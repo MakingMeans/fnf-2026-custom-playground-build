@@ -44,7 +44,10 @@ Motivo: cuando lime lanza hxcpp para compilar el C++ (desde `export\...\obj`), h
 ## Cambios respecto a Psych Engine original
 
 - `Project.xml`: nombre, ejecutable, package y company renombrados a este proyecto (v0.1.0).
-- `Project.xml`: `BASE_GAME_FILES` y `VIDEOS_ALLOWED` activados fuera de `officialBuild`, para que la build incluya las semanas/canciones base y soporte de vídeo sin flags extra.
+- `Project.xml`: `BASE_GAME_FILES` y `VIDEOS_ALLOWED` activados fuera de `officialBuild`, para que la build incluya el contenido base y soporte de vídeo sin flags extra.
+- Contenido del juego base reducido al **Tutorial**: se eliminaron las semanas 1-7 y Weekend 1 (charts, canciones, personajes, stages, vídeos, fondos de menú, logros semanales). `assets/base_game/` solo conserva el chart y audio del tutorial, la canción `test` del chart editor, el stage por defecto (`week1/`) y el stage `stage.json`.
+- Código: se borraron los scripts de stage de esas semanas (`source/states/stages/`) y sus objetos auxiliares; `PlayState` solo enlaza `stage`, `StageData.vanillaSongStage` siempre devuelve `stage`, y `Achievements` ya no define los logros por semana.
+- Listas hardcodeadas (`assets/shared/weeks/weekList.txt`, `data/stageList.txt`, `data/characterList.txt`) reducidas a `tutorial`, `stage` y `bf`/`gf`.
 - Scripts `.bat` en la raíz y configuración de VS Code (`.vscode/`) con tareas y extensiones recomendadas (`nadako.vshaxe`, `openfl.lime-vscode-extension`).
 
 ## Licencia

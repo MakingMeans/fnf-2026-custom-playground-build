@@ -31,3 +31,6 @@ export/
 obj/
 *.log
 Thumbs.db
+
+### Claude Code (local, no se sube)
+.claude/
