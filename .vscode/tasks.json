@@ -1,0 +1,30 @@
+{
+	"version": "2.0.0",
+	"options": {
+		"env": {
+			"HAXELIB_PATH": "${workspaceFolder}\\.haxelib"
+		}
+	},
+	"tasks": [
+		{
+			"label": "FNF: Ejecutar (debug)",
+			"type": "shell",
+			"command": "haxelib run lime test windows -debug",
+			"group": { "kind": "build", "isDefault": true },
+			"problemMatcher": ["$haxe-absolute", "$haxe", "$haxe-error", "$haxe-trace"]
+		},
+		{
+			"label": "FNF: Compilar release",
+			"type": "shell",
+			"command": "haxelib run lime build windows -release",
+			"group": "build",
+			"problemMatcher": ["$haxe-absolute", "$haxe", "$haxe-error", "$haxe-trace"]
+		},
+		{
+			"label": "FNF: Verificar dependencias",
+			"type": "shell",
+			"command": "${workspaceFolder}\\check-dependencies.bat",
+			"problemMatcher": []
+		}
+	]
+}

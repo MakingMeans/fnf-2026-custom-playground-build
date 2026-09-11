@@ -1,0 +1,12 @@
+{
+	"files.eol": "\n",
+	"[bat]": { "files.eol": "\r\n" },
+	"haxe.enableCompilationServer": true,
+	"terminal.integrated.env.windows": {
+		"HAXELIB_PATH": "${workspaceFolder}\\.haxelib"
+	},
+	"lime.targetConfigurations": [
+		{ "label": "Windows / Debug", "target": "windows", "args": ["-debug"] },
+		{ "label": "Windows / Release", "target": "windows", "args": ["-release"] }
+	]
+}
