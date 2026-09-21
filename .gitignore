@@ -34,3 +34,7 @@ Thumbs.db
 
 ### Claude Code (local, no se sube)
 .claude/
+
+### Contexto local para Claude Code (no se sube)
+CLAUDE.md
+CLAUDE.local.md

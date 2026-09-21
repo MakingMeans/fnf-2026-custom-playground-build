@@ -136,6 +136,14 @@ class Song
 	}
 
 	static var _lastPath:String;
+	public static function chartExists(path:String):Bool
+	{
+		#if MODS_ALLOWED
+		if(FileSystem.exists(path)) return true;
+		#end
+		return Assets.exists(path, TEXT);
+	}
+
 	public static function getChart(jsonInput:String, ?folder:String):SwagSong
 	{
 		if(folder == null) folder = jsonInput;
@@ -144,6 +152,13 @@ class Song
 		var formattedFolder:String = Paths.formatToSongPath(folder);
 		var formattedSong:String = Paths.formatToSongPath(jsonInput);
 		_lastPath = Paths.json('$formattedFolder/$formattedSong');
+
+		// Si esa dificultad no tiene chart propio, se cae al chart base de la cancion
+		if(formattedSong != formattedFolder && !chartExists(_lastPath))
+		{
+			var fallback:String = Paths.json('$formattedFolder/$formattedFolder');
+			if(chartExists(fallback)) _lastPath = fallback;
+		}
 
 		#if MODS_ALLOWED
 		if(FileSystem.exists(_lastPath))

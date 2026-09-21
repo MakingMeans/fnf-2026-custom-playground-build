@@ -143,7 +143,7 @@ class PlayState extends MusicBeatState
 	public static var isStoryMode:Bool = false;
 	public static var storyWeek:Int = 0;
 	public static var storyPlaylist:Array<String> = [];
-	public static var storyDifficulty:Int = 1;
+	public static var storyDifficulty:Int = 0;
 
 	public var spawnTime:Float = 2000;
 
@@ -2481,6 +2481,20 @@ class PlayState extends MusicBeatState
 					LoadingState.prepareToSong();
 					LoadingState.loadAndSwitchState(new PlayState(), false, false);
 				}
+			}
+			else if (states.OverworldState.fromOverworld)
+			{
+				trace('WENT BACK TO THE OVERWORLD');
+				Mods.loadTopMod();
+				#if DISCORD_ALLOWED DiscordClient.resetClientID(); #end
+
+				canResync = false;
+				if(!ClientPrefs.getGameplaySetting('practice') && !ClientPrefs.getGameplaySetting('botplay'))
+					states.OverworldState.completeCurrentNode();
+
+				states.OverworldState.backToOverworld();
+				FlxG.sound.playMusic(Paths.music('freakyMenu'));
+				changedDifficulty = false;
 			}
 			else
 			{

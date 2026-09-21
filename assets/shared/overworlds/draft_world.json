@@ -1,0 +1,118 @@
+{
+	"nodes": [
+		{"x": 80, "fps": 0, "anim": "tile0002", "y": 144, "world": "", "type": "level", "unlocked": true, "difficulty": "", "name": "Nivel 1", "animDone": "tile0003", "image": "overworld/og_mario/level_tiles", "id": "n0", "week": "tutorial", "song": "tutorial", "unlocks": ["n1"]
+		},
+		{
+			"x": 208,
+			"fps": 0,
+			"anim": "tile0002",
+			"y": 144,
+			"world": "",
+			"type": "level",
+			"unlocked": false,
+			"difficulty": "",
+			"name": "Nivel 2",
+			"animDone": "tile0003",
+			"image": "overworld/og_mario/level_tiles",
+			"id": "n1",
+			"week": "tutorial",
+			"song": "tutorial",
+			"unlocks": ["n2"]
+		},
+		{
+			"x": 320,
+			"fps": 0,
+			"anim": "tile0002",
+			"y": 208,
+			"world": "",
+			"type": "level",
+			"unlocked": false,
+			"difficulty": "",
+			"name": "Nivel 3",
+			"animDone": "tile0003",
+			"image": "overworld/og_mario/level_tiles",
+			"id": "n2",
+			"week": "tutorial",
+			"song": "tutorial",
+			"unlocks": ["n3"]
+		},
+		{
+			"x": 320,
+			"fps": 0,
+			"anim": "tile0002",
+			"y": 64,
+			"world": "",
+			"type": "level",
+			"unlocked": false,
+			"difficulty": "",
+			"name": "Nivel 4",
+			"animDone": "tile0003",
+			"image": "overworld/og_mario/level_tiles",
+			"id": "n3",
+			"week": "tutorial",
+			"song": "tutorial",
+			"unlocks": ["star"]
+		},
+		{
+			"x": 432,
+			"fps": 0,
+			"anim": "tile0006",
+			"y": 64,
+			"world": "",
+			"type": "empty",
+			"unlocked": false,
+			"difficulty": "",
+			"name": "Star Road",
+			"animDone": "",
+			"image": "overworld/og_mario/level_tiles",
+			"id": "star",
+			"week": "",
+			"song": "",
+			"unlocks": []
+		}
+	
+	],
+	"player": "overworld/overworld_bf",
+	"bgTile": true,
+	"zoom": 3,
+	"bgFps": 8,
+	"startNode": "n0",
+	"displayName": "Mundo del boceto",
+	"bg": "overworld/draft_world/quickdraft_guide",
+	"music": "freakyMenu",
+	"paths": [
+		{"a": "n0", "dotSpacing": 16, "dotAnim": "idle", "b": "n1", "dots": "overworld/dot", "points": []
+		},
+		{
+			"a": "n1",
+			"dotSpacing": 16,
+			"dotAnim": "idle",
+			"b": "n2",
+			"dots": "overworld/dot",
+			"points": [
+				[208, 208]
+			]
+		},
+		{
+			"a": "n2",
+			"dotSpacing": 16,
+			"dotAnim": "idle",
+			"b": "n3",
+			"dots": "overworld/dot",
+			"points": []
+		},
+		{
+			"a": "n3",
+			"dotSpacing": 16,
+			"dotAnim": "idle",
+			"b": "star",
+			"dots": "overworld/dot",
+			"points": []
+		}
+	
+	],
+	"sprites": [],
+	"walkSpeed": 60,
+	"bgAnim": "",
+	"gridSize": 16
+}

@@ -1,0 +1,39 @@
+<?xml version='1.0' encoding='utf-8'?>
+<TextureAtlas imagePath="level_blocks.png">
+	<SubTexture name="tile0000" x="0" y="0" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0001" x="32" y="0" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0002" x="64" y="0" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0003" x="96" y="0" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0004" x="128" y="0" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0005" x="160" y="0" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0006" x="192" y="0" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0007" x="224" y="0" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0008" x="0" y="32" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0009" x="32" y="32" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0010" x="64" y="32" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0011" x="96" y="32" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0012" x="128" y="32" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0013" x="160" y="32" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0014" x="192" y="32" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0015" x="224" y="32" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0016" x="0" y="64" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0017" x="32" y="64" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0018" x="64" y="64" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0019" x="96" y="64" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0020" x="128" y="64" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0021" x="160" y="64" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0022" x="192" y="64" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0023" x="224" y="64" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0024" x="0" y="96" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0025" x="32" y="96" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0026" x="64" y="96" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0027" x="96" y="96" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0028" x="128" y="96" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0029" x="160" y="96" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0030" x="192" y="96" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0031" x="224" y="96" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0032" x="0" y="128" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0033" x="32" y="128" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0034" x="64" y="128" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+	<SubTexture name="tile0035" x="96" y="128" width="32" height="32" frameX="0" frameY="0" frameWidth="32" frameHeight="32"/>
+</TextureAtlas>

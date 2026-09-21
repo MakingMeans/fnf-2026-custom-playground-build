@@ -166,7 +166,9 @@ class GameOverSubstate extends MusicBeatSubstate
 				PlayState.chartingMode = false;
 	
 				Mods.loadTopMod();
-				if (PlayState.isStoryMode)
+				if (states.OverworldState.fromOverworld)
+					states.OverworldState.backToOverworld();
+				else if (PlayState.isStoryMode)
 					MusicBeatState.switchState(new StoryMenuState());
 				else
 					MusicBeatState.switchState(new FreeplayState());

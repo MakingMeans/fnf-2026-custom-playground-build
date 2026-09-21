@@ -154,7 +154,39 @@ class Main extends Sprite
 		Controls.instance = new Controls();
 		ClientPrefs.loadDefaultKeys();
 		#if ACHIEVEMENTS_ALLOWED Achievements.load(); #end
-		addChild(new FlxGame(game.width, game.height, game.initialState, game.framerate, game.framerate, game.skipSplash, game.startFullscreen));
+		// Arranque directo al editor: FNF2026Playground.exe -overworld-editor [nombre_del_mundo]
+		var firstState:Dynamic = game.initialState;
+		#if sys
+		var launchArgs:Array<String> = Sys.args();
+		var editorArg:Int = launchArgs.indexOf('-overworld-editor');
+		if (editorArg > -1)
+		{
+			var worldToOpen:String = null;
+			if (editorArg + 1 < launchArgs.length && !launchArgs[editorArg + 1].startsWith('-'))
+				worldToOpen = launchArgs[editorArg + 1];
+
+			firstState = function():flixel.FlxState return new states.editors.OverworldEditorState(worldToOpen);
+		}
+		else
+		{
+			// Arranque directo a un mapa: FNF2026Playground.exe -overworld [nombre_del_mundo]
+			var worldArg:Int = launchArgs.indexOf('-overworld');
+			if (worldArg > -1)
+			{
+				var worldToPlay:String = null;
+				if (worldArg + 1 < launchArgs.length && !launchArgs[worldArg + 1].startsWith('-'))
+					worldToPlay = launchArgs[worldArg + 1];
+
+				firstState = function():flixel.FlxState
+				{
+					states.OverworldState.reset();
+					return new states.OverworldState(worldToPlay);
+				};
+			}
+		}
+		#end
+
+		addChild(new FlxGame(game.width, game.height, firstState, game.framerate, game.framerate, game.skipSplash, game.startFullscreen));
 
 		#if !mobile
 		fpsVar = new FPSCounter(10, 3, 0xFFFFFF);

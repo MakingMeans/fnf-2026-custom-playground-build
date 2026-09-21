@@ -14,6 +14,7 @@ class MasterEditorMenu extends MusicBeatState
 		'Character Editor',
 		'Stage Editor',
 		'Week Editor',
+		'Overworld Editor',
 		'Menu Character Editor',
 		'Dialogue Editor',
 		'Dialogue Portrait Editor',
@@ -113,6 +114,8 @@ class MasterEditorMenu extends MusicBeatState
 					LoadingState.loadAndSwitchState(new StageEditorState());
 				case 'Week Editor':
 					MusicBeatState.switchState(new WeekEditorState());
+				case 'Overworld Editor':
+					MusicBeatState.switchState(new OverworldEditorState(backend.OverworldData.DEFAULT_WORLD));
 				case 'Menu Character Editor':
 					MusicBeatState.switchState(new MenuCharacterEditorState());
 				case 'Dialogue Editor':

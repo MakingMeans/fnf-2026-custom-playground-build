@@ -2,12 +2,13 @@ package backend;
 
 class Difficulty
 {
+	// Esta build maneja UNA sola dificultad global: Hard.
 	public static final defaultList:Array<String> = [
-		'Easy',
-		'Normal',
 		'Hard'
 	];
-	private static final defaultDifficulty:String = 'Normal'; //The chart that has no postfix and starting difficulty on Freeplay/Story Mode
+	// Sigue siendo 'Normal' a proposito: es el nombre de la dificultad cuyo chart va SIN sufijo.
+	// Al no estar en la lista, todas las canciones cargan su chart "-hard".
+	private static final defaultDifficulty:String = 'Normal';
 
 	public static var list:Array<String> = [];
 
@@ -23,29 +24,13 @@ class Difficulty
 		return Paths.formatToSongPath(filePostfix);
 	}
 
+	/**
+	 * La dificultad es global en esta build: se ignora lo que declare cada semana en su JSON
+	 * para que no puedan reaparecer Easy ni Normal.
+	 */
 	inline public static function loadFromWeek(week:WeekData = null)
 	{
-		if(week == null) week = WeekData.getCurrentWeek();
-
-		var diffStr:String = week.difficulties;
-		if(diffStr != null && diffStr.length > 0)
-		{
-			var diffs:Array<String> = diffStr.trim().split(',');
-			var i:Int = diffs.length - 1;
-			while (i > 0)
-			{
-				if(diffs[i] != null)
-				{
-					diffs[i] = diffs[i].trim();
-					if(diffs[i].length < 1) diffs.remove(diffs[i]);
-				}
-				--i;
-			}
-
-			if(diffs.length > 0 && diffs[0].length > 0)
-				list = diffs;
-		}
-		else resetList();
+		resetList();
 	}
 
 	inline public static function resetList()
