@@ -310,6 +310,189 @@ class OverworldData
 		return false;
 	}
 
+	// ------------------------------------------------------------- revision del grafo
+
+	/** Algun nodo lista este id en sus `unlocks`. */
+	public static function anyoneUnlocks(file:OverworldFile, id:String):Bool
+	{
+		for (other in file.nodes)
+			if (other.unlocks != null && other.unlocks.contains(id)) return true;
+		return false;
+	}
+
+	/** Solo los niveles se completan (al acabar su cancion); 'world' y 'empty' nunca. */
+	public static inline function canBeCompleted(node:OverworldNodeFile):Bool
+		return node.type == 'level' && node.song != null && node.song.length > 0;
+
+	/** Un ID valido para un nodo: no vacio, sin comas (separan la lista de unlocks) y sin '::' (clave del progreso). */
+	public static function isValidNodeId(id:String):Bool
+		return id != null && id.length > 0 && id.indexOf(',') < 0 && id.indexOf('::') < 0;
+
+	/** El nodo donde aparece BF con el progreso a cero (misma regla que OverworldState). */
+	public static function firstStartNode(file:OverworldFile):OverworldNodeFile
+	{
+		var start:OverworldNodeFile = findNode(file, file.startNode);
+		if (start != null && start.unlocked) return start;
+
+		for (node in file.nodes)
+			if (node.unlocked) return node;
+		return null;
+	}
+
+	/**
+	 * Simula una partida completa desde cero: BF sale del nodo inicial, recorre todo lo que
+	 * tiene accesible, completa cada nivel al que llega y aplica sus desbloqueos, hasta que ya
+	 * no se abre nada nuevo. Devuelve los ids de los nodos a los que se acaba pudiendo llegar.
+	 */
+	public static function simulateReachable(file:OverworldFile):Map<String, Bool>
+	{
+		var reached:Map<String, Bool> = new Map<String, Bool>();
+		var start:OverworldNodeFile = firstStartNode(file);
+		if (start == null) return reached;
+
+		var open:Map<String, Bool> = new Map<String, Bool>();
+		for (node in file.nodes)
+			if (node.unlocked) open.set(node.id, true);
+
+		var changed:Bool = true;
+		while (changed)
+		{
+			changed = false;
+
+			// recorrido por caminos pisando solo nodos accesibles; en cada vuelta se sigue
+			// desde todo lo ya alcanzado, que es donde pueden haber aparecido caminos nuevos
+			reached.set(start.id, true);
+			var pending:Array<String> = [for (id in reached.keys()) id];
+			while (pending.length > 0)
+			{
+				var id:String = pending.pop();
+				for (pth in file.paths)
+				{
+					var other:String = (pth.a == id) ? pth.b : ((pth.b == id) ? pth.a : null);
+					if (other == null || reached.exists(other) || !open.exists(other)) continue;
+					if (findNode(file, other) == null) continue;
+
+					reached.set(other, true);
+					pending.push(other);
+				}
+			}
+
+			// completar todos los niveles alcanzados abre sus desbloqueos
+			for (node in file.nodes)
+			{
+				if (!reached.exists(node.id) || !canBeCompleted(node) || node.unlocks == null) continue;
+				for (target in node.unlocks)
+				{
+					if (open.exists(target)) continue;
+					open.set(target, true);
+					changed = true;
+				}
+			}
+		}
+		return reached;
+	}
+
+	/**
+	 * Revisa el mundo y devuelve los avisos en texto legible (lista vacia = todo correcto).
+	 * Mira referencias rotas e IDs repetidos, y con simulateReachable() detecta nodos a los
+	 * que nunca se puede llegar aunque tengan a alguien que los desbloquee.
+	 */
+	public static function checkWorld(file:OverworldFile):Array<String>
+	{
+		var problems:Array<String> = [];
+		if (file == null || file.nodes.length < 1)
+		{
+			problems.push('El mundo no tiene ningun nodo.');
+			return problems;
+		}
+
+		// nodos que ya tienen un aviso concreto: no se repiten como "inalcanzable"
+		var flagged:Map<String, Bool> = new Map<String, Bool>();
+		inline function warn(id:String, text:String)
+		{
+			problems.push(text);
+			if (id != null) flagged.set(id, true);
+		}
+
+		var counts:Map<String, Int> = new Map<String, Int>();
+		for (node in file.nodes)
+		{
+			if (!isValidNodeId(node.id))
+			{
+				warn(node.id, 'Hay un nodo con un ID no valido ("${node.id}").');
+				continue;
+			}
+			counts.set(node.id, counts.exists(node.id) ? counts.get(node.id) + 1 : 1);
+		}
+		for (id => count in counts)
+			if (count > 1) warn(id, '"$id": ID repetido en $count nodos.');
+
+		var linked:Map<String, Bool> = new Map<String, Bool>();
+		var pairs:Map<String, Bool> = new Map<String, Bool>();
+		for (pth in file.paths)
+		{
+			if (!counts.exists(pth.a) || !counts.exists(pth.b))
+			{
+				warn(null, 'Camino ${pth.a} <-> ${pth.b}: apunta a un nodo que no existe.');
+				continue;
+			}
+			if (pth.a == pth.b)
+			{
+				warn(pth.a, 'Camino de "${pth.a}" a si mismo.');
+				continue;
+			}
+
+			var key:String = pth.a < pth.b ? '${pth.a}|${pth.b}' : '${pth.b}|${pth.a}';
+			if (pairs.exists(key)) warn(null, 'Camino ${pth.a} <-> ${pth.b} repetido.');
+			pairs.set(key, true);
+			linked.set(pth.a, true);
+			linked.set(pth.b, true);
+		}
+
+		for (node in file.nodes)
+		{
+			if (!linked.exists(node.id) && file.nodes.length > 1)
+				warn(node.id, '"${node.id}": sin caminos, BF no puede llegar ni salir.');
+
+			if (!node.unlocked && !anyoneUnlocks(file, node.id))
+				warn(node.id, '"${node.id}": bloqueado y nadie lo desbloquea.');
+
+			if (node.type == 'level' && (node.song == null || node.song.length < 1))
+				warn(node.id, '"${node.id}": es un nivel sin cancion.');
+
+			if (node.type == 'world' && (node.world == null || node.world.length < 1 || !exists(node.world)))
+				warn(node.id, '"${node.id}": apunta a un mundo que no existe.');
+
+			if (node.unlocks == null || node.unlocks.length < 1) continue;
+
+			for (target in node.unlocks)
+			{
+				if (target == node.id) warn(node.id, '"${node.id}": se desbloquea a si mismo.');
+				else if (!counts.exists(target)) warn(node.id, '"${node.id}": desbloquea "$target", que no existe.');
+			}
+
+			if (!canBeCompleted(node))
+				warn(node.id, '"${node.id}": es "${node.type}" y nunca se completa, asi que no desbloquea nada.');
+		}
+
+		var start:OverworldNodeFile = findNode(file, file.startNode);
+		if (start == null) warn(null, 'El nodo inicial "${file.startNode}" no existe.');
+		else if (!start.unlocked) warn(start.id, 'El nodo inicial "${start.id}" no esta desbloqueado al empezar.');
+
+		if (firstStartNode(file) == null)
+		{
+			warn(null, 'Ningun nodo esta desbloqueado al empezar: BF no tiene donde aparecer.');
+			return problems;
+		}
+
+		var reached:Map<String, Bool> = simulateReachable(file);
+		for (node in file.nodes)
+			if (!reached.exists(node.id) && !flagged.exists(node.id))
+				problems.push('"${node.id}": inalcanzable aunque completes todo lo que se puede.');
+
+		return problems;
+	}
+
 	// ------------------------------------------------------------------ listados
 
 	public static function listWorlds():Array<String>

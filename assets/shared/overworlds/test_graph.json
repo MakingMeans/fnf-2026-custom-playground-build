@@ -1,0 +1,53 @@
+{
+	"displayName": "Prueba del grafo",
+	"bg": "overworld/backgrounds/sea",
+	"bgAnim": "idle",
+	"bgFps": 6,
+	"bgTile": true,
+	"music": "freakyMenu",
+	"zoom": 3,
+	"gridSize": 16,
+	"startNode": "t1",
+	"player": "overworld/overworld_bf",
+	"walkSpeed": 60,
+	"nodes": [
+		{"id": "t1", "x": 48, "y": 64, "type": "level", "image": "overworld/og_mario/level_tiles", "anim": "tile0002", "animDone": "tile0003", "fps": 0, "name": "Tutorial 1", "song": "tutorial1", "week": "test_levels", "difficulty": "", "world": "", "unlocked": true,
+			"unlocks": ["t2"]
+		},
+		{"id": "t2", "x": 112, "y": 64, "type": "level", "image": "overworld/og_mario/level_tiles", "anim": "tile0002", "animDone": "tile0003", "fps": 0, "name": "Tutorial 2", "song": "tutorial2", "week": "test_levels", "difficulty": "", "world": "", "unlocked": false,
+			"unlocks": ["t3", "cruce", "t4"]
+		},
+		{"id": "t3", "x": 176, "y": 64, "type": "level", "image": "overworld/og_mario/level_tiles", "anim": "tile0002", "animDone": "tile0003", "fps": 0, "name": "Tutorial 3", "song": "tutorial3", "week": "test_levels", "difficulty": "", "world": "", "unlocked": false,
+			"unlocks": ["t5"]
+		},
+		{"id": "cruce", "x": 112, "y": 128, "type": "empty", "image": "overworld/dot", "anim": "idle", "animDone": "", "fps": 6, "name": "Cruce", "song": "", "week": "", "difficulty": "", "world": "", "unlocked": false,
+			"unlocks": []
+		},
+		{"id": "t4", "x": 112, "y": 176, "type": "level", "image": "overworld/og_mario/level_tiles", "anim": "tile0002", "animDone": "tile0003", "fps": 0, "name": "Tutorial 4 (sin salida)", "song": "tutorial4", "week": "test_levels", "difficulty": "", "world": "", "unlocked": false,
+			"unlocks": []
+		},
+		{"id": "t5", "x": 224, "y": 128, "type": "level", "image": "overworld/og_mario/level_tiles", "anim": "tile0002", "animDone": "tile0003", "fps": 0, "name": "Tutorial 5", "song": "tutorial5", "week": "test_levels", "difficulty": "", "world": "", "unlocked": false,
+			"unlocks": []
+		}
+	],
+	"sprites": [],
+	"paths": [
+		{"a": "t1", "b": "t2", "dots": "overworld/dot", "dotAnim": "idle", "dotSpacing": 16,
+			"points": []
+		},
+		{"a": "t2", "b": "t3", "dots": "overworld/dot", "dotAnim": "idle", "dotSpacing": 16,
+			"points": []
+		},
+		{"a": "t2", "b": "cruce", "dots": "overworld/dot", "dotAnim": "idle", "dotSpacing": 16,
+			"points": []
+		},
+		{"a": "cruce", "b": "t4", "dots": "overworld/dot", "dotAnim": "idle", "dotSpacing": 16,
+			"points": []
+		},
+		{"a": "t3", "b": "t5", "dots": "overworld/dot", "dotAnim": "idle", "dotSpacing": 16,
+			"points": [
+				[224, 64]
+			]
+		}
+	]
+}

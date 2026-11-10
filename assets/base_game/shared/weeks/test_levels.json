@@ -1,0 +1,24 @@
+{
+	"songs": [
+		["Tutorial1", "gf", [165, 0, 77]],
+		["Tutorial2", "gf", [165, 0, 77]],
+		["Tutorial3", "gf", [165, 0, 77]],
+		["Tutorial4", "gf", [165, 0, 77]],
+		["Tutorial5", "gf", [165, 0, 77]]
+	],
+
+	"weekCharacters": [
+		"",
+		"bf",
+		"gf"
+	],
+	"weekBackground": "stage",
+
+	"storyName": "Niveles de prueba",
+	"weekBefore": "tutorial",
+	"weekName": "Test Levels",
+	"startUnlocked": true,
+
+	"hideStoryMode": true,
+	"hideFreeplay": false
+}

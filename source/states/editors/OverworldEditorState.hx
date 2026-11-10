@@ -688,19 +688,36 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			if (selectedNode == null) return;
 
 			var newId:String = cur.trim();
-			if (newId.length < 1) return;
-
 			var oldId:String = selectedNode.id;
+			if (newId.length < 1 || newId == oldId) return;
+
+			// Se renombra tecla a tecla, asi que un ID intermedio puede coincidir con otro nodo
+			// (de "node0" a "n10" se pasa por "n1"). Solo se aplica si el ID queda libre: si no,
+			// los caminos y desbloqueos de los dos nodos se mezclarian sin avisar.
+			if (!OverworldData.isValidNodeId(newId))
+			{
+				showOutput('"$newId" no vale como ID (sin comas ni "::"). El nodo sigue siendo "$oldId"', true);
+				return;
+			}
+			var other:OverworldNodeFile = OverworldData.findNode(worldFile, newId);
+			if (other != null && other != selectedNode)
+			{
+				showOutput('El ID "$newId" ya lo usa otro nodo. Este sigue siendo "$oldId"', true);
+				return;
+			}
+
 			for (pth in worldFile.paths)
 			{
 				if (pth.a == oldId) pth.a = newId;
 				if (pth.b == oldId) pth.b = newId;
 			}
 			for (node in worldFile.nodes)
-				if (node.unlocks != null && node.unlocks.contains(oldId))
-					node.unlocks[node.unlocks.indexOf(oldId)] = newId;
+				if (node.unlocks != null)
+					node.unlocks = [for (target in node.unlocks) target == oldId ? newId : target];
 
 			if (worldFile.startNode == oldId) worldFile.startNode = newId;
+			unsavedProgress = true;
+			showOutput('Nodo "$oldId" renombrado a "$newId"');
 			selectedNode.id = newId;
 			reloadMap();
 			refreshNodeIdLists();
@@ -836,12 +853,21 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			if (selectedNode == null) return;
 
 			var list:Array<String> = [];
+			var unknown:Array<String> = [];
 			for (part in cur.split(','))
 			{
 				var trimmed:String = part.trim();
-				if (trimmed.length > 0) list.push(trimmed);
+				if (trimmed.length < 1 || list.contains(trimmed)) continue;
+
+				list.push(trimmed);
+				if (OverworldData.findNode(worldFile, trimmed) == null) unknown.push(trimmed);
 			}
 			selectedNode.unlocks = list;
+			unsavedProgress = true;
+
+			// aviso en vivo: una errata en un ID deja ese nodo bloqueado para siempre
+			if (unknown.length > 0) showOutput('No existe ningun nodo: ' + unknown.join(', '), true);
+			else if (list.length > 0) showOutput('"${selectedNode.id}" desbloquea: ' + list.join(', '));
 		};
 		tab.add(nodeUnlocksInput);
 
@@ -1161,56 +1187,16 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 	}
 
 	// ------------------------------------------------------- revision del mundo
-	function anyoneUnlocks(id:String):Bool
-	{
-		for (other in worldFile.nodes)
-			if (other.unlocks != null && other.unlocks.contains(id)) return true;
-		return false;
-	}
-
-	function checkWorld():Array<String>
-	{
-		var problems:Array<String> = [];
-
-		if (worldFile.nodes.length < 1)
-		{
-			problems.push('El mundo no tiene ningun nodo.');
-			return problems;
-		}
-
-		for (node in worldFile.nodes)
-		{
-			var hasPath:Bool = false;
-			for (pth in worldFile.paths)
-				if (pth.a == node.id || pth.b == node.id)
-				{
-					hasPath = true;
-					break;
-				}
-
-			if (!hasPath && worldFile.nodes.length > 1)
-				problems.push('"${node.id}": sin caminos, BF no puede llegar ni salir.');
-
-			if (!node.unlocked && !anyoneUnlocks(node.id))
-				problems.push('"${node.id}": bloqueado y nadie lo desbloquea.');
-
-			if (node.type == 'level' && (node.song == null || node.song.length < 1))
-				problems.push('"${node.id}": es un nivel sin cancion.');
-
-			if (node.type == 'world' && (node.world == null || node.world.length < 1 || !OverworldData.exists(node.world)))
-				problems.push('"${node.id}": apunta a un mundo que no existe.');
-		}
-
-		if (OverworldData.findNode(worldFile, worldFile.startNode) == null)
-			problems.push('El nodo inicial "${worldFile.startNode}" no existe.');
-
-		return problems;
-	}
+	inline function checkWorld():Array<String>
+		return OverworldData.checkWorld(worldFile);
 
 	function reportProblems():Bool
 	{
 		var problems:Array<String> = checkWorld();
 		if (problems.length < 1) return true;
+
+		// la lista completa va a la consola; en pantalla caben 4
+		for (problem in problems) trace('Overworld "$worldName": $problem');
 
 		var shown:Array<String> = problems.slice(0, 4);
 		if (problems.length > 4) shown.push('(+${problems.length - 4} avisos mas)');
@@ -2093,7 +2079,14 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		}
 
 		for (node in worldFile.nodes)
-			if (node.unlocks != null && node.unlocks.contains(id)) node.unlocks.remove(id);
+			if (node.unlocks != null) node.unlocks = node.unlocks.filter(target -> target != id);
+
+		// sin esto el mundo se quedaria apuntando a un nodo inicial que ya no existe
+		if (worldFile.startNode == id && worldFile.nodes.length > 0)
+		{
+			worldFile.startNode = worldFile.nodes[0].id;
+			refreshNodeIdLists();
+		}
 
 		selectedNode = null;
 		selectedPath = null;

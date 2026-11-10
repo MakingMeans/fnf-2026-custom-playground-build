@@ -180,10 +180,24 @@ Un nodo queda bloqueado si tiene *Desbloqueado al empezar* sin marcar **y** ning
 lista en *Desbloquea al completarlo*. Si te pasa, BF se queda quieto porque no tiene a dónde ir.
 Dos botones en la pestaña **Mundo** para esto:
 
-- **Comprobar mundo**: lista los problemas — nodos sin caminos, nodos bloqueados que nadie
-  desbloquea, niveles sin canción, nodos `world` que apuntan a un mapa inexistente. También salta
-  solo al guardar.
+- **Comprobar mundo**: **simula una partida entera** (sale del nodo inicial, completa todo lo que
+  alcanza y aplica los desbloqueos hasta que no se abre nada más) y lista lo que falla:
+  - nodos **inalcanzables** aunque completes todo lo demás;
+  - nodos sin caminos, bloqueados que nadie desbloquea, niveles sin canción, nodos `world` que
+    apuntan a un mapa inexistente;
+  - `unlocks` con IDs que no existen (una errata deja ese nodo bloqueado para siempre);
+  - desbloqueos puestos en nodos `empty` o `world`: esos nodos **nunca se completan**, así que
+    no desbloquean nada. Los desbloqueos van siempre en un `level`;
+  - IDs repetidos, caminos repetidos o hacia nodos que no existen, nodo inicial bloqueado.
+
+  También salta solo al guardar. En pantalla caben 4 avisos; la lista completa sale por consola.
+  En la build debug, además, cada mundo que se carga escribe sus avisos en la consola.
 - **Desbloquear todos**: deja todos los nodos accesibles de una pasada. La reparación rápida.
+
+Al escribir en **Desbloquea al completarlo**, la barra de abajo avisa en rojo si algún ID no
+existe. Al cambiar el **ID** de un nodo, el cambio solo se aplica si ese ID está libre: si
+coincide con otro nodo (por ejemplo, al pasar por `n1` mientras escribes `n10`), sale un aviso
+y el nodo conserva su ID anterior hasta que termines de escribir uno libre.
 
 Recuerda que BF solo se mueve por **caminos**: dos nodos sin un camino que los una son dos islas.
 Y no tiene animación de estar parado: la hoja `overworld_bf` no trae ninguna, así que quieto se
@@ -207,6 +221,34 @@ dos opciones:
   a tu mundo, y BACK te devuelve al selector.
 
 ---
+
+## Mundo de pruebas: `test_graph`
+
+Un mundo pequeño para comprobar que el grafo funciona, sin tocar el boceto `draft_world`.
+Ábrelo con `run-world.bat test_graph` (o `run-editor.bat test_graph` para verlo en el editor).
+
+```
+[T1]───[T2]───[T3]
+         │      └──┐       camino en L (con un punto de curva)
+      (cruce)      │       cruce = nodo "empty" (punto de paso)
+         │       [T5]
+       [T4]                callejón sin salida: hay que volver
+```
+
+| Nodo | Empieza | Al completarlo desbloquea |
+|---|---|---|
+| T1 | desbloqueado | T2 |
+| T2 | bloqueado | T3, cruce y T4 (bifurcación) |
+| T3 | bloqueado | T5 |
+| T4, T5 | bloqueados | nada |
+
+Usa las canciones `tutorial1` … `tutorial5` de la semana `test_levels` (oculta en el modo
+historia, visible en Freeplay). Son copias del chart del tutorial que conservan
+`"song": "Tutorial"` dentro, así que **reutilizan su audio** en vez de duplicarlo; por eso en
+la pausa se lee "Tutorial".
+
+En la build debug, la tecla **1** durante una canción la termina al instante y cuenta como
+superada: es la forma rápida de probar los desbloqueos.
 
 ## Dificultad
 

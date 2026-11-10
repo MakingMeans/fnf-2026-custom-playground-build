@@ -106,6 +106,11 @@ class OverworldState extends MusicBeatState
 			return;
 		}
 
+		#if debug
+		// en debug los avisos del grafo salen por consola cada vez que se carga un mundo
+		for (problem in OverworldData.checkWorld(worldFile)) trace('Overworld "$curWorld": $problem');
+		#end
+
 		camGame = initPsychCamera();
 		camHUD = new FlxCamera();
 		camHUD.bgColor.alpha = 0;
@@ -544,61 +549,74 @@ class OverworldState extends MusicBeatState
 		var current:OverworldNodeFile = getCurrentNode();
 		if (current == null) return;
 
-		var bestPath:OverworldPathFile = null;
+		// Los caminos bloqueados estan ocultos, asi que no pueden quitarle la direccion a uno
+		// visible: primero se busca entre los accesibles y solo si no hay ninguno suena el cancel.
+		var bestLine:Array<Array<Float>> = null;
 		var bestTarget:OverworldNodeFile = null;
-		var bestScore:Float = 0.35; // minimo parecido con la direccion pulsada
+		var bestScore:Float = MIN_DIRECTION_SCORE;
+		var lockedAhead:Bool = false;
 
 		for (pth in worldFile.paths)
 		{
-			var other:OverworldNodeFile = null;
-			var firstStep:Array<Float> = null;
+			if (pth.a != current.id && pth.b != current.id) continue;
 
-			if (pth.a == current.id)
+			var nodeA:OverworldNodeFile = OverworldData.findNode(worldFile, pth.a);
+			var nodeB:OverworldNodeFile = OverworldData.findNode(worldFile, pth.b);
+			if (nodeA == null || nodeB == null || nodeA == nodeB) continue;
+
+			var line:Array<Array<Float>> = buildLine(pth, nodeA, nodeB);
+			if (pth.b == current.id) line.reverse();
+			var other:OverworldNodeFile = (pth.a == current.id) ? nodeB : nodeA;
+
+			var score:Float = directionScore(line, dirX, dirY);
+			if (score <= MIN_DIRECTION_SCORE) continue;
+
+			if (!OverworldData.isUnlocked(curWorld, worldFile, other))
 			{
-				other = OverworldData.findNode(worldFile, pth.b);
-				firstStep = (pth.points != null && pth.points.length > 0) ? pth.points[0] : null;
+				lockedAhead = true;
+				continue;
 			}
-			else if (pth.b == current.id)
-			{
-				other = OverworldData.findNode(worldFile, pth.a);
-				firstStep = (pth.points != null && pth.points.length > 0) ? pth.points[pth.points.length - 1] : null;
-			}
-			else continue;
-
-			if (other == null) continue;
-			if (firstStep == null) firstStep = [other.x, other.y];
-
-			var dx:Float = firstStep[0] - current.x;
-			var dy:Float = firstStep[1] - current.y;
-			var length:Float = Math.sqrt(dx * dx + dy * dy);
-			if (length <= 0) continue;
-
-			var score:Float = (dx / length) * dirX + (dy / length) * dirY;
 			if (score <= bestScore) continue;
 
 			bestScore = score;
-			bestPath = pth;
+			bestLine = line;
 			bestTarget = other;
 		}
 
-		if (bestPath == null) return;
-
-		if (!OverworldData.isUnlocked(curWorld, worldFile, bestTarget))
+		if (bestLine == null)
 		{
-			FlxG.sound.play(Paths.sound('cancelMenu'));
+			if (lockedAhead) FlxG.sound.play(Paths.sound('cancelMenu'));
 			return;
 		}
 
-		var nodeA:OverworldNodeFile = OverworldData.findNode(worldFile, bestPath.a);
-		var nodeB:OverworldNodeFile = OverworldData.findNode(worldFile, bestPath.b);
-		var line:Array<Array<Float>> = buildLine(bestPath, nodeA, nodeB);
-		if (bestPath.b == current.id) line.reverse();
-
-		line.shift(); // el primer punto es donde ya esta el jugador
-		walkQueue = line;
+		bestLine.shift(); // el primer punto es donde ya esta el jugador
+		walkQueue = bestLine;
 		walkTarget = bestTarget;
 		walking = true;
 		FlxG.sound.play(Paths.sound('scrollMenu'), 0.5);
+	}
+
+	/** Minimo parecido (producto escalar) entre la direccion pulsada y la salida del camino. */
+	static inline final MIN_DIRECTION_SCORE:Float = 0.35;
+
+	/**
+	 * Cuanto se parece la salida de un camino a la direccion pulsada (1 = identica).
+	 * La salida es el primer punto que de verdad se separa del nodo: un punto de curva
+	 * puesto encima del propio nodo no cuenta, o el camino quedaria sin direccion.
+	 */
+	static function directionScore(line:Array<Array<Float>>, dirX:Float, dirY:Float):Float
+	{
+		var origin:Array<Float> = line[0];
+		for (i in 1...line.length)
+		{
+			var dx:Float = line[i][0] - origin[0];
+			var dy:Float = line[i][1] - origin[1];
+			var length:Float = Math.sqrt(dx * dx + dy * dy);
+			if (length < 1) continue;
+
+			return (dx / length) * dirX + (dy / length) * dirY;
+		}
+		return -1;
 	}
 
 	function updateWalk(elapsed:Float)
