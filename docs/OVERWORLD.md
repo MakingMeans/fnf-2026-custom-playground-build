@@ -16,13 +16,22 @@ Los mundos se diseñan con el **Editor de Mundos** incluido en la build y se gua
 | Abrir el juego ya compilado | **`play.bat`** |
 | Abrir directamente el editor de mundos | **`run-editor.bat`** |
 | Abrir directamente un mapa para jugarlo | **`run-world.bat`** |
+| Jugar el mapa de pruebas `test_graph` | **`tests\test-world.bat`** |
+| Abrir `test_graph` en el editor | **`tests\test-editor.bat`** |
 | Recompilar y abrir | `run.bat` |
 
 Los dos `run-*` aceptan el nombre del mundo. Desde una consola en la raíz del repo:
 
 ```
-run-editor.bat draft_world     abre el editor con ese mundo cargado
-run-world.bat draft_world      entra a jugar ese mapa directamente
+run-editor.bat test_subworld     abre el editor con ese mundo cargado
+run-world.bat test_subworld      entra a jugar ese mapa directamente
+```
+
+Para probar una transición sin recorrer el mapa, llama al ejecutable con `-from`: entra en el
+mundo como si BF llegara desde otro por una salida.
+
+```
+export\debug\windows\bin\FNF2026Playground.exe -overworld test_world2 -from test_graph
 ```
 
 Por dentro pasan `-overworld-editor` / `-overworld` al ejecutable, que los lee en `Main.hx`.
@@ -33,7 +42,7 @@ Los `.bat` usan la build de `export\debug\`; si no existe, la de `export\release
 ninguna, ejecuta `run.bat` una vez para compilar.
 
 El mundo que abre el título (y con el que arranca el editor si no le pasas otro) es el que dice
-`OverworldData.DEFAULT_WORLD`; ahora mismo es **`draft_world`**. Si borras o renombras su `.json`,
+`OverworldData.DEFAULT_WORLD`; ahora mismo es **`test_graph`**. Si borras o renombras su `.json`,
 el título vuelve a llevar directamente al menú clásico de siempre.
 
 ## 2. Controles del editor
@@ -187,8 +196,10 @@ Dos botones en la pestaña **Mundo** para esto:
   - nodos sin caminos, bloqueados que nadie desbloquea, niveles sin canción, nodos `world` que
     apuntan a un mapa inexistente;
   - `unlocks` con IDs que no existen (una errata deja ese nodo bloqueado para siempre);
-  - desbloqueos puestos en nodos `empty` o `world`: esos nodos **nunca se completan**, así que
-    no desbloquean nada. Los desbloqueos van siempre en un `level`;
+  - desbloqueos puestos en nodos `empty`: un punto de paso **nunca se completa**, así que no
+    desbloquea nada. Los desbloqueos van en un `level` o en un `world`;
+  - nodos `world` que llevan a un mundo sin nada que superar (nunca se completarían);
+  - submundos sin ningún nodo `exit` (BF no podría salir);
   - IDs repetidos, caminos repetidos o hacia nodos que no existen, nodo inicial bloqueado.
 
   También salta solo al guardar. En pantalla caben 4 avisos; la lista completa sale por consola.
@@ -201,8 +212,8 @@ coincide con otro nodo (por ejemplo, al pasar por `n1` mientras escribes `n10`),
 y el nodo conserva su ID anterior hasta que termines de escribir uno libre.
 
 Recuerda que BF solo se mueve por **caminos**: dos nodos sin un camino que los una son dos islas.
-Y no tiene animación de estar parado: la hoja `overworld_bf` no trae ninguna, así que quieto se
-queda en el primer fotograma de la dirección a la que mira, igual que Mario.
+Parado en un nodo, BF **mira a cámara y camina en el sitio** (la animación de andar hacia abajo
+en bucle), como Mario en el mapa de SMW.
 
 ### Paso 5 — guardar y probar
 
@@ -212,28 +223,70 @@ queda en el primer fotograma de la dirección a la que mira, igual que Mario.
 
 ### Paso 6 — que sea el mapa principal
 
-El juego entra al mundo que nombra `OverworldData.DEFAULT_WORLD` (ahora `draft_world`). Tienes
+El juego entra al mundo que nombra `OverworldData.DEFAULT_WORLD` (ahora `test_graph`). Tienes
 dos opciones:
 
 - **Que tu mundo sea el principal**: ponle ese nombre de archivo y guárdalo, o cambia la constante
   en `source/backend/OverworldData.hx`.
 - **Mantener un selector de mundos** (como el de SMW): deja el mundo principal como mapa selector y
   añádele un nodo de **Tipo `world`** con **Mundo destino** = `mundo1`. Al entrar en ese nodo saltas
-  a tu mundo, y BACK te devuelve al selector.
+  a tu mundo.
+
+### Salidas y transiciones: nodos `exit`
+
+**ESC no saca de un mapa**: abre el menú principal, y al salir del menú vuelves al mismo mapa y
+nodo. Para irse de un mapa hay que **llegar andando a un nodo de tipo `exit`**. Lo que pasa al
+alcanzarlo depende de su **Mundo destino**:
+
+- **Sin destino** (salida de submundo): vuelve al mapa de fuera, encima del nodo `world` por el
+  que se entró.
+- **Con destino** (transición): pasa a ese mundo **de lado**. Funciona en cualquier mapa, sea un
+  submundo o no. Allí BF aparece en la salida que apunta **de vuelta** a este mundo y **entra
+  andando** por su camino hasta el primer nodo. Si el otro mundo no tiene salida de vuelta, BF
+  aparece en su nodo inicial (*Comprobar mundo* lo avisa).
+
+  Ejemplo: en `mundo1`, una salida con destino `mundo2` en el borde derecho; en `mundo2`, otra
+  con destino `mundo1` en el borde izquierdo. Andando por el borde se pasa de uno a otro, como
+  si fueran un solo mapa.
+
+Hay dos maneras de colocar una salida (valen para los dos casos):
+
+- **Camino que se va de la pantalla** (la de por defecto): al cambiar un nodo a `exit`, se queda
+  **sin sprite**, invisible en el juego (en el editor se ve como un cuadro magenta). Colócalo
+  **fuera de lo que se ve** del mapa y únelo con un camino: BF se va andando por los puntitos
+  hasta perderse de vista. Las salidas no cuentan para el tamaño del mapa, así que la cámara no
+  las sigue.
+- **Salida visible**: ponle un sprite (por ejemplo `overworld/pipe`) y colócala dentro del mapa,
+  como un tubo.
+
+Una salida puede empezar bloqueada y abrirse al superar un nivel, como cualquier nodo.
+*Comprobar mundo* avisa si un submundo no tiene ninguna salida (BF se quedaría encerrado).
+
+Un nodo `world` **cuenta como superado cuando está superado todo lo de su mundo**: sus niveles y,
+si tiene, sus propios nodos `world` (las salidas no cuentan). Así funciona como el castillo de
+una zona de SMW: le pones en *Desbloquea al completarlo* lo que debe abrirse en el mapa de fuera,
+y al salir del submundo tras superar su último nivel, ese camino aparece con la misma animación
+de puntitos.
+
+Si dentro de un submundo pones un nodo `world` que lleva de vuelta al mapa de fuera, también
+funciona como salida (entras en ese mapa), pero no cuenta para superar el submundo ni para el
+contador. Para salir es mejor un `exit`, que te deja encima del nodo por el que entraste.
 
 ---
 
 ## Mundo de pruebas: `test_graph`
 
-Un mundo pequeño para comprobar que el grafo funciona, sin tocar el boceto `draft_world`.
-Ábrelo con `run-world.bat test_graph` (o `run-editor.bat test_graph` para verlo en el editor).
+Un mundo pequeño para comprobar que el grafo funciona. Es el **mundo por defecto**: es el que
+abre el título, `play.bat` y `run-world.bat` sin nombre. Atajos en la carpeta `tests\`:
+`test-world.bat` para jugarlo y `test-editor.bat` para abrirlo en el editor.
 
 ```
 [T1]───[T2]───[T3]
          │      └──┐       camino en L (con un punto de curva)
       (cruce)      │       cruce = nodo "empty" (punto de paso)
          │       [T5]
-       [T4]                callejón sin salida: hay que volver
+       [T4]        │       T4: callejón sin salida, hay que volver
+                [castillo]──(meta)     castillo = nodo "world" → test_subworld
 ```
 
 | Nodo | Empieza | Al completarlo desbloquea |
@@ -241,7 +294,27 @@ Un mundo pequeño para comprobar que el grafo funciona, sin tocar el boceto `dra
 | T1 | desbloqueado | T2 |
 | T2 | bloqueado | T3, cruce y T4 (bifurcación) |
 | T3 | bloqueado | T5 |
-| T4, T5 | bloqueados | nada |
+| T4 | bloqueado | nada |
+| T5 | bloqueado | castillo |
+| castillo | bloqueado | meta y la salida hacia `test_world2` (cuando superas `test_subworld`) |
+
+Desde la meta sale un camino hacia abajo que se va de la pantalla: es una salida con destino
+`test_world2`. Ese mundo tiene dos niveles (Mundo 2 - 1 y 2 - 2) y su salida de vuelta está
+fuera de la pantalla por arriba.
+
+`test_subworld` son dos niveles en línea con dos salidas, una de cada tipo:
+
+```
+ ···(salida)···[Sub 1]───[Sub 2]───[tubo]
+ fuera de la pantalla              salida visible
+```
+
+| Nodo | Empieza | Al completarlo desbloquea |
+|---|---|---|
+| Sub 1 | desbloqueado | Sub 2 |
+| Sub 2 | bloqueado | tubo |
+| salida | desbloqueada, sin sprite, en x = -112 | — (al llegar, vuelves al castillo) |
+| tubo | bloqueado, sprite `overworld/pipe` | — (al llegar, vuelves al castillo) |
 
 T4 no tiene *Anim. completado* a propósito: al superarlo sale el check verde en vez de cambiar
 de color, para poder ver los dos tipos de marca.
@@ -293,7 +366,7 @@ de la build al repo. También existe **Guardar como...** para elegir la ruta a m
     {
       "id": "n0",                     // único dentro del mundo
       "x": 80, "y": 160,              // centro del nodo, en píxeles del mapa
-      "type": "level",                // level | world | empty
+      "type": "level",                // level | world | empty | exit
       "image": "overworld/big",
       "anim": "idle",
       "animDone": "",                 // animación cuando ya está superado
@@ -335,9 +408,12 @@ de la build al repo. También existe **Guardar como...** para elegir la ruta a m
 - **Niveles superados**: el nodo cambia a su *Anim. completado*. Si no tiene ninguna, se le pone
   encima un **check verde**. Abajo, el nombre lleva **SUPERADO** y a la derecha se lee
   `Superados: X/Y` del mundo actual.
-- BACK: sube al mapa anterior; en el mapa raíz abre el menú clásico (freeplay, opciones, mods,
-  créditos, editores).
-- **R**: reinicia el progreso del mundo actual (útil mientras pruebas).
+- BACK (ESC): abre el menú clásico (freeplay, opciones, mods, créditos, editores) en cualquier
+  mapa, también dentro de un submundo. BACK en ese menú te devuelve al mismo mapa y nodo.
+- **Nodo `exit`**: al llegar andando a él, BF sale del submundo (sin *Mundo destino*) o pasa al
+  mundo que tenga de destino, entrando andando por la salida de vuelta.
+- **R**: reinicia el progreso del mundo actual **y de sus submundos** (útil mientras pruebas). No
+  toca los mapas de los que vienes.
 
 El progreso se guarda en el `FlxG.save` del juego, con la clave `overworldProgress`
 (`"<mundo>::<nodo>"`).

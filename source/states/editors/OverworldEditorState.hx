@@ -237,6 +237,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		{
 			case 'world': 0xFF7FD4FF;
 			case 'empty': 0xFFBBBBBB;
+			case 'exit': 0xFFFFA040;
 			default: node.unlocked ? 0xFFFFE066 : 0xFFFF8080;
 		}
 	}
@@ -725,12 +726,25 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		tab.add(nodeIdInput);
 
 		label(tab, x + 120, y - 17, 'Tipo:');
-		nodeTypeDropDown = new PsychUIDropDownMenu(x + 120, y, ['level', 'world', 'empty'], function(sel:Int, value:String)
+		nodeTypeDropDown = new PsychUIDropDownMenu(x + 120, y, ['level', 'world', 'empty', 'exit'], function(sel:Int, value:String)
 		{
 			if (selectedNode == null) return;
+			pushUndo();
 			selectedNode.type = value;
 			lastNodeType = value;
+
+			// Por defecto una salida es invisible: se coloca fuera de la pantalla y BF se va
+			// andando por su camino. Si se quiere una salida visible (un tubo), se le pone sprite.
+			if (value == 'exit' && selectedNode.image == OverworldData.createNode('', 0, 0).image)
+			{
+				selectedNode.image = '';
+				selectedNode.anim = '';
+				showOutput('Salida invisible: colocala fuera de la pantalla o ponle un sprite (un tubo...)');
+			}
+
+			unsavedProgress = true;
 			reloadMap();
+			updateUI();
 		}, 100);
 		tab.add(nodeTypeDropDown);
 
@@ -782,7 +796,9 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		label(tab, x + 160, y - 17, 'Mundo destino:');
 		nodeWorldDropDown = new PsychUIDropDownMenu(x + 160, y, [''].concat(worldList), function(sel:Int, value:String)
 		{
-			if (selectedNode != null) selectedNode.world = value;
+			if (selectedNode == null) return;
+			selectedNode.world = value;
+			unsavedProgress = true;
 		}, 180);
 		tab.add(nodeWorldDropDown);
 
@@ -880,7 +896,9 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 '
 			+ '- sin semana salen todas las de la build
 '
-			+ '- con semana, solo las que ella declara', 11));
+			+ '- con semana, solo las que ella declara'
+			+ '\nSalida (exit) sin Mundo destino: vuelve al mapa de fuera.'
+			+ '\nCon destino: pasa a ese mundo y entra por su salida de vuelta.', 11));
 	}
 
 	function addDecorTab()
@@ -1188,7 +1206,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 
 	// ------------------------------------------------------- revision del mundo
 	inline function checkWorld():Array<String>
-		return OverworldData.checkWorld(worldFile);
+		return OverworldData.checkWorld(worldFile, worldName);
 
 	function reportProblems():Bool
 	{

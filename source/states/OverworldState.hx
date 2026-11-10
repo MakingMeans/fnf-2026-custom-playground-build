@@ -37,14 +37,28 @@ class OverworldState extends MusicBeatState
 	 */
 	static var pendingReveal:Array<String> = null;
 
+	/**
+	 * Mundo del que viene BF por una salida con destino: aqui entra andando por la de vuelta.
+	 * Publico para que Main pueda simularlo con `-from <mundo>`.
+	 */
+	public static var arrivingFrom:String = null;
+
+	/**
+	 * true cuando el menu principal se abrio con ESC desde un mapa: su BACK devuelve a ese mismo
+	 * mapa y nodo (con la pila de submundos intacta) en vez de ir a la pantalla de titulo.
+	 */
+	public static var menuFromMap:Bool = false;
+
 	public static function reset()
 	{
 		curWorld = OverworldData.DEFAULT_WORLD;
 		curNodeId = null;
 		fromOverworld = false;
 		returnToEditor = false;
+		menuFromMap = false;
 		lastLevelNode = null;
 		pendingReveal = null;
+		arrivingFrom = null;
 		worldStack = [];
 	}
 
@@ -122,7 +136,7 @@ class OverworldState extends MusicBeatState
 
 		#if debug
 		// en debug los avisos del grafo salen por consola cada vez que se carga un mundo
-		for (problem in OverworldData.checkWorld(worldFile)) trace('Overworld "$curWorld": $problem');
+		for (problem in OverworldData.checkWorld(worldFile, curWorld)) trace('Overworld "$curWorld": $problem');
 		#end
 
 		camGame = initPsychCamera();
@@ -201,6 +215,8 @@ class OverworldState extends MusicBeatState
 
 		for (node in file.nodes)
 		{
+			// las salidas pueden quedar fuera del mapa a proposito: BF se va andando de la pantalla
+			if (node.type == 'exit') continue;
 			if (node.x + 32 > targetWidth) targetWidth = node.x + 32;
 			if (node.y + 32 > targetHeight) targetHeight = node.y + 32;
 		}
@@ -273,7 +289,8 @@ class OverworldState extends MusicBeatState
 			else spritesBack.add(spr);
 		}
 
-		buildPaths();
+		// antes de dibujar nodos y caminos: un nodo 'world' recien superado cambia los dos
+		buildPaths(collectRevealNodes());
 
 		// Los nodos se dibujan siempre, estén o no accesibles: lo que se revela al
 		// desbloquear es el camino, igual que en Super Mario World.
@@ -285,6 +302,8 @@ class OverworldState extends MusicBeatState
 
 			var spr:FlxSprite = buildSprite(node.image, anim, node.fps);
 			spr.setPosition(node.x - spr.width * 0.5, node.y - spr.height * 0.5);
+			// una salida sin sprite no se ve: solo se ve el camino que se va de la pantalla
+			if (node.type == 'exit' && (node.image == null || node.image.length < 1)) spr.visible = false;
 			nodesGroup.add(spr);
 			nodeSprites.set(node.id, spr);
 
@@ -302,6 +321,14 @@ class OverworldState extends MusicBeatState
 		loadPlayerGraphic();
 		add(player);
 		add(spritesFront);
+
+		// llegando por una transicion: BF aparece en la salida de vuelta (fuera de la pantalla)
+		var arrival:Array<Dynamic> = arrivalPlan();
+		if (arrival != null)
+		{
+			var door:OverworldNodeFile = arrival[0];
+			curNodeId = door.id;
+		}
 
 		var start:OverworldNodeFile = getCurrentNode();
 		if (start == null)
@@ -321,6 +348,14 @@ class OverworldState extends MusicBeatState
 
 		updatePlayerPosition();
 		idleAnim();
+
+		// ...y entra andando hasta el primer nodo en cuanto termina la transicion de pantalla
+		if (arrival != null && start != null && start.id == curNodeId)
+		{
+			walkQueue = arrival[2];
+			walkTarget = arrival[1];
+			walking = true;
+		}
 
 		camFollow = new FlxObject(playerX, playerY, 1, 1);
 		add(camFollow);
@@ -363,25 +398,56 @@ class OverworldState extends MusicBeatState
 	 * Dibuja los caminos abiertos. Si se acaba de completar un nivel por primera vez, los caminos
 	 * que ha abierto se crean ocultos y prepareReveal() los hace aparecer puntito a puntito.
 	 */
-	function buildPaths()
+	function buildPaths(revealNodes:Array<String>)
 	{
-		var revealNode:String = (pendingReveal != null && pendingReveal[0] == curWorld) ? pendingReveal[1] : null;
-		pendingReveal = null;
-
 		var newPaths:Array<OverworldPathFile> = [];
 		for (pth in worldFile.paths)
 		{
 			if (!isPathOpen(pth)) continue;
 
-			if (revealNode != null && !isPathOpen(pth, revealNode)) newPaths.push(pth);
+			if (revealNodes.length > 0 && !isPathOpen(pth, revealNodes)) newPaths.push(pth);
 			else buildPathDots(pth);
 		}
 
-		if (newPaths.length > 0) prepareReveal(newPaths, revealNode);
+		if (newPaths.length > 0) prepareReveal(newPaths, revealNodes);
+	}
+
+	/**
+	 * Lo que se acaba de superar y cuyos caminos hay que animar: el nivel de la ultima cancion
+	 * y los nodos 'world' cuyo mundo ha quedado superado (lo normal: BF acaba de volver de el).
+	 */
+	function collectRevealNodes():Array<String>
+	{
+		var result:Array<String> = syncWorldNodes();
+		if (pendingReveal != null && pendingReveal[0] == curWorld && !result.contains(pendingReveal[1]))
+			result.push(pendingReveal[1]);
+		pendingReveal = null;
+		return result;
+	}
+
+	/** Los mundos por encima del actual en la pila: un nodo que lleve a ellos es una salida. */
+	function parentWorlds():Array<String>
+		return [for (entry in worldStack) entry[0]];
+
+	/** Marca como superados los nodos 'world' cuyo mundo ya esta completo y devuelve sus ids. */
+	function syncWorldNodes():Array<String>
+	{
+		var chain:Array<String> = parentWorlds().concat([curWorld]);
+		var newly:Array<String> = [];
+		for (node in worldFile.nodes)
+		{
+			if (node.type != 'world' || !OverworldData.canBeCompleted(node)) continue;
+			if (OverworldData.isCompleted(curWorld, node.id)) continue;
+			if (!OverworldData.isWorldCleared(node.world, chain)) continue;
+
+			OverworldData.setCompleted(curWorld, node.id);
+			newly.push(node.id);
+		}
+		return newly;
 	}
 
 	/** Un camino se ve (y se puede andar) cuando sus dos extremos estan accesibles. */
-	function isPathOpen(pth:OverworldPathFile, ?ignoreCompleted:String):Bool
+	function isPathOpen(pth:OverworldPathFile, ?ignoreCompleted:Array<String>):Bool
 	{
 		var nodeA:OverworldNodeFile = OverworldData.findNode(worldFile, pth.a);
 		var nodeB:OverworldNodeFile = OverworldData.findNode(worldFile, pth.b);
@@ -427,11 +493,11 @@ class OverworldState extends MusicBeatState
 	 * salen de un nodo accesible, despues los que continuan desde esos, etc. Los caminos de una
 	 * misma oleada crecen a la vez (una bifurcacion se abre por los dos lados).
 	 */
-	function prepareReveal(newPaths:Array<OverworldPathFile>, revealNode:String)
+	function prepareReveal(newPaths:Array<OverworldPathFile>, revealNodes:Array<String>)
 	{
 		var known:Map<String, Bool> = new Map<String, Bool>();
 		for (node in worldFile.nodes)
-			if (OverworldData.isUnlocked(curWorld, worldFile, node, revealNode)) known.set(node.id, true);
+			if (OverworldData.isUnlocked(curWorld, worldFile, node, revealNodes)) known.set(node.id, true);
 
 		var pending:Array<OverworldPathFile> = newPaths.copy();
 		while (pending.length > 0)
@@ -696,13 +762,14 @@ class OverworldState extends MusicBeatState
 		nameTxt.cameras = [camHUD];
 		add(nameTxt);
 
-		hintTxt = new FlxText(10, FlxG.height - 22, FlxG.width - 20, 'ACCEPT: entrar    BACK: menu    R: reiniciar progreso de este mundo', 14);
+		var backHint:String = returnToEditor ? 'BACK: volver al editor' : 'BACK: menu';
+		hintTxt = new FlxText(10, FlxG.height - 22, FlxG.width - 20, 'ACCEPT: entrar    $backHint    R: reiniciar este mundo y sus submundos', 14);
 		hintTxt.setFormat(Paths.font('vcr.ttf'), 14, 0xFFCCCCCC, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		hintTxt.cameras = [camHUD];
 		add(hintTxt);
 
 		// progreso del mundo, a la derecha de la barra
-		var count:Array<Int> = OverworldData.levelCount(curWorld, worldFile);
+		var count:Array<Int> = OverworldData.levelCount(curWorld, worldFile, parentWorlds());
 		if (count[1] > 0)
 		{
 			var progressTxt:FlxText = new FlxText(10, FlxG.height - 44, FlxG.width - 20, 'Superados: ${count[0]}/${count[1]}', 18);
@@ -753,7 +820,8 @@ class OverworldState extends MusicBeatState
 
 		if (FlxG.keys.justPressed.R)
 		{
-			OverworldData.resetProgress(curWorld);
+			// tambien los submundos: si no, un submundo ya superado volveria a marcar su nodo al momento
+			for (world in OverworldData.worldTree(curWorld, parentWorlds())) OverworldData.resetProgress(world);
 			FlxG.sound.play(Paths.sound('cancelMenu'));
 			MusicBeatState.resetState();
 			return;
@@ -769,26 +837,110 @@ class OverworldState extends MusicBeatState
 		if (dirX != 0 || dirY != 0) tryWalk(dirX, dirY);
 	}
 
+	/**
+	 * ESC nunca saca de un submundo (para eso estan los nodos 'exit'): abre el menu principal,
+	 * y al salir de el se vuelve a este mismo sitio. Probando desde el editor, vuelve al editor.
+	 */
 	function goBack()
 	{
-		if (worldStack.length > 0)
+		if (returnToEditor)
 		{
-			var entry:Array<String> = worldStack.pop();
-			curWorld = entry[0];
-			curNodeId = entry[1];
+			// el editor tenia abierto el mundo de la base de la pila, no el submundo actual
+			var edited:String = worldStack.length > 0 ? worldStack[0][0] : curWorld;
+			returnToEditor = false;
+			worldStack = [];
+			MusicBeatState.switchState(new states.editors.OverworldEditorState(edited));
+			return;
+		}
+
+		menuFromMap = true;
+		MusicBeatState.switchState(new MainMenuState());
+	}
+
+	/**
+	 * BF ha llegado a un nodo 'exit'.
+	 * - Con "Mundo destino": pasa a ese mundo de lado (una transicion, no un submundo: la pila no
+	 *   cambia) y alli entra andando desde la salida que apunta de vuelta a este.
+	 * - Sin destino: vuelve al mapa del que se entro a este submundo, encima de su nodo 'world'.
+	 */
+	function leaveWorld(exit:OverworldNodeFile)
+	{
+		busy = true;
+
+		if (exit.world != null && exit.world.length > 0)
+		{
+			if (!OverworldData.exists(exit.world))
+			{
+				failExit('Esta salida lleva a "${exit.world}", que no existe');
+				return;
+			}
+
+			arrivingFrom = curWorld;
+			curWorld = exit.world;
+			curNodeId = null;
 			MusicBeatState.switchState(new OverworldState());
 			return;
 		}
 
-		if (returnToEditor)
+		var target:Array<String> = worldStack.length > 0 ? worldStack.pop() : OverworldData.findParentWorld(curWorld);
+		if (target == null)
 		{
-			returnToEditor = false;
-			MusicBeatState.switchState(new states.editors.OverworldEditorState(curWorld));
+			failExit('Esta salida no lleva a ningun mapa:\nponle un "Mundo destino" o haz que un nodo "world" lleve aqui');
 			return;
 		}
 
-		MusicBeatState.switchState(new MainMenuState());
+		// si se llego aqui de lado desde otro submundo, la puerta correcta es la que lleva a este
+		var parentFile:OverworldFile = OverworldData.load(target[0]);
+		var door:OverworldNodeFile = parentFile == null ? null : Lambda.find(parentFile.nodes, n -> n.type == 'world' && n.world == curWorld);
+
+		curWorld = target[0];
+		curNodeId = door != null ? door.id : target[1];
+		MusicBeatState.switchState(new OverworldState());
 	}
+
+	function failExit(message:String)
+	{
+		busy = false;
+		FlxG.sound.play(Paths.sound('cancelMenu'));
+		showError(message);
+	}
+
+	/**
+	 * Al llegar por una transicion desde `arrivingFrom`, BF aparece en la salida de este mundo que
+	 * apunta de vuelta y entra andando por su camino hasta el primer nodo. Devuelve el plan
+	 * [salida, nodo al que llega, linea a recorrer], o null si no hay por donde entrar (entonces
+	 * BF aparece en el nodo inicial de siempre).
+	 */
+	function arrivalPlan():Array<Dynamic>
+	{
+		var from:String = arrivingFrom;
+		arrivingFrom = null;
+		if (from == null) return null;
+
+		for (door in worldFile.nodes)
+		{
+			if (door.type != 'exit' || door.world != from || !OverworldData.isUnlocked(curWorld, worldFile, door)) continue;
+
+			for (pth in worldFile.paths)
+			{
+				if (pth.a != door.id && pth.b != door.id) continue;
+
+				var nodeA:OverworldNodeFile = OverworldData.findNode(worldFile, pth.a);
+				var nodeB:OverworldNodeFile = OverworldData.findNode(worldFile, pth.b);
+				if (nodeA == null || nodeB == null || nodeA == nodeB) continue;
+
+				var other:OverworldNodeFile = (pth.a == door.id) ? nodeB : nodeA;
+				if (other.type == 'exit' || !OverworldData.isUnlocked(curWorld, worldFile, other)) continue;
+
+				var line:Array<Array<Float>> = buildLine(pth, nodeA, nodeB);
+				if (pth.b == door.id) line.reverse();
+				line.shift();
+				return [door, other, line];
+			}
+		}
+		return null;
+	}
+
 
 	function tryWalk(dirX:Float, dirY:Float)
 	{
@@ -898,9 +1050,17 @@ class OverworldState extends MusicBeatState
 		if (walkQueue.length < 1)
 		{
 			walking = false;
-			if (walkTarget != null) curNodeId = walkTarget.id;
+			var arrived:OverworldNodeFile = walkTarget;
+			if (arrived != null) curNodeId = arrived.id;
 			walkTarget = null;
 			idleAnim();
+
+			if (arrived != null && arrived.type == 'exit')
+			{
+				leaveWorld(arrived);
+				return;
+			}
+
 			updateNameText();
 		}
 	}
@@ -922,14 +1082,11 @@ class OverworldState extends MusicBeatState
 		player.animation.resume();
 	}
 
+	/** Parado en un nodo, BF mira a camara y camina en el sitio, como Mario en el mapa de SMW. */
 	function idleAnim()
 	{
-		playAnim('walk_$facing');
-		if (player.animation.curAnim != null)
-		{
-			player.animation.curAnim.curFrame = 0;
-			player.animation.pause();
-		}
+		facing = 'down';
+		playAnim('walk_down');
 	}
 
 	function updatePlayerPosition()
@@ -962,9 +1119,16 @@ class OverworldState extends MusicBeatState
 			return;
 		}
 
+		// BF solo pisa una salida al entrar andando por ella: su nombre confundiria ("Hacia X" viniendo de X)
+		if (node.type == 'exit')
+		{
+			nameTxt.text = '';
+			return;
+		}
+
 		var text:String = node.name != null && node.name.length > 0 ? node.name : node.id;
-		if (node.type == 'level' && OverworldData.isCompleted(curWorld, node.id)) text += '  <g>SUPERADO<g>';
-		else if (node.type == 'world') text += '  >>';
+		if (node.type == 'world') text += '  >>';
+		if (OverworldData.canBeCompleted(node) && OverworldData.isCompleted(curWorld, node.id)) text += '  <g>SUPERADO<g>';
 
 		nameTxt.applyMarkup(text, DONE_MARKUP);
 	}

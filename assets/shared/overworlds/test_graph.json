@@ -27,6 +27,15 @@
 			"unlocks": []
 		},
 		{"id": "t5", "x": 224, "y": 128, "type": "level", "image": "overworld/og_mario/level_tiles", "anim": "tile0002", "animDone": "tile0003", "fps": 0, "name": "Tutorial 5", "song": "tutorial5", "week": "test_levels", "difficulty": "", "world": "", "unlocked": false,
+			"unlocks": ["sub"]
+		},
+		{"id": "sub", "x": 224, "y": 192, "type": "world", "image": "overworld/castle", "anim": "idle", "animDone": "dead", "fps": 0, "name": "Castillo (submundo)", "song": "", "week": "", "difficulty": "", "world": "test_subworld", "unlocked": false,
+			"unlocks": ["meta", "a_mundo2"]
+		},
+		{"id": "a_mundo2", "x": 288, "y": 304, "type": "exit", "image": "", "anim": "", "animDone": "", "fps": 0, "name": "Hacia el mundo 2", "song": "", "week": "", "difficulty": "", "world": "test_world2", "unlocked": false,
+			"unlocks": []
+		},
+		{"id": "meta", "x": 288, "y": 192, "type": "empty", "image": "overworld/og_mario/level_tiles", "anim": "tile0006", "animDone": "", "fps": 0, "name": "Meta", "song": "", "week": "", "difficulty": "", "world": "", "unlocked": false,
 			"unlocks": []
 		}
 	],
@@ -48,6 +57,15 @@
 			"points": [
 				[224, 64]
 			]
+		},
+		{"a": "t5", "b": "sub", "dots": "overworld/dot", "dotAnim": "idle", "dotSpacing": 16,
+			"points": []
+		},
+		{"a": "sub", "b": "meta", "dots": "overworld/dot", "dotAnim": "idle", "dotSpacing": 16,
+			"points": []
+		},
+		{"a": "meta", "b": "a_mundo2", "dots": "overworld/dot", "dotAnim": "idle", "dotSpacing": 16,
+			"points": []
 		}
 	]
 }

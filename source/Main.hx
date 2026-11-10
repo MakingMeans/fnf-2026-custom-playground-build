@@ -177,9 +177,14 @@ class Main extends Sprite
 				if (worldArg + 1 < launchArgs.length && !launchArgs[worldArg + 1].startsWith('-'))
 					worldToPlay = launchArgs[worldArg + 1];
 
+				// -from <mundo>: entra como si BF llegara de ese mundo por una salida (para probar transiciones)
+				var fromArg:Int = launchArgs.indexOf('-from');
+				var arriveFrom:String = (fromArg > -1 && fromArg + 1 < launchArgs.length) ? launchArgs[fromArg + 1] : null;
+
 				firstState = function():flixel.FlxState
 				{
 					states.OverworldState.reset();
+					states.OverworldState.arrivingFrom = arriveFrom;
 					return new states.OverworldState(worldToPlay);
 				};
 			}

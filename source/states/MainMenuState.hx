@@ -260,7 +260,14 @@ class MainMenuState extends MusicBeatState
 				selectedSomethin = true;
 				FlxG.mouse.visible = false;
 				FlxG.sound.play(Paths.sound('cancelMenu'));
-				MusicBeatState.switchState(new TitleState());
+
+				// abierto con ESC desde el overworld: se vuelve al mismo mapa y nodo
+				if (OverworldState.menuFromMap)
+				{
+					OverworldState.menuFromMap = false;
+					MusicBeatState.switchState(new OverworldState());
+				}
+				else MusicBeatState.switchState(new TitleState());
 			}
 
 			if (controls.ACCEPT || (FlxG.mouse.justPressed && allowMouse))

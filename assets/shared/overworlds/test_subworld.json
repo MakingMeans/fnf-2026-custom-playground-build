@@ -1,0 +1,39 @@
+{
+	"displayName": "Submundo de prueba",
+	"bg": "overworld/backgrounds/sea",
+	"bgAnim": "idle",
+	"bgFps": 6,
+	"bgTile": true,
+	"music": "freakyMenu",
+	"zoom": 3,
+	"gridSize": 16,
+	"startNode": "s1",
+	"player": "overworld/overworld_bf",
+	"walkSpeed": 60,
+	"nodes": [
+		{"id": "s1", "x": 64, "y": 96, "type": "level", "image": "overworld/og_mario/level_tiles", "anim": "tile0002", "animDone": "tile0003", "fps": 0, "name": "Sub 1", "song": "tutorial1", "week": "test_levels", "difficulty": "", "world": "", "unlocked": true,
+			"unlocks": ["s2"]
+		},
+		{"id": "s2", "x": 144, "y": 96, "type": "level", "image": "overworld/og_mario/level_tiles", "anim": "tile0002", "animDone": "tile0003", "fps": 0, "name": "Sub 2", "song": "tutorial2", "week": "test_levels", "difficulty": "", "world": "", "unlocked": false,
+			"unlocks": ["tubo"]
+		},
+		{"id": "salida", "x": -112, "y": 96, "type": "exit", "image": "", "anim": "", "animDone": "", "fps": 0, "name": "Salida", "song": "", "week": "", "difficulty": "", "world": "", "unlocked": true,
+			"unlocks": []
+		},
+		{"id": "tubo", "x": 208, "y": 96, "type": "exit", "image": "overworld/pipe", "anim": "idle", "animDone": "", "fps": 0, "name": "Tubo (salida)", "song": "", "week": "", "difficulty": "", "world": "", "unlocked": false,
+			"unlocks": []
+		}
+	],
+	"sprites": [],
+	"paths": [
+		{"a": "s1", "b": "s2", "dots": "overworld/dot", "dotAnim": "idle", "dotSpacing": 16,
+			"points": []
+		},
+		{"a": "s1", "b": "salida", "dots": "overworld/dot", "dotAnim": "idle", "dotSpacing": 16,
+			"points": []
+		},
+		{"a": "s2", "b": "tubo", "dots": "overworld/dot", "dotAnim": "idle", "dotSpacing": 16,
+			"points": []
+		}
+	]
+}

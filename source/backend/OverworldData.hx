@@ -10,7 +10,7 @@ typedef OverworldNodeFile =
 	var id:String;          // identificador unico dentro del mundo
 	var x:Float;            // posicion en pixeles del mundo
 	var y:Float;
-	var type:String;        // 'level' | 'world' | 'empty'
+	var type:String;        // 'level' | 'world' | 'empty' | 'exit' (al llegar, BF sale del submundo)
 	var image:String;       // clave de imagen, ej: 'overworld/dot'
 	var anim:String;        // prefijo de animacion (vacio = imagen estatica)
 	var animDone:String;    // animacion al estar completado (vacio = la misma)
@@ -85,7 +85,7 @@ typedef OverworldFile =
 class OverworldData
 {
 	// El mundo que abre TitleState y con el que arranca el editor si no le pasas otro.
-	public static final DEFAULT_WORLD:String = 'draft_world';
+	public static final DEFAULT_WORLD:String = 'test_graph';
 	public static final DEFAULT_BG:String = 'overworld/backgrounds/sea';
 	public static final DEFAULT_SONG:String = 'tutorial';
 	public static final DEFAULT_WEEK:String = 'tutorial';
@@ -302,26 +302,110 @@ class OverworldData
 	 * `ignoreCompleted` hace como si ese nodo aun no se hubiera completado: sirve para saber
 	 * que estaba abierto justo antes de ganarlo (y asi animar solo los caminos nuevos).
 	 */
-	public static function isUnlocked(world:String, file:OverworldFile, node:OverworldNodeFile, ?ignoreCompleted:String):Bool
+	public static function isUnlocked(world:String, file:OverworldFile, node:OverworldNodeFile, ?ignoreCompleted:Array<String>):Bool
 	{
 		if (node == null) return false;
 		if (node.unlocked) return true;
 
 		for (other in file.nodes)
-			if (other.id != ignoreCompleted && other.unlocks != null && other.unlocks.contains(node.id) && isCompleted(world, other.id))
+		{
+			if (ignoreCompleted != null && ignoreCompleted.contains(other.id)) continue;
+			if (other.unlocks != null && other.unlocks.contains(node.id) && isCompleted(world, other.id))
 				return true;
+		}
 
 		return false;
 	}
 
-	/** Cuantos niveles tiene el mundo y cuantos estan completados: [completados, total]. */
-	public static function levelCount(world:String, file:OverworldFile):Array<Int>
+	/**
+	 * Un mundo esta superado cuando todo lo completable que tiene lo esta: sus niveles y sus
+	 * nodos 'world' (estos, guardados o porque su propio mundo ya este superado).
+	 * Un nodo que lleva a un mundo de mas arriba en la cadena (una "salida" de vuelta) no cuenta,
+	 * o padre e hijo se esperarian el uno al otro y ninguno se superaria nunca.
+	 */
+	public static function isWorldCleared(name:String, ?visiting:Array<String>):Bool
+	{
+		if (visiting == null) visiting = [];
+		if (visiting.contains(name)) return false;
+
+		var file:OverworldFile = load(name);
+		if (file == null) return false;
+
+		visiting = visiting.concat([name]);
+		var required:Int = 0;
+		for (node in file.nodes)
+		{
+			if (!canBeCompleted(node)) continue;
+
+			if (node.type == 'world')
+			{
+				if (visiting.contains(node.world)) continue; // salida hacia un mundo padre
+				required++;
+				if (!isCompleted(name, node.id) && !isWorldCleared(node.world, visiting)) return false;
+			}
+			else
+			{
+				required++;
+				if (!isCompleted(name, node.id)) return false;
+			}
+		}
+		return required > 0;
+	}
+
+	/**
+	 * El mundo desde el que se entra a `name` por un nodo 'world': [mundo, id del nodo].
+	 * Sirve para saber a donde lleva una salida cuando no hay pila (p. ej. si el submundo
+	 * se abrio directamente con run-world.bat). null si nadie lleva a el.
+	 */
+	public static function findParentWorld(name:String):Array<String>
+	{
+		for (world in listWorlds())
+		{
+			if (world == name) continue;
+			var file:OverworldFile = load(world);
+			if (file == null) continue;
+
+			for (node in file.nodes)
+				if (node.type == 'world' && node.world == name) return [world, node.id];
+		}
+		return null;
+	}
+
+	/**
+	 * Este mundo y todos los que cuelgan de el por nodos 'world' (sin repetir). No entra en
+	 * `exclude`: asi, reiniciar un submundo no reinicia tambien el mapa del que se vino.
+	 */
+	public static function worldTree(name:String, ?exclude:Array<String>):Array<String>
+	{
+		var result:Array<String> = [];
+		var pending:Array<String> = [name];
+		while (pending.length > 0)
+		{
+			var current:String = pending.shift();
+			if (result.contains(current) || (exclude != null && exclude.contains(current))) continue;
+			result.push(current);
+
+			var file:OverworldFile = load(current);
+			if (file == null) continue;
+			for (node in file.nodes)
+				if (node.type == 'world' && node.world != null && node.world.length > 0 && !result.contains(node.world))
+					pending.push(node.world);
+		}
+		return result;
+	}
+
+	/**
+	 * Cuantos nodos completables tiene el mundo y cuantos estan completados: [completados, total].
+	 * Los nodos que llevan a `parentWorlds` son salidas de vuelta y no cuentan.
+	 */
+	public static function levelCount(world:String, file:OverworldFile, ?parentWorlds:Array<String>):Array<Int>
 	{
 		var done:Int = 0;
 		var total:Int = 0;
 		for (node in file.nodes)
 		{
 			if (!canBeCompleted(node)) continue;
+			if (node.type == 'world' && (node.world == world || (parentWorlds != null && parentWorlds.contains(node.world)))) continue;
 			total++;
 			if (isCompleted(world, node.id)) done++;
 		}
@@ -338,9 +422,19 @@ class OverworldData
 		return false;
 	}
 
-	/** Solo los niveles se completan (al acabar su cancion); 'world' y 'empty' nunca. */
-	public static inline function canBeCompleted(node:OverworldNodeFile):Bool
-		return node.type == 'level' && node.song != null && node.song.length > 0;
+	/**
+	 * Un 'level' se completa al acabar su cancion; un 'world', cuando su mundo queda superado
+	 * (ver isWorldCleared). Un 'empty' es solo un punto de paso y nunca se completa.
+	 */
+	public static function canBeCompleted(node:OverworldNodeFile):Bool
+	{
+		return switch (node.type)
+		{
+			case 'level': node.song != null && node.song.length > 0;
+			case 'world': node.world != null && node.world.length > 0;
+			default: false;
+		}
+	}
 
 	/** Un ID valido para un nodo: no vacio, sin comas (separan la lista de unlocks) y sin '::' (clave del progreso). */
 	public static function isValidNodeId(id:String):Bool
@@ -413,9 +507,10 @@ class OverworldData
 	/**
 	 * Revisa el mundo y devuelve los avisos en texto legible (lista vacia = todo correcto).
 	 * Mira referencias rotas e IDs repetidos, y con simulateReachable() detecta nodos a los
-	 * que nunca se puede llegar aunque tengan a alguien que los desbloquee.
+	 * que nunca se puede llegar aunque tengan a alguien que los desbloquee. Con `name`, ademas
+	 * avisa si es un submundo sin ninguna salida.
 	 */
-	public static function checkWorld(file:OverworldFile):Array<String>
+	public static function checkWorld(file:OverworldFile, ?name:String):Array<String>
 	{
 		var problems:Array<String> = [];
 		if (file == null || file.nodes.length < 1)
@@ -478,8 +573,22 @@ class OverworldData
 			if (node.type == 'level' && (node.song == null || node.song.length < 1))
 				warn(node.id, '"${node.id}": es un nivel sin cancion.');
 
-			if (node.type == 'world' && (node.world == null || node.world.length < 1 || !exists(node.world)))
-				warn(node.id, '"${node.id}": apunta a un mundo que no existe.');
+			if (node.type == 'world')
+			{
+				var target:OverworldFile = (node.world != null && node.world.length > 0) ? load(node.world) : null;
+				if (target == null) warn(node.id, '"${node.id}": apunta a un mundo que no existe.');
+				else if (!Lambda.exists(target.nodes, n -> canBeCompleted(n)))
+					warn(node.id, '"${node.id}": el mundo "${node.world}" no tiene nada que superar, asi que este nodo nunca se completa.');
+			}
+
+			// salida con destino: transicion de lado a otro mundo
+			if (node.type == 'exit' && node.world != null && node.world.length > 0)
+			{
+				var dest:OverworldFile = load(node.world);
+				if (dest == null) warn(node.id, '"${node.id}": la salida lleva a "${node.world}", que no existe.');
+				else if (name != null && !Lambda.exists(dest.nodes, n -> n.type == 'exit' && n.world == name))
+					warn(node.id, '"${node.id}": "${node.world}" no tiene ninguna salida de vuelta hacia aqui, asi que BF aparecera alli en su nodo inicial.');
+			}
 
 			if (node.unlocks == null || node.unlocks.length < 1) continue;
 
@@ -491,6 +600,14 @@ class OverworldData
 
 			if (!canBeCompleted(node))
 				warn(node.id, '"${node.id}": es "${node.type}" y nunca se completa, asi que no desbloquea nada.');
+		}
+
+		// un submundo sin salida deja a BF encerrado: ESC ya no saca de el
+		if (name != null && !Lambda.exists(file.nodes, n -> n.type == 'exit'))
+		{
+			var parent:Array<String> = findParentWorld(name);
+			if (parent != null)
+				warn(null, 'Es un submundo (se entra desde "${parent[0]}") y no tiene ningun nodo "exit": BF no podria salir.');
 		}
 
 		var start:OverworldNodeFile = findNode(file, file.startNode);
