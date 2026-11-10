@@ -54,6 +54,13 @@ typedef OverworldPathFile =
 	var dotSpacing:Float;
 }
 
+/** Un aviso de checkWorldProblems(): el texto y el nodo al que se refiere (null = todo el mundo). */
+typedef OverworldProblem =
+{
+	var node:Null<String>;
+	var text:String;
+}
+
 typedef OverworldImageInfo =
 {
 	var width:Int;
@@ -504,18 +511,23 @@ class OverworldData
 		return reached;
 	}
 
+	/** Los avisos en texto legible (lista vacia = todo correcto). Ver checkWorldProblems(). */
+	public static function checkWorld(file:OverworldFile, ?name:String):Array<String>
+		return [for (problem in checkWorldProblems(file, name)) problem.text];
+
 	/**
-	 * Revisa el mundo y devuelve los avisos en texto legible (lista vacia = todo correcto).
+	 * Revisa el mundo y devuelve sus avisos, cada uno con el nodo al que se refiere (null si es
+	 * del mundo entero), para que el editor pueda marcarlos en el mapa.
 	 * Mira referencias rotas e IDs repetidos, y con simulateReachable() detecta nodos a los
 	 * que nunca se puede llegar aunque tengan a alguien que los desbloquee. Con `name`, ademas
 	 * avisa si es un submundo sin ninguna salida.
 	 */
-	public static function checkWorld(file:OverworldFile, ?name:String):Array<String>
+	public static function checkWorldProblems(file:OverworldFile, ?name:String):Array<OverworldProblem>
 	{
-		var problems:Array<String> = [];
+		var problems:Array<OverworldProblem> = [];
 		if (file == null || file.nodes.length < 1)
 		{
-			problems.push('El mundo no tiene ningun nodo.');
+			problems.push({node: null, text: 'El mundo no tiene ningun nodo.'});
 			return problems;
 		}
 
@@ -523,9 +535,13 @@ class OverworldData
 		var flagged:Map<String, Bool> = new Map<String, Bool>();
 		inline function warn(id:String, text:String)
 		{
-			problems.push(text);
+			problems.push({node: id, text: text});
 			if (id != null) flagged.set(id, true);
 		}
+
+		// aviso que se marca en un nodo pero no le quita el de "inalcanzable" (es de un camino suyo)
+		inline function note(id:String, text:String)
+			problems.push({node: id, text: text});
 
 		var counts:Map<String, Int> = new Map<String, Int>();
 		for (node in file.nodes)
@@ -546,7 +562,7 @@ class OverworldData
 		{
 			if (!counts.exists(pth.a) || !counts.exists(pth.b))
 			{
-				warn(null, 'Camino ${pth.a} <-> ${pth.b}: apunta a un nodo que no existe.');
+				note(counts.exists(pth.a) ? pth.a : (counts.exists(pth.b) ? pth.b : null), 'Camino ${pth.a} <-> ${pth.b}: apunta a un nodo que no existe.');
 				continue;
 			}
 			if (pth.a == pth.b)
@@ -556,7 +572,7 @@ class OverworldData
 			}
 
 			var key:String = pth.a < pth.b ? '${pth.a}|${pth.b}' : '${pth.b}|${pth.a}';
-			if (pairs.exists(key)) warn(null, 'Camino ${pth.a} <-> ${pth.b} repetido.');
+			if (pairs.exists(key)) note(pth.a, 'Camino ${pth.a} <-> ${pth.b} repetido.');
 			pairs.set(key, true);
 			linked.set(pth.a, true);
 			linked.set(pth.b, true);
@@ -623,7 +639,7 @@ class OverworldData
 		var reached:Map<String, Bool> = simulateReachable(file);
 		for (node in file.nodes)
 			if (!reached.exists(node.id) && !flagged.exists(node.id))
-				problems.push('"${node.id}": inalcanzable aunque completes todo lo que se puede.');
+				problems.push({node: node.id, text: '"${node.id}": inalcanzable aunque completes todo lo que se puede.'});
 
 		return problems;
 	}

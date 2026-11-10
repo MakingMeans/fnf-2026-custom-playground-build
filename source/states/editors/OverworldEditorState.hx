@@ -24,8 +24,9 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 	static inline var MODE_DECOR:Int = 2;
 	static inline var MODE_PATH:Int = 3;
 	static inline var MODE_TILE:Int = 4;
+	static inline var MODE_LINK:Int = 5;
 
-	static final MODE_NAMES:Array<String> = ['SELECCIONAR (V)', 'NODO (N)', 'DECORADO (B)', 'CAMINO (C)', 'PINTAR TILES (T)'];
+	static final MODE_NAMES:Array<String> = ['SELECCIONAR (V)', 'NODO (N)', 'DECORADO (B)', 'CAMINO (C)', 'PINTAR TILES (T)', 'ENLAZAR DESBLOQUEOS (L)'];
 
 	static inline var PALETTE_WIDTH:Int = 300;
 
@@ -75,6 +76,29 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 	var redoStack:Array<String> = [];
 	var dragSnapshot:String = null;
 	static inline var MAX_UNDO:Int = 40;
+
+	// deshacer en la UI: un campo de texto da un paso por cada vez que se entra en el; los clics
+	// seguidos en desplegables / casillas / botones +- sobre lo mismo se juntan en un paso
+	var lastFocus:PsychUIInputText = null;
+	var focusBefore:String = null;
+	var focusRecorded:Bool = false;
+	var lastUIEditTime:Float = -999;
+	var lastUITarget:Dynamic = null;
+	static inline final UI_EDIT_GAP:Float = 1.2;
+
+	// modo enlazar (L): el nodo que desbloquea
+	var linkStart:OverworldNodeFile = null;
+
+	// punto de curva que se esta arrastrando: [camino, indice]
+	var dragPointPath:OverworldPathFile = null;
+	var dragPointIndex:Int = -1;
+
+	// avisos de checkWorld marcados sobre el mapa
+	var problems:Array<OverworldProblem> = [];
+	var problemsDirty:Bool = true;
+	var problemsTimer:Float = 0;
+	var problemCursor:Int = -1;
+	var problemGroup:FlxTypedGroup<FlxSprite>;
 
 	// desplegables: el que se abre pasa al frente para que no lo tape nada
 	var dropDowns:Array<PsychUIDropDownMenu> = [];
@@ -133,9 +157,12 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		spritesFront = new FlxTypedGroup<FlxSprite>();
 		labelsGroup = new FlxTypedGroup<FlxText>();
 
+		problemGroup = new FlxTypedGroup<FlxSprite>();
+
 		add(spritesBack);
 		add(dotsGroup);
 		add(nodesGroup);
+		add(problemGroup);
 		add(spritesFront);
 		add(labelsGroup);
 
@@ -229,6 +256,12 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 
 		buildPathLines();
 		updateSelectionBox();
+
+		// los avisos se recalculan un momento despues (no en cada pixel de un arrastre)
+		problemGroup.forEachAlive(function(spr:FlxSprite) spr.destroy());
+		problemGroup.clear();
+		problemsDirty = true;
+		problemsTimer = 0;
 	}
 
 	function labelColor(node:OverworldNodeFile):FlxColor
@@ -586,7 +619,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		collectDropDowns();
 		for (dropDown in dropDowns) dropDown.showDropDown(false);
 
-		modeTxt = new FlxText(10, 42, 640, '', 16);
+		modeTxt = new FlxText(10, 42, 885, '', 16); // hasta el panel de la derecha, para que no se parta
 		modeTxt.setFormat(Paths.font('vcr.ttf'), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		modeTxt.cameras = [camHUD];
 		modeTxt.scrollFactor.set();
@@ -617,7 +650,12 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			+ 'C  modo camino: clic en nodo A y luego en nodo B para unirlos\n'
 			+ '   (con un camino elegido, clic en el vacio anade un punto de curva)\n'
 			+ 'T  modo pintar tiles: elige un tile en la paleta y pinta arrastrando\n'
-			+ 'P  mostrar / ocultar la paleta de tiles\n\n'
+			+ 'L  modo enlazar: clic en el nodo que desbloquea y luego en los que abre\n'
+			+ '   (otro clic en un destino quita el enlace; clic en el vacio termina;\n'
+			+ '    L otra vez, V o ESC salen del modo)\n'
+			+ 'P  mostrar / ocultar la paleta de tiles\n'
+			+ 'Punto de curva         arrastrar = moverlo, clic derecho = borrarlo (modos V y C)\n'
+			+ 'E                     ir al siguiente aviso (nodos con contorno rojo)\n\n'
 			+ 'Clic derecho          borrar lo que hay bajo el raton\n'
 			+ 'SUPR                  borrar la seleccion\n'
 			+ 'ALT (mantener)        colocar sin ajustar a la rejilla\n'
@@ -630,7 +668,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			+ 'CTRL+S                guardar\n'
 			+ 'CTRL+T                probar el mundo\n'
 			+ 'F1                    esta ayuda\n'
-			+ 'ESC                   volver al menu de editores';
+			+ 'ESC                   salir del modo actual; en SELECCIONAR, volver al menu de editores';
 
 		helpTxt = new FlxText(40, 60, FlxG.width - 80, text, 16);
 		helpTxt.setFormat(Paths.font('vcr.ttf'), 16, FlxColor.WHITE, LEFT);
@@ -770,19 +808,29 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		y += 36;
 		tab.add(new PsychUIButton(x, y, 'Mundo nuevo', function()
 		{
-			pushUndo();
+			if (!confirmDiscard('Mundo nuevo')) return;
+
+			// nombre de archivo libre: si conservara el del mundo abierto, CTRL+S lo machacaria
+			worldName = uniqueWorldName('mundo_nuevo');
 			worldFile = OverworldData.createEmpty();
 			selectedNode = null;
 			selectedSprite = null;
 			selectedPath = null;
+			resetHistory();
+			unsavedProgress = true;
 			reloadMap();
 			updateUI();
-			showOutput('Mundo nuevo creado (sin guardar)');
+			showOutput('Mundo nuevo "$worldName" creado (sin guardar)');
 		}, 100));
 
 		worldsDropDown = new PsychUIDropDownMenu(x + 110, y, worldList, function(sel:Int, value:String)
 		{
 			if (value == null || value.length < 1) return;
+			if (!confirmDiscard('cargar "$value"'))
+			{
+				worldsDropDown.selectedLabel = worldName;
+				return;
+			}
 
 			var loaded:OverworldFile = OverworldData.load(value);
 			if (loaded == null)
@@ -791,12 +839,13 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 				return;
 			}
 
-			pushUndo();
 			worldName = value;
 			worldFile = loaded;
 			selectedNode = null;
 			selectedSprite = null;
 			selectedPath = null;
+			resetHistory();
+			unsavedProgress = false;
 			reloadMap();
 			updateUI();
 			showOutput('Mundo "$value" cargado');
@@ -887,7 +936,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		nodeXStepper.onValueChange = function()
 		{
 			if (selectedNode == null) return;
-			selectedNode.x = nodeXStepper.value;
+			moveNodeTo(selectedNode, nodeXStepper.value, selectedNode.y);
 			reloadMap();
 		};
 		tab.add(nodeXStepper);
@@ -896,7 +945,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		nodeYStepper.onValueChange = function()
 		{
 			if (selectedNode == null) return;
-			selectedNode.y = nodeYStepper.value;
+			moveNodeTo(selectedNode, selectedNode.x, nodeYStepper.value);
 			reloadMap();
 		};
 		tab.add(nodeYStepper);
@@ -1358,9 +1407,105 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 	/** Guarda el estado ANTES de una accion que cambia el mundo. */
 	function pushUndo(?state:String = null)
 	{
-		undoStack.push(state != null ? state : snapshot());
+		var entry:String = state != null ? state : snapshot();
+
+		// si una accion ya guardo este mismo estado (p. ej. un desplegable que hace su propio
+		// pushUndo y ademas lo registra recordUIChange), no se apila dos veces
+		if (undoStack.length < 1 || undoStack[undoStack.length - 1] != entry) undoStack.push(entry);
 		if (undoStack.length > MAX_UNDO) undoStack.shift();
 		redoStack = [];
+	}
+
+	/**
+	 * Cambiar de mundo (cargar otro o crear uno) empieza un historial nuevo: deshacer con el de
+	 * antes metia el contenido de otro archivo bajo el nombre del nuevo, y CTRL+S lo machacaba.
+	 */
+	function resetHistory()
+	{
+		undoStack = [];
+		redoStack = [];
+		lastUITarget = null;
+		lastFocus = null;
+		linkStart = null;
+		pathStart = null;
+	}
+
+	var discardAskedAt:Float = -999;
+
+	/** Con cambios sin guardar, cambiar de mundo hay que pedirlo dos veces seguidas. */
+	function confirmDiscard(action:String):Bool
+	{
+		if (!unsavedProgress) return true;
+
+		var now:Float = haxe.Timer.stamp();
+		if (now - discardAskedAt < 5)
+		{
+			discardAskedAt = -999;
+			return true;
+		}
+
+		discardAskedAt = now;
+		showOutput('"$worldName" tiene cambios sin guardar.\nGuarda con CTRL+S, o repite $action para descartarlos', true);
+		return false;
+	}
+
+	function uniqueWorldName(base:String):String
+	{
+		var name:String = base;
+		var i:Int = 2;
+		while (OverworldData.exists(name)) name = base + (i++);
+		return name;
+	}
+
+	/** Lo que esta seleccionado: sirve para juntar clics seguidos sobre lo mismo en un paso. */
+	function selectionTarget():Dynamic
+	{
+		if (selectedNode != null) return selectedNode;
+		if (selectedSprite != null) return selectedSprite;
+		if (selectedPath != null) return selectedPath;
+		return worldFile;
+	}
+
+	/**
+	 * Cambios hechos con el raton en la UI (desplegables, casillas, botones +-): `before` es el
+	 * mundo justo antes de que la UI procesara el clic. Varios clics seguidos sobre lo mismo
+	 * (subir un contador de 1 en 1) son un solo paso de deshacer.
+	 */
+	function recordUIChange(before:String)
+	{
+		if (snapshot() == before) return;
+
+		var now:Float = haxe.Timer.stamp();
+		var target:Dynamic = selectionTarget();
+		if (target != lastUITarget || now - lastUIEditTime > UI_EDIT_GAP) pushUndo(before);
+
+		lastUIEditTime = now;
+		lastUITarget = target;
+		unsavedProgress = true;
+	}
+
+	/**
+	 * Cambios tecleando en un campo: se aplican al mundo tecla a tecla, asi que se guarda el
+	 * estado al entrar en el campo y se apila (una sola vez) en cuanto la primera tecla cambia algo.
+	 * Asi un renombrado entero se deshace de una vez, no letra a letra.
+	 */
+	function trackFocusEdits()
+	{
+		var focus:PsychUIInputText = PsychUIInputText.focusOn;
+		if (focus != lastFocus)
+		{
+			lastFocus = focus;
+			focusBefore = focus != null ? snapshot() : null;
+			focusRecorded = false;
+			return;
+		}
+
+		if (focus == null || focusRecorded || FlxG.keys.firstJustPressed() == -1) return;
+		if (snapshot() == focusBefore) return;
+
+		pushUndo(focusBefore);
+		focusRecorded = true;
+		unsavedProgress = true;
 	}
 
 	function undo()
@@ -1391,15 +1536,26 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 
 	function applySnapshot(json:String)
 	{
+		// la seleccion se conserva por posicion: tras deshacer un renombrado el nodo sigue elegido
+		var nodeIndex:Int = worldFile.nodes.indexOf(selectedNode);
+		var spriteIndex:Int = worldFile.sprites.indexOf(selectedSprite);
+		var pathIndex:Int = worldFile.paths.indexOf(selectedPath);
+
 		worldFile = cast haxe.Json.parse(json);
 		OverworldData.applyDefaults(worldFile);
 
-		selectedNode = null;
-		selectedSprite = null;
-		selectedPath = null;
+		selectedNode = (nodeIndex > -1 && nodeIndex < worldFile.nodes.length) ? worldFile.nodes[nodeIndex] : null;
+		selectedSprite = (spriteIndex > -1 && spriteIndex < worldFile.sprites.length) ? worldFile.sprites[spriteIndex] : null;
+		selectedPath = (pathIndex > -1 && pathIndex < worldFile.paths.length) ? worldFile.paths[pathIndex] : null;
 		pathStart = null;
+		linkStart = null;
 		dragging = false;
+		dragPointPath = null;
 		unsavedProgress = true;
+
+		// lo siguiente que se edite empieza un paso nuevo
+		lastUITarget = null;
+		lastFocus = null;
 
 		reloadMap();
 		updateUI();
@@ -1769,12 +1925,34 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 	{
 		var hadFocus:Bool = (PsychUIInputText.focusOn != null);
 
+		// un clic puede cambiar el mundo desde la UI: se guarda como estaba antes de procesarlo
+		var beforeClick:String = FlxG.mouse.justPressed ? snapshot() : null;
+		var worldBefore:OverworldFile = worldFile;
+
 		super.update(elapsed);
 
-		raiseOpenDropDown();
+		// si el clic cambio de mundo (cargar / nuevo), su historial ya se reinicio: no se apila
+		if (beforeClick != null && worldFile == worldBefore) recordUIChange(beforeClick);
+		trackFocusEdits();
 
-		modeTxt.text = 'Mundo: $worldName   |   Modo: ${MODE_NAMES[curMode]}   |   F1 = ayuda'
-			+ (unsavedProgress ? '   |   * sin guardar' : '');
+		// CTRL+Z / CTRL+Y tambien con un campo de texto activo (el campo no los usa): se sale del
+		// campo y se deshace en el mundo; el campo vuelve a mostrar el valor deshecho
+		if (PsychUIInputText.focusOn != null && FlxG.keys.pressed.CONTROL && (FlxG.keys.justPressed.Z || FlxG.keys.justPressed.Y))
+		{
+			var redoKey:Bool = FlxG.keys.justPressed.Y || FlxG.keys.pressed.SHIFT;
+			PsychUIInputText.focusOn = null;
+			lastFocus = null;
+			redoKey ? redo() : undo();
+			updateSelectionBox();
+			return;
+		}
+
+		raiseOpenDropDown();
+		updateProblems(elapsed);
+
+		modeTxt.text = 'Mundo: $worldName  |  Modo: ${MODE_NAMES[curMode]}  |  F1 = ayuda'
+			+ (problems.length > 0 ? '  |  ${problems.length} avisos (E)' : '')
+			+ (unsavedProgress ? '  |  * sin guardar' : '');
 
 		if (helpBg.visible)
 		{
@@ -1817,15 +1995,49 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 		if (FlxG.keys.justPressed.ESCAPE)
 		{
+			// ESC primero saca del modo en el que estes; solo desde SELECCIONAR sale del editor
+			if (curMode != MODE_SELECT)
+			{
+				curMode = MODE_SELECT;
+				linkStart = null;
+				pathStart = null;
+				showOutput('Modo SELECCIONAR (ESC otra vez para salir del editor)');
+				return;
+			}
+
+			if (!confirmDiscard('ESC')) return;
 			MusicBeatState.switchState(new MasterEditorMenu());
 			return;
 		}
 
+		var prevMode:Int = curMode;
 		if (FlxG.keys.justPressed.V) curMode = MODE_SELECT;
 		if (FlxG.keys.justPressed.N) curMode = MODE_NODE;
 		if (FlxG.keys.justPressed.B) curMode = MODE_DECOR;
 		if (FlxG.keys.justPressed.C) curMode = MODE_PATH;
 		if (FlxG.keys.justPressed.T) curMode = MODE_TILE;
+		// L hace de interruptor: pulsarla otra vez vuelve a SELECCIONAR
+		if (FlxG.keys.justPressed.L) curMode = (prevMode == MODE_LINK) ? MODE_SELECT : MODE_LINK;
+
+		if (curMode != prevMode)
+		{
+			// un enlace o un camino a medias no sobrevive a un cambio de modo
+			linkStart = null;
+			pathStart = null;
+
+			if (curMode == MODE_LINK)
+			{
+				if (!showUnlocks)
+				{
+					showUnlocks = true;
+					reloadMap();
+				}
+				showOutput('ENLAZAR: clic en el nodo que desbloquea y luego en los que abre\n(L, V o ESC para salir del modo)');
+			}
+			else if (prevMode == MODE_LINK) showOutput('Modo ${MODE_NAMES[curMode]}');
+		}
+
+		if (FlxG.keys.justPressed.E) gotoNextProblem();
 
 		if (FlxG.keys.justPressed.P)
 		{
@@ -1894,6 +2106,17 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 		if (FlxG.mouse.justPressedRight)
 		{
+			// enlazando, el clic derecho solo cancela: nunca borra un nodo
+			if (curMode == MODE_LINK)
+			{
+				if (linkStart != null) showOutput('Enlace terminado');
+				linkStart = null;
+				return;
+			}
+
+			// sobre un punto de curva, borra solo ese punto
+			if ((curMode == MODE_SELECT || curMode == MODE_PATH) && deletePointUnderMouse(mouseX, mouseY)) return;
+
 			// pintando, el clic derecho es la goma: no debe cargarse un nodo sin querer
 			deleteUnderMouse(mouseX, mouseY, curMode != MODE_TILE);
 			return;
@@ -1911,6 +2134,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		{
 			dragging = false;
 			dragSnapshot = null;
+			dragPointPath = null;
 		}
 
 		if (dragging && FlxG.mouse.pressed)
@@ -1918,7 +2142,23 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			var newX:Float = snap(mouseX + dragOffsetX);
 			var newY:Float = snap(mouseY + dragOffsetY);
 
-			if (selectedNode != null)
+			if (dragPointPath != null)
+			{
+				var point:Array<Float> = dragPointPath.points[dragPointIndex];
+				if (point != null && (point[0] != newX || point[1] != newY))
+				{
+					if (dragSnapshot != null)
+					{
+						pushUndo(dragSnapshot);
+						dragSnapshot = null;
+					}
+					point[0] = newX;
+					point[1] = newY;
+					unsavedProgress = true;
+					reloadMap();
+				}
+			}
+			else if (selectedNode != null)
 			{
 				if (selectedNode.x != newX || selectedNode.y != newY)
 				{
@@ -1927,8 +2167,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 						pushUndo(dragSnapshot);
 						dragSnapshot = null;
 					}
-					selectedNode.x = newX;
-					selectedNode.y = newY;
+					moveNodeTo(selectedNode, newX, newY);
 					nodeXStepper.value = newX;
 					nodeYStepper.value = newY;
 					unsavedProgress = true;
@@ -1957,6 +2196,9 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 		if (!FlxG.mouse.justPressed) return;
 
+		// un punto de curva se agarra antes que lo que tenga debajo
+		if ((curMode == MODE_SELECT || curMode == MODE_PATH) && startPointDrag(mouseX, mouseY)) return;
+
 		switch (curMode)
 		{
 			case MODE_NODE:
@@ -1967,6 +2209,9 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 			case MODE_PATH:
 				handlePathClick(mouseX, mouseY);
+
+			case MODE_LINK:
+				handleLinkClick(mouseX, mouseY);
 
 			default:
 				selectUnderMouse(mouseX, mouseY, true);
@@ -2188,6 +2433,244 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		}
 
 		pathStart = null;
+	}
+
+	// ------------------------------------------------------- mover nodos y puntos de curva
+	/**
+	 * Mueve un nodo arrastrando el punto de curva pegado a el en cada camino: si ese punto estaba
+	 * alineado con el nodo en vertical u horizontal, sigue alineado, asi una L no se tuerce.
+	 */
+	function moveNodeTo(node:OverworldNodeFile, newX:Float, newY:Float)
+	{
+		var oldX:Float = node.x;
+		var oldY:Float = node.y;
+
+		for (pth in worldFile.paths)
+		{
+			if (pth.points == null || pth.points.length < 1 || pth.a == pth.b) continue;
+
+			var point:Array<Float> = null;
+			if (pth.a == node.id) point = pth.points[0];
+			else if (pth.b == node.id) point = pth.points[pth.points.length - 1];
+			if (point == null || point.length < 2) continue;
+
+			if (Math.abs(point[0] - oldX) < 0.01) point[0] = newX;
+			if (Math.abs(point[1] - oldY) < 0.01) point[1] = newY;
+		}
+
+		node.x = newX;
+		node.y = newY;
+		unsavedProgress = true;
+	}
+
+	/** Punto de curva bajo el raton: [camino, indice], o null. El radio no depende del zoom. */
+	function pointUnderMouse(mouseX:Float, mouseY:Float):Array<Dynamic>
+	{
+		var radius:Float = Math.max(3, 8 / camGame.zoom);
+		var best:Array<Dynamic> = null;
+		var bestDist:Float = radius;
+
+		for (pth in worldFile.paths)
+		{
+			if (pth.points == null) continue;
+			for (i in 0...pth.points.length)
+			{
+				var point:Array<Float> = pth.points[i];
+				var dist:Float = Math.sqrt(Math.pow(mouseX - point[0], 2) + Math.pow(mouseY - point[1], 2));
+				if (dist > bestDist) continue;
+
+				bestDist = dist;
+				best = [pth, i];
+			}
+		}
+		return best;
+	}
+
+	function startPointDrag(mouseX:Float, mouseY:Float):Bool
+	{
+		var hit:Array<Dynamic> = pointUnderMouse(mouseX, mouseY);
+		if (hit == null) return false;
+
+		var pth:OverworldPathFile = hit[0];
+		var index:Int = hit[1];
+
+		selectedPath = pth;
+		selectedNode = null;
+		selectedSprite = null;
+		pathStart = null;
+
+		dragPointPath = pth;
+		dragPointIndex = index;
+		dragging = true;
+		dragSnapshot = snapshot();
+		dragOffsetX = pth.points[index][0] - mouseX;
+		dragOffsetY = pth.points[index][1] - mouseY;
+
+		UI_box.selectedName = 'Camino';
+		reloadMap();
+		updateUI();
+		showOutput('Punto ${index + 1} de ${pth.a} <-> ${pth.b}: arrastra para moverlo, clic derecho para borrarlo');
+		return true;
+	}
+
+	function deletePointUnderMouse(mouseX:Float, mouseY:Float):Bool
+	{
+		var hit:Array<Dynamic> = pointUnderMouse(mouseX, mouseY);
+		if (hit == null) return false;
+
+		var pth:OverworldPathFile = hit[0];
+		var index:Int = hit[1];
+
+		pushUndo();
+		pth.points.splice(index, 1);
+		selectedPath = pth;
+		unsavedProgress = true;
+		reloadMap();
+		updateUI();
+		showOutput('Punto borrado de ${pth.a} <-> ${pth.b}');
+		return true;
+	}
+
+	// ------------------------------------------------------- modo enlazar (L)
+	/**
+	 * Clic en el nodo que desbloquea y luego en cada nodo que abre: cada clic alterna el enlace.
+	 * Enlazar bloquea al destino (si empezaba abierto, el desbloqueo no haria nada) y quitar su
+	 * ultimo enlace lo vuelve a dejar abierto, para que el grafo nunca quede con nodos sin salida.
+	 */
+	function handleLinkClick(mouseX:Float, mouseY:Float)
+	{
+		var node:OverworldNodeFile = nodeUnderMouse(mouseX, mouseY);
+
+		if (node == null || node == linkStart)
+		{
+			if (linkStart != null) showOutput('Enlace terminado');
+			linkStart = null;
+			return;
+		}
+
+		if (linkStart == null)
+		{
+			if (!OverworldData.canBeCompleted(node))
+			{
+				showOutput('"${node.id}" es "${node.type}" y nunca se completa: no puede desbloquear nada', true);
+				return;
+			}
+
+			linkStart = node;
+			selectedNode = node;
+			selectedSprite = null;
+			selectedPath = null;
+			UI_box.selectedName = 'Nodo';
+			updateUI();
+			showOutput('"${node.id}": clic en los nodos que desbloquea (clic en el mismo o en el vacio para terminar)');
+			return;
+		}
+
+		if (node.id == worldFile.startNode && !linkStart.unlocks.contains(node.id))
+		{
+			showOutput('"${node.id}" es el nodo inicial: tiene que empezar abierto', true);
+			return;
+		}
+
+		pushUndo();
+		var message:String;
+		if (linkStart.unlocks.contains(node.id))
+		{
+			linkStart.unlocks.remove(node.id);
+			message = '"${linkStart.id}" ya no desbloquea "${node.id}"';
+			if (!node.unlocked && !OverworldData.anyoneUnlocks(worldFile, node.id))
+			{
+				node.unlocked = true;
+				message += ' (nadie mas lo desbloquea: vuelve a empezar abierto)';
+			}
+		}
+		else
+		{
+			linkStart.unlocks.push(node.id);
+			message = '"${linkStart.id}" desbloquea "${node.id}"';
+			if (node.unlocked)
+			{
+				node.unlocked = false;
+				message += ' (ahora empieza bloqueado)';
+			}
+		}
+
+		unsavedProgress = true;
+		reloadMap();
+		updateUI();
+		showOutput(message);
+	}
+
+	// ------------------------------------------------------- avisos sobre el mapa
+	static inline final PROBLEM_DELAY:Float = 0.35;
+
+	/** Recalcula los avisos un rato despues del ultimo cambio, nunca a mitad de un arrastre. */
+	function updateProblems(elapsed:Float)
+	{
+		if (!problemsDirty || dragging) return;
+
+		problemsTimer += elapsed;
+		if (problemsTimer < PROBLEM_DELAY) return;
+
+		problemsDirty = false;
+		problems = OverworldData.checkWorldProblems(worldFile, worldName);
+		problemCursor = -1;
+		buildProblemMarkers();
+	}
+
+	/** Contorno rojo alrededor de cada nodo con algun aviso. */
+	function buildProblemMarkers()
+	{
+		problemGroup.forEachAlive(function(spr:FlxSprite) spr.destroy());
+		problemGroup.clear();
+
+		var marked:Array<String> = [];
+		for (problem in problems)
+		{
+			if (problem.node == null || marked.contains(problem.node)) continue;
+			marked.push(problem.node);
+
+			var index:Int = -1;
+			for (i in 0...worldFile.nodes.length)
+				if (worldFile.nodes[i].id == problem.node) index = i;
+			if (index < 0 || index >= nodesGroup.length) continue;
+
+			var spr:FlxSprite = nodesGroup.members[index];
+			var width:Int = Std.int(Math.max(spr.width, 12)) + 6;
+			var height:Int = Std.int(Math.max(spr.height, 12)) + 6;
+
+			var box:FlxSprite = new FlxSprite().makeGraphic(width, height, FlxColor.TRANSPARENT, true);
+			FlxSpriteUtil.drawRect(box, 0.5, 0.5, width - 1, height - 1, FlxColor.TRANSPARENT, {color: FlxColor.RED, thickness: 1});
+			box.setPosition(worldFile.nodes[index].x - width * 0.5, worldFile.nodes[index].y - height * 0.5);
+			problemGroup.add(box);
+		}
+	}
+
+	/** E: salta al siguiente aviso, centra la camara en su nodo y lo selecciona. */
+	function gotoNextProblem()
+	{
+		if (problemsDirty) problems = OverworldData.checkWorldProblems(worldFile, worldName);
+		if (problems.length < 1)
+		{
+			showOutput('Todo correcto: el mundo se puede recorrer entero.');
+			return;
+		}
+
+		problemCursor = (problemCursor + 1) % problems.length;
+		var problem:OverworldProblem = problems[problemCursor];
+		var node:OverworldNodeFile = problem.node != null ? OverworldData.findNode(worldFile, problem.node) : null;
+
+		if (node != null)
+		{
+			selectedNode = node;
+			selectedSprite = null;
+			selectedPath = null;
+			UI_box.selectedName = 'Nodo';
+			updateUI();
+			camGame.scroll.set(node.x - camGame.width * 0.5, node.y - camGame.height * 0.5);
+		}
+
+		showOutput('AVISO ${problemCursor + 1}/${problems.length}: ${problem.text}', true);
 	}
 
 	function findPath(a:String, b:String):OverworldPathFile

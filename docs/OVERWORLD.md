@@ -54,19 +54,22 @@ el título vuelve a llevar directamente al menú clásico de siempre.
 | **B** | Modo DECORADO: clic coloca el sprite elegido en la pestaña *Decorado* |
 | **C** | Modo CAMINO: clic en un nodo y luego en otro para unirlos |
 | **T** | Modo PINTAR TILES: pinta con el tile elegido en la paleta (arrastra para pintar seguido) |
+| **L** | Modo ENLAZAR: clic en el nodo que desbloquea y luego en cada nodo que abre (ver abajo). L otra vez vuelve a SELECCIONAR |
 | **P** | Mostrar / ocultar la paleta de tiles |
-| Clic derecho | Borra lo que haya bajo el ratón |
+| Clic derecho | Borra lo que haya bajo el ratón (en modo L solo cancela; sobre un punto de curva, borra ese punto) |
+| Arrastrar un punto de curva | Lo mueve (modos V y C) |
+| **E** | Ir al siguiente aviso: selecciona su nodo y centra la cámara en él |
 | SUPR | Borra la selección actual |
 | ALT (mantener) | Coloca sin ajustar a la rejilla |
 | Rueda del ratón | Zoom |
 | Botón central / flechas | Mover la cámara |
 | **G** | Mostrar / ocultar la rejilla |
 | **U** | Mostrar / ocultar las flechas rosas de desbloqueo (de cada nodo a los que desbloquea) |
-| **CTRL+Z** / **CTRL+Y** | Deshacer / rehacer (también hay botones en la pestaña *Mundo*) |
+| **CTRL+Z** / **CTRL+Y** | Deshacer / rehacer (también CTRL+SHIFT+Z, y hay botones en la pestaña *Mundo*). Funcionan aunque estés escribiendo en un campo |
 | **CTRL+S** | Guardar |
 | **CTRL+T** | Probar el mundo (BACK dentro del mapa te devuelve al editor) |
 | **F1** | Ayuda en pantalla |
-| **ESC** | Volver al menú de editores |
+| **ESC** | Salir del modo actual (vuelve a SELECCIONAR). En SELECCIONAR, volver al menú de editores; con cambios sin guardar avisa y hay que pulsarlo otra vez |
 
 El **rectángulo blanco discontinuo** ("LO QUE SE VE EN EL JUEGO") marca hasta dónde puede llegar
 la cámara del juego con el zoom del mundo. Lo que quede fuera no se ve nunca: ahí van las salidas
@@ -76,6 +79,43 @@ desbloquea, un poco apartadas del camino para no taparlo.
 En modo CAMINO, con un camino ya seleccionado, cada clic en una zona vacía **añade un punto de
 curva**: así se dibujan caminos en L o en zigzag como los de SMW. Los puntitos del camino se
 generan solos entre nodo y nodo según la separación configurada (16 px por defecto).
+
+Los **puntos de curva** se pueden **arrastrar** (en modo V o C) y **borrar uno a uno** con clic
+derecho. Al mover un nodo, el punto de curva pegado a él lo sigue si estaba alineado en vertical u
+horizontal, así una L sigue siendo una L.
+
+**Deshacer** (CTRL+Z) cubre todo lo que cambia el mundo, también lo que se escribe o se elige en
+las pestañas: un renombrado o una lista de desbloqueos se deshace de una vez, no letra a letra, y
+varios clics seguidos en un mismo contador cuentan como un paso. Con un campo de texto activo,
+CTRL+Z / CTRL+Y salen del campo y deshacen en el mundo. Al deshacer se mantiene seleccionado lo que
+tenías elegido.
+
+**Cambiar de mundo** (cargar otro o *Mundo nuevo*) empieza un historial nuevo. Si hay cambios sin
+guardar, la primera vez solo avisa: repite la acción para descartarlos. *Mundo nuevo* le pone un
+nombre de archivo libre (`mundo_nuevo`, `mundo_nuevo2`...), así un CTRL+S no puede machacar el
+mundo que tenías abierto.
+
+### Modo ENLAZAR (L): desbloqueos con el ratón
+
+1. Pulsa **L**. Se muestran las flechas rosas aunque las tuvieras ocultas.
+2. Clic en el nodo que desbloquea (tiene que ser un `level` o un `world`: los demás nunca se
+   completan).
+3. Clic en cada nodo que debe abrir al completarlo. Cada clic **alterna** el enlace: si ya lo
+   desbloqueaba, se quita.
+4. Clic en el mismo nodo, en el vacío o clic derecho para terminar con ese nodo (sigues en el
+   modo, listo para enlazar desde otro).
+5. Para salir del modo: **L** otra vez, **V** o **ESC**.
+
+Enlazar **bloquea al destino** (si empezaba abierto, el desbloqueo no haría nada), y quitar su
+último enlace lo vuelve a dejar abierto. El nodo inicial no se puede enlazar como destino: tiene
+que empezar abierto. Es lo mismo que escribir los IDs en *Desbloquea al completarlo*, pero sin
+erratas.
+
+### Avisos sobre el mapa
+
+Los nodos con algún aviso de *Comprobar mundo* se ven con un **contorno rojo**, y arriba se lee
+cuántos avisos hay. Se recalculan solos un momento después de cada cambio. **E** salta al
+siguiente: selecciona su nodo, centra la cámara y muestra el aviso abajo.
 
 ## 3. Tutorial: tu primer mundo desde cero
 
@@ -126,7 +166,8 @@ son 256x224 px; con zoom 3 llena bien la pantalla.
    - **Nombre visible**: lo que se lee abajo en el mapa.
    - **Desbloqueado al empezar** viene marcado por defecto. Desmárcalo solo si quieres que
      ese nivel haya que ganárselo.
-   - **Desbloquea al completarlo**: `n1`.
+   - **Desbloquea al completarlo**: `n1`. Más cómodo: pulsa **L**, clic en `n0` y clic en `n1`
+     (ver *Modo ENLAZAR* arriba).
 3. Repite con `n1` (desbloquea `n2`), `n2` (desbloquea `n3`) y `n3`, que será el castillo:
    sprite `overworld/castle`, **Animación** `idle`, **Anim. completado** `dead`, FPS 0.
 4. Vuelve a la pestaña **Mundo** y pon **Nodo inicial**: `n0`.
