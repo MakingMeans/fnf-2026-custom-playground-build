@@ -23,7 +23,7 @@
 		{"id": "cruce", "x": 112, "y": 128, "type": "empty", "image": "overworld/dot", "anim": "idle", "animDone": "", "fps": 6, "name": "Cruce", "song": "", "week": "", "difficulty": "", "world": "", "unlocked": false,
 			"unlocks": []
 		},
-		{"id": "t4", "x": 112, "y": 176, "type": "level", "image": "overworld/og_mario/level_tiles", "anim": "tile0002", "animDone": "tile0003", "fps": 0, "name": "Tutorial 4 (sin salida)", "song": "tutorial4", "week": "test_levels", "difficulty": "", "world": "", "unlocked": false,
+		{"id": "t4", "x": 112, "y": 176, "type": "level", "image": "overworld/og_mario/level_tiles", "anim": "tile0002", "animDone": "", "fps": 0, "name": "Tutorial 4 (sin salida)", "song": "tutorial4", "week": "test_levels", "difficulty": "", "world": "", "unlocked": false,
 			"unlocks": []
 		},
 		{"id": "t5", "x": 224, "y": 128, "type": "level", "image": "overworld/og_mario/level_tiles", "anim": "tile0002", "animDone": "tile0003", "fps": 0, "name": "Tutorial 5", "song": "tutorial5", "week": "test_levels", "difficulty": "", "world": "", "unlocked": false,

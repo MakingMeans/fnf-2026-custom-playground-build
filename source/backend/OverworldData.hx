@@ -297,17 +297,35 @@ class OverworldData
 		FlxG.save.flush();
 	}
 
-	/** Un nodo esta accesible si empieza desbloqueado o si algo ya completado lo desbloquea. */
-	public static function isUnlocked(world:String, file:OverworldFile, node:OverworldNodeFile):Bool
+	/**
+	 * Un nodo esta accesible si empieza desbloqueado o si algo ya completado lo desbloquea.
+	 * `ignoreCompleted` hace como si ese nodo aun no se hubiera completado: sirve para saber
+	 * que estaba abierto justo antes de ganarlo (y asi animar solo los caminos nuevos).
+	 */
+	public static function isUnlocked(world:String, file:OverworldFile, node:OverworldNodeFile, ?ignoreCompleted:String):Bool
 	{
 		if (node == null) return false;
 		if (node.unlocked) return true;
 
 		for (other in file.nodes)
-			if (other.unlocks != null && other.unlocks.contains(node.id) && isCompleted(world, other.id))
+			if (other.id != ignoreCompleted && other.unlocks != null && other.unlocks.contains(node.id) && isCompleted(world, other.id))
 				return true;
 
 		return false;
+	}
+
+	/** Cuantos niveles tiene el mundo y cuantos estan completados: [completados, total]. */
+	public static function levelCount(world:String, file:OverworldFile):Array<Int>
+	{
+		var done:Int = 0;
+		var total:Int = 0;
+		for (node in file.nodes)
+		{
+			if (!canBeCompleted(node)) continue;
+			total++;
+			if (isCompleted(world, node.id)) done++;
+		}
+		return [done, total];
 	}
 
 	// ------------------------------------------------------------- revision del grafo

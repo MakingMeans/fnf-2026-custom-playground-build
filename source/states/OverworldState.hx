@@ -6,7 +6,10 @@ import backend.Highscore;
 import backend.WeekData;
 
 import flixel.FlxObject;
+import flixel.addons.display.FlxBackdrop;
 import flixel.group.FlxGroup.FlxTypedGroup;
+import flixel.text.FlxText.FlxTextFormat;
+import flixel.text.FlxText.FlxTextFormatMarkerPair;
 
 /**
  * Mapa estilo Super Mario World: BF camina de nodo en nodo por caminos y entra a los niveles.
@@ -28,6 +31,12 @@ class OverworldState extends MusicBeatState
 	static var worldStack:Array<Array<String>> = [];
 	static var lastMusic:String = null;
 
+	/**
+	 * [mundo, nodo] completado por primera vez en la ultima cancion. Al volver al mapa, los
+	 * caminos que ha abierto aparecen puntito a puntito en vez de estar ya dibujados.
+	 */
+	static var pendingReveal:Array<String> = null;
+
 	public static function reset()
 	{
 		curWorld = OverworldData.DEFAULT_WORLD;
@@ -35,6 +44,7 @@ class OverworldState extends MusicBeatState
 		fromOverworld = false;
 		returnToEditor = false;
 		lastLevelNode = null;
+		pendingReveal = null;
 		worldStack = [];
 	}
 
@@ -42,6 +52,9 @@ class OverworldState extends MusicBeatState
 	public static function completeCurrentNode()
 	{
 		if (!fromOverworld || lastLevelNode == null) return;
+
+		// repetir un nivel ya superado no abre nada nuevo: solo se anima la primera vez
+		if (!OverworldData.isCompleted(curWorld, lastLevelNode)) pendingReveal = [curWorld, lastLevelNode];
 		OverworldData.setCompleted(curWorld, lastLevelNode);
 	}
 
@@ -62,6 +75,7 @@ class OverworldState extends MusicBeatState
 	var spritesBack:FlxTypedGroup<FlxSprite>;
 	var dotsGroup:FlxTypedGroup<FlxSprite>;
 	var nodesGroup:FlxTypedGroup<FlxSprite>;
+	var marksGroup:FlxTypedGroup<FlxSprite>;
 	var spritesFront:FlxTypedGroup<FlxSprite>;
 
 	var player:FlxSprite;
@@ -158,22 +172,9 @@ class OverworldState extends MusicBeatState
 
 		if (!file.bgTile || first.width < 8 || first.height < 8) return result;
 
-		var targetWidth:Float = first.width;
-		var targetHeight:Float = first.height;
-
-		for (node in file.nodes)
-		{
-			if (node.x + 32 > targetWidth) targetWidth = node.x + 32;
-			if (node.y + 32 > targetHeight) targetHeight = node.y + 32;
-		}
-		for (spr in file.sprites)
-		{
-			if (spr.x + 64 > targetWidth) targetWidth = spr.x + 64;
-			if (spr.y + 64 > targetHeight) targetHeight = spr.y + 64;
-		}
-
-		var columns:Int = Std.int(Math.min(12, Math.ceil(targetWidth / first.width)));
-		var rows:Int = Std.int(Math.min(12, Math.ceil(targetHeight / first.height)));
+		var size:Array<Float> = tiledMapSize(file, first.width, first.height);
+		var columns:Int = Std.int(Math.min(12, Math.round(size[0] / first.width)));
+		var rows:Int = Std.int(Math.min(12, Math.round(size[1] / first.height)));
 
 		for (row in 0...rows)
 		{
@@ -189,19 +190,57 @@ class OverworldState extends MusicBeatState
 		return result;
 	}
 
+	/**
+	 * Tamaño del mapa cuando el fondo va en mosaico: lo que ocupan nodos y decorados (y como
+	 * minimo un tile), redondeado a tiles enteros. Devuelve [ancho, alto].
+	 */
+	public static function tiledMapSize(file:OverworldFile, tileWidth:Float, tileHeight:Float):Array<Float>
+	{
+		var targetWidth:Float = tileWidth;
+		var targetHeight:Float = tileHeight;
+
+		for (node in file.nodes)
+		{
+			if (node.x + 32 > targetWidth) targetWidth = node.x + 32;
+			if (node.y + 32 > targetHeight) targetHeight = node.y + 32;
+		}
+		for (spr in file.sprites)
+		{
+			if (spr.x + 64 > targetWidth) targetWidth = spr.x + 64;
+			if (spr.y + 64 > targetHeight) targetHeight = spr.y + 64;
+		}
+
+		return [Math.ceil(targetWidth / tileWidth) * tileWidth, Math.ceil(targetHeight / tileHeight) * tileHeight];
+	}
+
 	function buildMap()
 	{
 		var bgWidth:Float = FlxG.width;
 		var bgHeight:Float = FlxG.height;
 
-		var bgTiles:Array<FlxSprite> = buildBackgroundSprites(worldFile);
-		for (tile in bgTiles) add(tile);
-
-		if (bgTiles.length > 0)
+		if (worldFile.bgTile && OverworldData.imageExists(worldFile.bg))
 		{
-			var last:FlxSprite = bgTiles[bgTiles.length - 1];
-			bgWidth = last.x + last.width;
-			bgHeight = last.y + last.height;
+			// Mosaico infinito: si el mapa es mas pequeño que la pantalla, la camara lo centra
+			// y el fondo sigue llenando los lados en vez de dejar bandas negras.
+			var backdrop:FlxBackdrop = new FlxBackdrop();
+			buildSprite(worldFile.bg, worldFile.bgAnim, worldFile.bgFps, true, backdrop);
+			add(backdrop);
+
+			var size:Array<Float> = tiledMapSize(worldFile, backdrop.width, backdrop.height);
+			bgWidth = size[0];
+			bgHeight = size[1];
+		}
+		else
+		{
+			var bgTiles:Array<FlxSprite> = buildBackgroundSprites(worldFile);
+			for (tile in bgTiles) add(tile);
+
+			if (bgTiles.length > 0)
+			{
+				var last:FlxSprite = bgTiles[bgTiles.length - 1];
+				bgWidth = last.x + last.width;
+				bgHeight = last.y + last.height;
+			}
 		}
 
 		spritesBack = new FlxTypedGroup<FlxSprite>();
@@ -209,9 +248,12 @@ class OverworldState extends MusicBeatState
 		nodesGroup = new FlxTypedGroup<FlxSprite>();
 		spritesFront = new FlxTypedGroup<FlxSprite>();
 
+		marksGroup = new FlxTypedGroup<FlxSprite>();
+
 		add(spritesBack);
 		add(dotsGroup);
 		add(nodesGroup);
+		add(marksGroup);
 
 		for (data in worldFile.sprites)
 		{
@@ -231,19 +273,28 @@ class OverworldState extends MusicBeatState
 			else spritesBack.add(spr);
 		}
 
-		for (pth in worldFile.paths) buildPathDots(pth);
+		buildPaths();
 
 		// Los nodos se dibujan siempre, estén o no accesibles: lo que se revela al
 		// desbloquear es el camino, igual que en Super Mario World.
 		for (node in worldFile.nodes)
 		{
 			var completed:Bool = OverworldData.isCompleted(curWorld, node.id);
-			var anim:String = (completed && node.animDone != null && node.animDone.length > 0) ? node.animDone : node.anim;
+			var hasDoneAnim:Bool = node.animDone != null && node.animDone.length > 0;
+			var anim:String = (completed && hasDoneAnim) ? node.animDone : node.anim;
 
 			var spr:FlxSprite = buildSprite(node.image, anim, node.fps);
 			spr.setPosition(node.x - spr.width * 0.5, node.y - spr.height * 0.5);
 			nodesGroup.add(spr);
 			nodeSprites.set(node.id, spr);
+
+			// un nivel superado sin animacion de completado propia lleva un check encima
+			if (completed && !hasDoneAnim && OverworldData.canBeCompleted(node))
+			{
+				var mark:FlxSprite = buildDoneMark();
+				mark.setPosition(Math.round(spr.x + spr.width - mark.width * 0.5 - 1), Math.round(spr.y - mark.height * 0.5 + 1));
+				marksGroup.add(mark);
+			}
 		}
 
 		// jugador
@@ -308,23 +359,202 @@ class OverworldState extends MusicBeatState
 		camGame.setScrollBoundsRect(rectX, rectY, rectWidth, rectHeight);
 	}
 
-	function buildPathDots(pth:OverworldPathFile)
+	/**
+	 * Dibuja los caminos abiertos. Si se acaba de completar un nivel por primera vez, los caminos
+	 * que ha abierto se crean ocultos y prepareReveal() los hace aparecer puntito a puntito.
+	 */
+	function buildPaths()
 	{
-		if (pth.dots == null || pth.dots.length < 1) return;
+		var revealNode:String = (pendingReveal != null && pendingReveal[0] == curWorld) ? pendingReveal[1] : null;
+		pendingReveal = null;
+
+		var newPaths:Array<OverworldPathFile> = [];
+		for (pth in worldFile.paths)
+		{
+			if (!isPathOpen(pth)) continue;
+
+			if (revealNode != null && !isPathOpen(pth, revealNode)) newPaths.push(pth);
+			else buildPathDots(pth);
+		}
+
+		if (newPaths.length > 0) prepareReveal(newPaths, revealNode);
+	}
+
+	/** Un camino se ve (y se puede andar) cuando sus dos extremos estan accesibles. */
+	function isPathOpen(pth:OverworldPathFile, ?ignoreCompleted:String):Bool
+	{
+		var nodeA:OverworldNodeFile = OverworldData.findNode(worldFile, pth.a);
+		var nodeB:OverworldNodeFile = OverworldData.findNode(worldFile, pth.b);
+		if (nodeA == null || nodeB == null) return false;
+
+		return OverworldData.isUnlocked(curWorld, worldFile, nodeA, ignoreCompleted)
+			&& OverworldData.isUnlocked(curWorld, worldFile, nodeB, ignoreCompleted);
+	}
+
+	/** Crea los puntitos de un camino, de `a` hacia `b`, y los devuelve en ese orden. */
+	function buildPathDots(pth:OverworldPathFile, ?hidden:Bool = false):Array<FlxSprite>
+	{
+		var result:Array<FlxSprite> = [];
+		if (pth.dots == null || pth.dots.length < 1) return result;
 
 		var nodeA:OverworldNodeFile = OverworldData.findNode(worldFile, pth.a);
 		var nodeB:OverworldNodeFile = OverworldData.findNode(worldFile, pth.b);
-		if (nodeA == null || nodeB == null) return;
-
-		if (!OverworldData.isUnlocked(curWorld, worldFile, nodeA) || !OverworldData.isUnlocked(curWorld, worldFile, nodeB))
-			return;
+		if (nodeA == null || nodeB == null) return result;
 
 		for (point in getDotPositions(pth, nodeA, nodeB))
 		{
 			var dot:FlxSprite = buildSprite(pth.dots, pth.dotAnim, 6);
 			dot.setPosition(point[0] - dot.width * 0.5, point[1] - dot.height * 0.5);
+			dot.visible = !hidden;
 			dotsGroup.add(dot);
+			result.push(dot);
 		}
+		return result;
+	}
+
+	// ------------------------------------------------------------- revelar caminos
+	static inline final REVEAL_DELAY:Float = 0.4;     // pausa al volver al mapa antes de empezar
+	static inline final REVEAL_DOT_TIME:Float = 0.07; // segundos entre puntito y puntito
+
+	/** Oleadas de caminos por revelar; cada camino es su lista de puntitos en orden de aparicion. */
+	var revealWaves:Array<Array<Array<FlxSprite>>> = [];
+	var revealStep:Int = 0;
+	var revealTimer:Float = 0;
+	var revealing:Bool = false;
+
+	/**
+	 * Ordena los caminos nuevos para que crezcan desde lo que ya estaba abierto: primero los que
+	 * salen de un nodo accesible, despues los que continuan desde esos, etc. Los caminos de una
+	 * misma oleada crecen a la vez (una bifurcacion se abre por los dos lados).
+	 */
+	function prepareReveal(newPaths:Array<OverworldPathFile>, revealNode:String)
+	{
+		var known:Map<String, Bool> = new Map<String, Bool>();
+		for (node in worldFile.nodes)
+			if (OverworldData.isUnlocked(curWorld, worldFile, node, revealNode)) known.set(node.id, true);
+
+		var pending:Array<OverworldPathFile> = newPaths.copy();
+		while (pending.length > 0)
+		{
+			var wave:Array<Array<FlxSprite>> = [];
+			var reachedNow:Array<String> = [];
+
+			for (pth in pending.copy())
+			{
+				var fromA:Bool = known.exists(pth.a);
+				if (!fromA && !known.exists(pth.b)) continue;
+
+				pending.remove(pth);
+				var dots:Array<FlxSprite> = buildPathDots(pth, true);
+				if (!fromA) dots.reverse(); // que crezca desde el extremo que ya estaba abierto
+				wave.push(dots);
+				reachedNow.push(fromA ? pth.b : pth.a);
+			}
+
+			// caminos sin contacto con nada abierto (desbloqueos a distancia): todos a la vez
+			if (wave.length < 1)
+			{
+				for (pth in pending) wave.push(buildPathDots(pth, true));
+				pending = [];
+			}
+
+			for (id in reachedNow) known.set(id, true);
+			revealWaves.push(wave);
+		}
+
+		revealing = true;
+		revealStep = 0;
+		revealTimer = REVEAL_DELAY;
+	}
+
+	function updateReveal(elapsed:Float)
+	{
+		if (controls.ACCEPT || controls.BACK)
+		{
+			finishReveal(); // saltarse la animacion
+			return;
+		}
+
+		revealTimer -= elapsed;
+		while (revealing && revealTimer <= 0)
+		{
+			var shown:Bool = false;
+			for (dots in revealWaves[0])
+			{
+				if (revealStep >= dots.length) continue;
+				popDot(dots[revealStep]);
+				shown = true;
+			}
+
+			if (shown)
+			{
+				revealStep++;
+				revealTimer += REVEAL_DOT_TIME;
+				FlxG.sound.play(Paths.sound('scrollMenu'), 0.3);
+				continue;
+			}
+
+			// oleada terminada: la siguiente sale tras una pausa de un puntito
+			revealWaves.shift();
+			revealStep = 0;
+			revealTimer += REVEAL_DOT_TIME;
+			if (revealWaves.length < 1) revealing = false;
+		}
+	}
+
+	function popDot(dot:FlxSprite)
+	{
+		dot.visible = true;
+		dot.scale.set(0.2, 0.2);
+		FlxTween.tween(dot.scale, {x: 1, y: 1}, 0.2, {ease: FlxEase.backOut});
+	}
+
+	function finishReveal()
+	{
+		for (wave in revealWaves)
+			for (dots in wave)
+				for (dot in dots) dot.visible = true;
+
+		revealWaves = [];
+		revealing = false;
+	}
+
+	// ------------------------------------------------------------- marca de superado
+	/** Check verde (G) de 2 px de grosor; el contorno negro se calcula solo. */
+	static final DONE_MARK:Array<String> = [
+		'......GG',
+		'.....GG.',
+		'GG..GG..',
+		'.GGGG...',
+		'..GG....'
+	];
+
+	static function buildDoneMark():FlxSprite
+	{
+		var rows:Array<String> = DONE_MARK;
+		inline function isGreen(x:Int, y:Int):Bool
+			return y >= 0 && y < rows.length && x >= 0 && x < rows[y].length && rows[y].charAt(x) == 'G';
+
+		var width:Int = rows[0].length + 2;
+		var height:Int = rows.length + 2;
+
+		var mark:FlxSprite = new FlxSprite();
+		mark.makeGraphic(width, height, FlxColor.TRANSPARENT, true);
+		mark.antialiasing = false;
+
+		for (y in 0...height)
+		{
+			for (x in 0...width)
+			{
+				var gx:Int = x - 1;
+				var gy:Int = y - 1;
+				if (isGreen(gx, gy)) mark.pixels.setPixel32(x, y, 0xFF4CD94C);
+				else if (isGreen(gx - 1, gy) || isGreen(gx + 1, gy) || isGreen(gx, gy - 1) || isGreen(gx, gy + 1))
+					mark.pixels.setPixel32(x, y, FlxColor.BLACK);
+			}
+		}
+		mark.dirty = true;
+		return mark;
 	}
 
 	/** Posiciones de los puntitos repartidos a lo largo de la polilinea del camino. */
@@ -383,9 +613,10 @@ class OverworldState extends MusicBeatState
 	}
 
 	/** Crea un sprite a partir de una clave de imagen y (opcionalmente) un prefijo de animacion. */
-	public static function buildSprite(image:String, anim:String, fps:Int, ?loop:Bool = true):FlxSprite
+	public static function buildSprite(image:String, anim:String, fps:Int, ?loop:Bool = true, ?target:FlxSprite):FlxSprite
 	{
-		var spr:FlxSprite = new FlxSprite();
+		// `target` permite cargar la imagen en un sprite ya creado (por ejemplo un FlxBackdrop)
+		var spr:FlxSprite = target != null ? target : new FlxSprite();
 		spr.antialiasing = false;
 
 		if (image == null || image.length < 1 || !OverworldData.imageExists(image))
@@ -470,8 +701,22 @@ class OverworldState extends MusicBeatState
 		hintTxt.cameras = [camHUD];
 		add(hintTxt);
 
+		// progreso del mundo, a la derecha de la barra
+		var count:Array<Int> = OverworldData.levelCount(curWorld, worldFile);
+		if (count[1] > 0)
+		{
+			var progressTxt:FlxText = new FlxText(10, FlxG.height - 44, FlxG.width - 20, 'Superados: ${count[0]}/${count[1]}', 18);
+			progressTxt.setFormat(Paths.font('vcr.ttf'), 18, count[0] >= count[1] ? DONE_COLOR : FlxColor.WHITE, RIGHT,
+				FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			progressTxt.cameras = [camHUD];
+			add(progressTxt);
+		}
+
 		updateNameText();
 	}
+
+	static inline final DONE_COLOR:FlxColor = 0xFF66FF66;
+	static final DONE_MARKUP:Array<FlxTextFormatMarkerPair> = [new FlxTextFormatMarkerPair(new FlxTextFormat(DONE_COLOR), '<g>')];
 
 	// ------------------------------------------------------------- bucle
 	override function update(elapsed:Float)
@@ -482,7 +727,8 @@ class OverworldState extends MusicBeatState
 			return;
 		}
 
-		if (walking) updateWalk(elapsed);
+		if (revealing) updateReveal(elapsed);
+		else if (walking) updateWalk(elapsed);
 		else if (!busy) updateInput();
 
 		if (camFollow != null) camFollow.setPosition(playerX, playerY);
@@ -717,10 +963,10 @@ class OverworldState extends MusicBeatState
 		}
 
 		var text:String = node.name != null && node.name.length > 0 ? node.name : node.id;
-		if (node.type == 'level' && OverworldData.isCompleted(curWorld, node.id)) text += '  *';
+		if (node.type == 'level' && OverworldData.isCompleted(curWorld, node.id)) text += '  <g>SUPERADO<g>';
 		else if (node.type == 'world') text += '  >>';
 
-		nameTxt.text = text;
+		nameTxt.applyMarkup(text, DONE_MARKUP);
 	}
 
 	// ------------------------------------------------------------- entrar

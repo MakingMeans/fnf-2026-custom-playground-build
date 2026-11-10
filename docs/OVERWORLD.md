@@ -90,7 +90,8 @@ son 256x224 px; con zoom 3 llena bien la pantalla.
 5. **Fondo**: un mundo nuevo ya viene con el **mar** (`overworld/backgrounds/sea`, animado).
    Si pones otro y es animado, elige también su **Animación del fondo** y los FPS.
    **Repetir el fondo (mosaico)** lo repite hasta cubrir todo el mapa: con el mar puesto,
-   el agua llega hasta donde llegue el mundo por grande que sea.
+   el agua llega hasta donde llegue el mundo por grande que sea. En el juego se repite sin fin,
+   así que también llena los lados de la pantalla cuando el mapa es más pequeño que ella.
 6. **Zoom**: 3 (súbelo a 4 si tu arte es más pequeño). **Rejilla**: 16.
 7. **Musica**: `freakyMenu` u otro nombre de `assets/shared/music/`.
 
@@ -242,6 +243,9 @@ Un mundo pequeño para comprobar que el grafo funciona, sin tocar el boceto `dra
 | T3 | bloqueado | T5 |
 | T4, T5 | bloqueados | nada |
 
+T4 no tiene *Anim. completado* a propósito: al superarlo sale el check verde en vez de cambiar
+de color, para poder ver los dos tipos de marca.
+
 Usa las canciones `tutorial1` … `tutorial5` de la semana `test_levels` (oculta en el modo
 historia, visible en Freeplay). Son copias del chart del tutorial que conservan
 `"song": "Tutorial"` dentro, así que **reutilizan su audio** en vez de duplicarlo; por eso en
@@ -322,7 +326,15 @@ de la build al repo. También existe **Guardar como...** para elegir la ruta a m
 - Un nodo bloqueado no deja pasar (suena el *cancel*). Se desbloquea cuando completas un nodo que
   lo lista en `unlocks`.
 - ACCEPT: entra al nivel (o al mundo). Al terminar la canción vuelves al mapa y el nodo queda
-  marcado como completado. Si sales por pausa o game over, vuelves al mapa sin completarlo.
+  marcado como completado. Si sales por pausa o game over, vuelves al mapa sin completarlo. En
+  *practice* o *botplay* tampoco cuenta.
+- **Caminos nuevos**: la primera vez que superas un nivel, los caminos que abre aparecen puntito
+  a puntito desde ese nivel, como en SMW. Si abre varios (una bifurcación), crecen a la vez; si
+  un camino continúa desde otro recién abierto, sale después. ACCEPT o BACK se saltan la
+  animación. Repetir un nivel ya superado no la vuelve a mostrar.
+- **Niveles superados**: el nodo cambia a su *Anim. completado*. Si no tiene ninguna, se le pone
+  encima un **check verde**. Abajo, el nombre lleva **SUPERADO** y a la derecha se lee
+  `Superados: X/Y` del mundo actual.
 - BACK: sube al mapa anterior; en el mapa raíz abre el menú clásico (freeplay, opciones, mods,
   créditos, editores).
 - **R**: reinicia el progreso del mundo actual (útil mientras pruebas).
