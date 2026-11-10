@@ -392,6 +392,7 @@ class TitleState extends MusicBeatState
 					if(backend.OverworldData.exists(backend.OverworldData.DEFAULT_WORLD))
 					{
 						states.OverworldState.reset();
+						states.OverworldState.restorePosition(); // seguir donde se dejo a BF
 						MusicBeatState.switchState(new states.OverworldState());
 					}
 					else MusicBeatState.switchState(new MainMenuState());

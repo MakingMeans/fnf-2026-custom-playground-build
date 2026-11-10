@@ -43,6 +43,49 @@ class OverworldState extends MusicBeatState
 	 */
 	public static var arrivingFrom:String = null;
 
+	// ------------------------------------------------------------- posicion guardada
+	/**
+	 * Guarda donde esta BF (mundo, nodo y pila de submundos) en la partida, para seguir ahi la
+	 * proxima vez que se abra el juego. No guarda mientras se prueba desde el editor, ni encima
+	 * de una salida (solo se pisa de paso al entrar andando a un mundo).
+	 */
+	function savePosition()
+	{
+		if (returnToEditor || curNodeId == null) return;
+
+		var node:OverworldNodeFile = OverworldData.findNode(worldFile, curNodeId);
+		if (node == null || node.type == 'exit') return;
+
+		FlxG.save.data.overworldPosition = {world: curWorld, node: curNodeId, stack: [for (entry in worldStack) entry.copy()]};
+		FlxG.save.flush();
+	}
+
+	/**
+	 * Vuelve a la ultima posicion guardada (llamar despues de reset()). false si no hay ninguna
+	 * o su mundo ya no existe: entonces se empieza como siempre, en el nodo inicial.
+	 */
+	public static function restorePosition():Bool
+	{
+		var pos:Dynamic = FlxG.save.data.overworldPosition;
+		if (pos == null || pos.world == null || !OverworldData.exists(pos.world)) return false;
+
+		var stack:Array<Array<String>> = [];
+		var saved:Array<Dynamic> = pos.stack;
+		if (saved != null)
+		{
+			for (entry in saved)
+			{
+				var pair:Array<String> = entry;
+				if (pair != null && pair.length > 1 && OverworldData.exists(pair[0])) stack.push([pair[0], pair[1]]);
+			}
+		}
+
+		curWorld = pos.world;
+		curNodeId = pos.node;
+		worldStack = stack;
+		return true;
+	}
+
 	/**
 	 * true cuando el menu principal se abrio con ESC desde un mapa: su BACK devuelve a ese mismo
 	 * mapa y nodo (con la pila de submundos intacta) en vez de ir a la pantalla de titulo.
@@ -153,6 +196,9 @@ class OverworldState extends MusicBeatState
 
 		buildMap();
 		buildHUD();
+
+		// si BF esta entrando andando por una salida, se guarda al llegar al primer nodo
+		if (!walking) savePosition();
 
 		camGame.zoom = worldFile.zoom;
 		applyCameraBounds();
@@ -372,8 +418,19 @@ class OverworldState extends MusicBeatState
 	{
 		if (mapWidth <= 0 || mapHeight <= 0) return;
 
-		var viewWidth:Float = FlxG.width / camGame.zoom;
-		var viewHeight:Float = FlxG.height / camGame.zoom;
+		var area:Array<Float> = cameraArea(mapWidth, mapHeight, camGame.zoom);
+		camGame.setScrollBoundsRect(area[0], area[1], area[2], area[3]);
+	}
+
+	/**
+	 * Zona del mundo que la camara puede llegar a enseñar: [x, y, ancho, alto]. Lo que quede fuera
+	 * no se ve nunca (ahi van las salidas "fuera de pantalla"). Si el mapa cabe en pantalla por un
+	 * eje, ese eje se centra y la zona sobresale del mapa por los dos lados.
+	 */
+	public static function cameraArea(mapWidth:Float, mapHeight:Float, zoom:Float):Array<Float>
+	{
+		var viewWidth:Float = FlxG.width / zoom;
+		var viewHeight:Float = FlxG.height / zoom;
 
 		var rectX:Float = 0;
 		var rectWidth:Float = mapWidth;
@@ -391,7 +448,20 @@ class OverworldState extends MusicBeatState
 			rectHeight = viewHeight;
 		}
 
-		camGame.setScrollBoundsRect(rectX, rectY, rectWidth, rectHeight);
+		return [rectX, rectY, rectWidth, rectHeight];
+	}
+
+	/**
+	 * Tamaño del mapa calculado como lo hace el juego, pero sin crear sprites (para el editor):
+	 * el fondo, o con fondo en mosaico, lo que ocupan nodos y decorados en tiles enteros.
+	 */
+	public static function mapSize(file:OverworldFile):Array<Float>
+	{
+		if (file.bg == null || file.bg.length < 1 || !OverworldData.imageExists(file.bg)) return [FlxG.width, FlxG.height];
+
+		var info:OverworldImageInfo = OverworldData.imageInfo(file.bg);
+		if (file.bgTile) return tiledMapSize(file, info.frameWidth, info.frameHeight);
+		return [info.frameWidth, info.frameHeight];
 	}
 
 	/**
@@ -1061,6 +1131,7 @@ class OverworldState extends MusicBeatState
 				return;
 			}
 
+			savePosition();
 			updateNameText();
 		}
 	}

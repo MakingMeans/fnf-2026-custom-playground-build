@@ -184,8 +184,14 @@ class Main extends Sprite
 				firstState = function():flixel.FlxState
 				{
 					states.OverworldState.reset();
+
+					// Como el juego normal (sin mundo o con el de por defecto): se sigue donde se dejo
+					// a BF. Pidiendo otro mundo concreto, o con -from, se empieza en ese mundo.
+					var normalStart:Bool = worldToPlay == null || worldToPlay == backend.OverworldData.DEFAULT_WORLD;
+					var restored:Bool = arriveFrom == null && normalStart && states.OverworldState.restorePosition();
+
 					states.OverworldState.arrivingFrom = arriveFrom;
-					return new states.OverworldState(worldToPlay);
+					return new states.OverworldState(restored ? null : worldToPlay);
 				};
 			}
 		}

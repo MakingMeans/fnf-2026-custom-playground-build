@@ -61,11 +61,17 @@ el título vuelve a llevar directamente al menú clásico de siempre.
 | Rueda del ratón | Zoom |
 | Botón central / flechas | Mover la cámara |
 | **G** | Mostrar / ocultar la rejilla |
+| **U** | Mostrar / ocultar las flechas rosas de desbloqueo (de cada nodo a los que desbloquea) |
 | **CTRL+Z** / **CTRL+Y** | Deshacer / rehacer (también hay botones en la pestaña *Mundo*) |
 | **CTRL+S** | Guardar |
 | **CTRL+T** | Probar el mundo (BACK dentro del mapa te devuelve al editor) |
 | **F1** | Ayuda en pantalla |
 | **ESC** | Volver al menú de editores |
+
+El **rectángulo blanco discontinuo** ("LO QUE SE VE EN EL JUEGO") marca hasta dónde puede llegar
+la cámara del juego con el zoom del mundo. Lo que quede fuera no se ve nunca: ahí van las salidas
+que se van de la pantalla. Las **flechas rosas discontinuas** van de cada nodo a los que
+desbloquea, un poco apartadas del camino para no taparlo.
 
 En modo CAMINO, con un camino ya seleccionado, cada clic en una zona vacía **añade un punto de
 curva**: así se dibujan caminos en L o en zigzag como los de SMW. Los puntitos del camino se
@@ -417,6 +423,13 @@ de la build al repo. También existe **Guardar como...** para elegir la ruta a m
 
 El progreso se guarda en el `FlxG.save` del juego, con la clave `overworldProgress`
 (`"<mundo>::<nodo>"`).
+
+**Dónde está BF también se guarda** (clave `overworldPosition`: mundo, nodo y la pila de
+submundos): al abrir el juego otra vez, sigue en el mismo sitio, aunque sea dentro de un castillo.
+Se recupera al entrar desde el título y con `run-world.bat` / `tests\test-world.bat` (el mundo por
+defecto). Si abres a propósito otro mundo (`run-world.bat test_subworld`) o usas `-from`, se
+empieza en ese mundo como siempre. Probando desde el editor (CTRL+T) no se guarda. La debug y la
+release comparten partida.
 
 ## 7. Assets
 

@@ -299,6 +299,108 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 
 	var showGrid:Bool = true;
 
+	/** Flechas de "quien desbloquea a quien" (tecla U). */
+	var showUnlocks:Bool = true;
+	var viewLabel:FlxText;
+
+	static inline final VIEW_COLOR:FlxColor = 0xCCFFFFFF;
+	static inline final UNLOCK_COLOR:FlxColor = 0xFFFF66FF;
+
+	/** Lo que la camara del juego puede llegar a enseñar: [x, y, ancho, alto]. */
+	function viewArea():Array<Float>
+	{
+		var size:Array<Float> = OverworldState.mapSize(worldFile);
+		return OverworldState.cameraArea(size[0], size[1], worldFile.zoom);
+	}
+
+	/**
+	 * Rectangulo que cubre todo lo que se dibuja encima del mapa, aunque se salga de el (salidas
+	 * fuera de pantalla, la vista del juego centrada...): [minX, minY, maxX, maxY].
+	 */
+	function overlayBounds(area:Array<Float>):Array<Float>
+	{
+		var minX:Float = Math.min(0, area[0]) - 4;
+		var minY:Float = Math.min(0, area[1]) - 4;
+		var maxX:Float = Math.max(mapWidth, area[0] + area[2]) + 4;
+		var maxY:Float = Math.max(mapHeight, area[1] + area[3]) + 4;
+
+		for (node in worldFile.nodes)
+		{
+			minX = Math.min(minX, node.x - 32);
+			minY = Math.min(minY, node.y - 32);
+			maxX = Math.max(maxX, node.x + 32);
+			maxY = Math.max(maxY, node.y + 32);
+		}
+		for (pth in worldFile.paths)
+		{
+			if (pth.points == null) continue;
+			for (point in pth.points)
+			{
+				minX = Math.min(minX, point[0] - 8);
+				minY = Math.min(minY, point[1] - 8);
+				maxX = Math.max(maxX, point[0] + 8);
+				maxY = Math.max(maxY, point[1] + 8);
+			}
+		}
+		return [Math.floor(minX), Math.floor(minY), Math.ceil(maxX), Math.ceil(maxY)];
+	}
+
+	function dashedLine(target:FlxSprite, x1:Float, y1:Float, x2:Float, y2:Float, color:FlxColor, ?dash:Float = 4, ?gap:Float = 3)
+	{
+		var dx:Float = x2 - x1;
+		var dy:Float = y2 - y1;
+		var length:Float = Math.sqrt(dx * dx + dy * dy);
+		if (length <= 0) return;
+
+		var ux:Float = dx / length;
+		var uy:Float = dy / length;
+		var pos:Float = 0;
+		while (pos < length)
+		{
+			var end:Float = Math.min(pos + dash, length);
+			FlxSpriteUtil.drawLine(target, x1 + ux * pos, y1 + uy * pos, x1 + ux * end, y1 + uy * end, {color: color, thickness: 1});
+			pos += dash + gap;
+		}
+	}
+
+	/**
+	 * Flecha discontinua de cada nodo a los que desbloquea. Va desplazada a un lado para no tapar
+	 * el camino cuando los dos nodos estan unidos.
+	 */
+	function drawUnlockArrows(ox:Float, oy:Float)
+	{
+		for (node in worldFile.nodes)
+		{
+			if (node.unlocks == null) continue;
+			for (id in node.unlocks)
+			{
+				var target:OverworldNodeFile = OverworldData.findNode(worldFile, id);
+				if (target == null || target == node) continue;
+
+				var dx:Float = target.x - node.x;
+				var dy:Float = target.y - node.y;
+				var length:Float = Math.sqrt(dx * dx + dy * dy);
+				if (length < 20) continue;
+
+				var ux:Float = dx / length;
+				var uy:Float = dy / length;
+				var sideX:Float = -uy * 3;
+				var sideY:Float = ux * 3;
+
+				var x1:Float = node.x + ux * 9 + sideX - ox;
+				var y1:Float = node.y + uy * 9 + sideY - oy;
+				var x2:Float = target.x - ux * 9 + sideX - ox;
+				var y2:Float = target.y - uy * 9 + sideY - oy;
+				dashedLine(linesSprite, x1, y1, x2, y2, UNLOCK_COLOR);
+
+				// punta de flecha
+				var style = {color: UNLOCK_COLOR, thickness: 1.0};
+				FlxSpriteUtil.drawLine(linesSprite, x2, y2, x2 - ux * 5 - uy * 3, y2 - uy * 5 + ux * 3, style);
+				FlxSpriteUtil.drawLine(linesSprite, x2, y2, x2 - ux * 5 + uy * 3, y2 - uy * 5 - ux * 3, style);
+			}
+		}
+	}
+
 	function buildPathLines()
 	{
 		if (linesSprite != null)
@@ -307,8 +409,30 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			linesSprite.destroy();
 		}
 
-		linesSprite = new FlxSprite().makeGraphic(Std.int(mapWidth), Std.int(mapHeight), FlxColor.TRANSPARENT, true);
+		// el lienzo empieza donde haga falta (puede ser en negativo) y todo se dibuja desplazado
+		var area:Array<Float> = viewArea();
+		var bounds:Array<Float> = overlayBounds(area);
+		var ox:Float = bounds[0];
+		var oy:Float = bounds[1];
+		linesSprite = new FlxSprite(ox, oy).makeGraphic(Std.int(bounds[2] - ox), Std.int(bounds[3] - oy), FlxColor.TRANSPARENT, true);
 		insert(members.indexOf(nodesGroup), linesSprite);
+
+		// lo que se ve en el juego: fuera de este rectangulo, BF desaparece de la pantalla
+		var ax:Float = area[0] - ox;
+		var ay:Float = area[1] - oy;
+		dashedLine(linesSprite, ax, ay, ax + area[2], ay, VIEW_COLOR, 6, 4);
+		dashedLine(linesSprite, ax + area[2], ay, ax + area[2], ay + area[3], VIEW_COLOR, 6, 4);
+		dashedLine(linesSprite, ax + area[2], ay + area[3], ax, ay + area[3], VIEW_COLOR, 6, 4);
+		dashedLine(linesSprite, ax, ay + area[3], ax, ay, VIEW_COLOR, 6, 4);
+
+		if (viewLabel == null)
+		{
+			viewLabel = new FlxText(0, 0, 200, 'LO QUE SE VE EN EL JUEGO', 8);
+			viewLabel.setFormat(Paths.font('vcr.ttf'), 8, VIEW_COLOR, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			viewLabel.borderSize = 1;
+			add(viewLabel);
+		}
+		viewLabel.setPosition(area[0] + 3, area[1] + 2);
 
 		for (pth in worldFile.paths)
 		{
@@ -320,11 +444,11 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			var line:Array<Array<Float>> = OverworldState.buildLine(pth, nodeA, nodeB);
 
 			for (i in 0...line.length - 1)
-				FlxSpriteUtil.drawLine(linesSprite, line[i][0], line[i][1], line[i + 1][0], line[i + 1][1], {color: color, thickness: 1});
+				FlxSpriteUtil.drawLine(linesSprite, line[i][0] - ox, line[i][1] - oy, line[i + 1][0] - ox, line[i + 1][1] - oy, {color: color, thickness: 1});
 
 			if (pth.points != null)
 				for (point in pth.points)
-					FlxSpriteUtil.drawRect(linesSprite, point[0] - 2, point[1] - 2, 4, 4, color);
+					FlxSpriteUtil.drawRect(linesSprite, point[0] - 2 - ox, point[1] - 2 - oy, 4, 4, color);
 
 			// vista previa de los puntitos del camino
 			for (point in OverworldState.getDotPositions(pth, nodeA, nodeB))
@@ -335,6 +459,8 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 				dotsGroup.add(dot);
 			}
 		}
+
+		if (showUnlocks) drawUnlockArrows(ox, oy);
 	}
 
 	function updateSelectionBox()
@@ -498,6 +624,8 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			+ 'Rueda del raton       zoom\n'
 			+ 'Raton central / flechas  mover la camara\n'
 			+ 'G                     mostrar/ocultar rejilla\n'
+			+ 'U                     mostrar/ocultar flechas de desbloqueo (rosa)\n'
+			+ 'Rectangulo blanco     lo que se ve en el juego (fuera = fuera de pantalla)\n'
 			+ 'CTRL+Z / CTRL+Y       deshacer / rehacer\n'
 			+ 'CTRL+S                guardar\n'
 			+ 'CTRL+T                probar el mundo\n'
@@ -1709,6 +1837,13 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		{
 			showGrid = !showGrid;
 			gridSprite.visible = showGrid;
+		}
+
+		if (FlxG.keys.justPressed.U)
+		{
+			showUnlocks = !showUnlocks;
+			reloadMap();
+			showOutput(showUnlocks ? 'Flechas de desbloqueo visibles' : 'Flechas de desbloqueo ocultas');
 		}
 
 		if (FlxG.keys.justPressed.DELETE)
