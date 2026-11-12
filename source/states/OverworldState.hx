@@ -102,8 +102,12 @@ class OverworldState extends MusicBeatState
 		lastLevelNode = null;
 		pendingReveal = null;
 		arrivingFrom = null;
+		arrivingByWarp = null;
 		worldStack = [];
 	}
+
+	/** Mundo del que viene BF por un warp: aqui aparece encima de su pareja. Main lo usa con -warp-from. */
+	public static var arrivingByWarp:String = null;
 
 	/** Llamado al terminar una cancion lanzada desde el overworld. */
 	public static function completeCurrentNode()
@@ -166,6 +170,7 @@ class OverworldState extends MusicBeatState
 	{
 		fromOverworld = false;
 
+		OverworldData.clearWarpCache(); // las parejas de warp se leen de nuevo en cada mapa
 		worldFile = OverworldData.load(curWorld);
 		if (worldFile == null)
 		{
@@ -367,6 +372,10 @@ class OverworldState extends MusicBeatState
 		loadPlayerGraphic();
 		add(player);
 		add(spritesFront);
+
+		// llegando por un warp: BF aparece directamente encima de su pareja
+		var warpDoor:OverworldNodeFile = warpArrival();
+		if (warpDoor != null) curNodeId = warpDoor.id;
 
 		// llegando por una transicion: BF aparece en la salida de vuelta (fuera de la pantalla)
 		var arrival:Array<Dynamic> = arrivalPlan();
@@ -800,6 +809,7 @@ class OverworldState extends MusicBeatState
 		addPlayerAnim('walk_left', anims, 'walk left');
 		addPlayerAnim('walk_right', anims, 'walk right');
 		addPlayerAnim('enter', anims, 'level start');
+		addPlayerAnim('warp', anims, 'warp');
 
 		if (player.animation.getByName('walk_down') == null && anims.length > 0)
 			player.animation.addByPrefix('walk_down', anims[0], 8, true);
@@ -1199,6 +1209,7 @@ class OverworldState extends MusicBeatState
 
 		var text:String = node.name != null && node.name.length > 0 ? node.name : node.id;
 		if (node.type == 'world') text += '  >>';
+		if (node.type == 'warp') text += '  (ENTER: viajar)';
 		if (OverworldData.canBeCompleted(node) && OverworldData.isCompleted(curWorld, node.id)) text += '  <g>SUPERADO<g>';
 
 		nameTxt.applyMarkup(text, DONE_MARKUP);
@@ -1236,9 +1247,53 @@ class OverworldState extends MusicBeatState
 				}
 				startLevel(node);
 
+			case 'warp':
+				warpTo(node);
+
 			default:
 				FlxG.sound.play(Paths.sound('cancelMenu'));
 		}
+	}
+
+	/**
+	 * Warp (con ENTER): como una tuberia. BF desaparece con su animacion "warp" y aparece encima
+	 * del warp del otro mundo que apunta de vuelta a este (o en su nodo inicial si no hay). Es un
+	 * paso de lado, no un submundo: la pila no cambia.
+	 */
+	function warpTo(node:OverworldNodeFile)
+	{
+		if (node.world == null || node.world.length < 1 || !OverworldData.exists(node.world))
+		{
+			FlxG.sound.play(Paths.sound('cancelMenu'));
+			showError('Este warp no lleva a ningun mundo');
+			return;
+		}
+
+		busy = true;
+		FlxG.sound.play(Paths.sound('confirmMenu'));
+		playAnim('warp');
+
+		var from:String = curWorld;
+		var target:String = node.world;
+		new FlxTimer().start(0.5, function(_:FlxTimer)
+		{
+			arrivingByWarp = from;
+			curWorld = target;
+			curNodeId = null;
+			MusicBeatState.switchState(new OverworldState());
+		});
+	}
+
+	/** Llegando por un warp: el warp de este mundo que apunta de vuelta (su pareja), o null. */
+	function warpArrival():OverworldNodeFile
+	{
+		var from:String = arrivingByWarp;
+		arrivingByWarp = null;
+		if (from == null) return null;
+
+		for (node in worldFile.nodes)
+			if (node.type == 'warp' && node.world == from && OverworldData.isUnlocked(curWorld, worldFile, node)) return node;
+		return null;
 	}
 
 	function startLevel(node:OverworldNodeFile)

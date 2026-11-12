@@ -181,6 +181,10 @@ class Main extends Sprite
 				var fromArg:Int = launchArgs.indexOf('-from');
 				var arriveFrom:String = (fromArg > -1 && fromArg + 1 < launchArgs.length) ? launchArgs[fromArg + 1] : null;
 
+				// -warp-from <mundo>: entra como si BF llegara de ese mundo por un warp
+				var warpArg:Int = launchArgs.indexOf('-warp-from');
+				var warpFrom:String = (warpArg > -1 && warpArg + 1 < launchArgs.length) ? launchArgs[warpArg + 1] : null;
+
 				firstState = function():flixel.FlxState
 				{
 					states.OverworldState.reset();
@@ -188,9 +192,10 @@ class Main extends Sprite
 					// Como el juego normal (sin mundo o con el de por defecto): se sigue donde se dejo
 					// a BF. Pidiendo otro mundo concreto, o con -from, se empieza en ese mundo.
 					var normalStart:Bool = worldToPlay == null || worldToPlay == backend.OverworldData.DEFAULT_WORLD;
-					var restored:Bool = arriveFrom == null && normalStart && states.OverworldState.restorePosition();
+					var restored:Bool = arriveFrom == null && warpFrom == null && normalStart && states.OverworldState.restorePosition();
 
 					states.OverworldState.arrivingFrom = arriveFrom;
+					states.OverworldState.arrivingByWarp = warpFrom;
 					return new states.OverworldState(restored ? null : worldToPlay);
 				};
 			}

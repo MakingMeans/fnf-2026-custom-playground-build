@@ -10,7 +10,7 @@ typedef OverworldNodeFile =
 	var id:String;          // identificador unico dentro del mundo
 	var x:Float;            // posicion en pixeles del mundo
 	var y:Float;
-	var type:String;        // 'level' | 'world' | 'empty' | 'exit' (al llegar, BF sale del submundo)
+	var type:String;        // 'level' | 'world' | 'empty' | 'exit' (al pisarlo) | 'warp' (con ENTER, en pareja)
 	var image:String;       // clave de imagen, ej: 'overworld/dot'
 	var anim:String;        // prefijo de animacion (vacio = imagen estatica)
 	var animDone:String;    // animacion al estar completado (vacio = la misma)
@@ -321,6 +321,57 @@ class OverworldData
 				return true;
 		}
 
+		// un warp tambien se abre si su pareja del otro mundo esta abierta (p. ej. el del mundo
+		// central hacia un mundo, en cuanto el castillo de ese mundo abre su warp de vuelta)
+		if (node.type == 'warp' && partnerOpen(world, node)) return true;
+
+		return false;
+	}
+
+	// ------------------------------------------------------------- warps (tuberias)
+	static var warpCache:Map<String, OverworldFile> = new Map<String, OverworldFile>();
+
+	/** Olvida los mundos leidos para los warps (llamar al entrar a un mapa o tras guardar). */
+	public static function clearWarpCache()
+		warpCache.clear();
+
+	static function loadCached(name:String):OverworldFile
+	{
+		if (!warpCache.exists(name)) warpCache.set(name, load(name));
+		return warpCache.get(name);
+	}
+
+	/**
+	 * La pareja de un warp: el warp del mundo destino que apunta de vuelta a `world`, como los
+	 * dos extremos de una tuberia (por donde se entra se sale). null si no hay.
+	 */
+	public static function warpPartner(world:String, node:OverworldNodeFile):OverworldNodeFile
+	{
+		if (node == null || node.type != 'warp' || world == null || node.world == null || node.world.length < 1) return null;
+
+		var dest:OverworldFile = loadCached(node.world);
+		if (dest == null) return null;
+
+		for (other in dest.nodes)
+			if (other.type == 'warp' && other.world == world) return other;
+		return null;
+	}
+
+	/** Un warp que tiene pareja: puede abrirse desde el otro mundo aunque aqui nadie lo desbloquee. */
+	public static inline function opensByPartner(world:String, node:OverworldNodeFile):Bool
+		return world != null && warpPartner(world, node) != null;
+
+	/** Si la pareja de un warp esta abierta en su mundo (sin seguir la cadena: evita el bucle). */
+	static function partnerOpen(world:String, node:OverworldNodeFile):Bool
+	{
+		var partner:OverworldNodeFile = warpPartner(world, node);
+		if (partner == null) return false;
+		if (partner.unlocked) return true;
+
+		var destFile:OverworldFile = loadCached(node.world);
+		for (other in destFile.nodes)
+			if (other.unlocks != null && other.unlocks.contains(partner.id) && isCompleted(node.world, other.id))
+				return true;
 		return false;
 	}
 
@@ -447,14 +498,21 @@ class OverworldData
 	public static function isValidNodeId(id:String):Bool
 		return id != null && id.length > 0 && id.indexOf(',') < 0 && id.indexOf('::') < 0;
 
+	/**
+	 * Abierto "en principio": desbloqueado al empezar, o un warp que puede abrirse por su pareja
+	 * (en un mundo central todos los warps son asi y ninguno empieza abierto).
+	 */
+	static inline function openAtStart(name:String, node:OverworldNodeFile):Bool
+		return node.unlocked || (opensByPartner(name, node) && node.type == 'warp');
+
 	/** El nodo donde aparece BF con el progreso a cero (misma regla que OverworldState). */
-	public static function firstStartNode(file:OverworldFile):OverworldNodeFile
+	public static function firstStartNode(file:OverworldFile, ?name:String):OverworldNodeFile
 	{
 		var start:OverworldNodeFile = findNode(file, file.startNode);
-		if (start != null && start.unlocked) return start;
+		if (start != null && openAtStart(name, start)) return start;
 
 		for (node in file.nodes)
-			if (node.unlocked) return node;
+			if (openAtStart(name, node)) return node;
 		return null;
 	}
 
@@ -463,15 +521,17 @@ class OverworldData
 	 * tiene accesible, completa cada nivel al que llega y aplica sus desbloqueos, hasta que ya
 	 * no se abre nada nuevo. Devuelve los ids de los nodos a los que se acaba pudiendo llegar.
 	 */
-	public static function simulateReachable(file:OverworldFile):Map<String, Bool>
+	public static function simulateReachable(file:OverworldFile, ?name:String):Map<String, Bool>
 	{
 		var reached:Map<String, Bool> = new Map<String, Bool>();
-		var start:OverworldNodeFile = firstStartNode(file);
+		var start:OverworldNodeFile = firstStartNode(file, name);
 		if (start == null) return reached;
 
+		// los warps que solo se abren por su pareja se dan por abiertos: depende de otro mundo
 		var open:Map<String, Bool> = new Map<String, Bool>();
 		for (node in file.nodes)
-			if (node.unlocked) open.set(node.id, true);
+			if (node.unlocked || (node.type == 'warp' && opensByPartner(name, node) && !anyoneUnlocks(file, node.id)))
+				open.set(node.id, true);
 
 		var changed:Bool = true;
 		while (changed)
@@ -583,8 +643,17 @@ class OverworldData
 			if (!linked.exists(node.id) && file.nodes.length > 1)
 				warn(node.id, '"${node.id}": sin caminos, BF no puede llegar ni salir.');
 
-			if (!node.unlocked && !anyoneUnlocks(file, node.id))
+			if (!node.unlocked && !anyoneUnlocks(file, node.id) && !opensByPartner(name, node))
 				warn(node.id, '"${node.id}": bloqueado y nadie lo desbloquea.');
+
+			// warp: tuberia de ida y vuelta con un warp del mundo destino que apunte aqui
+			if (node.type == 'warp')
+			{
+				var dest:OverworldFile = (node.world != null && node.world.length > 0) ? load(node.world) : null;
+				if (dest == null) warn(node.id, '"${node.id}": el warp no tiene mundo destino o ese mundo no existe.');
+				else if (name != null && warpPartner(name, node) == null)
+					warn(node.id, '"${node.id}": "${node.world}" no tiene ningun warp que vuelva aqui, asi que BF aparecera alli en su nodo inicial.');
+			}
 
 			if (node.type == 'level' && (node.song == null || node.song.length < 1))
 				warn(node.id, '"${node.id}": es un nivel sin cancion.');
@@ -628,15 +697,15 @@ class OverworldData
 
 		var start:OverworldNodeFile = findNode(file, file.startNode);
 		if (start == null) warn(null, 'El nodo inicial "${file.startNode}" no existe.');
-		else if (!start.unlocked) warn(start.id, 'El nodo inicial "${start.id}" no esta desbloqueado al empezar.');
+		else if (!openAtStart(name, start)) warn(start.id, 'El nodo inicial "${start.id}" no esta desbloqueado al empezar.');
 
-		if (firstStartNode(file) == null)
+		if (firstStartNode(file, name) == null)
 		{
 			warn(null, 'Ningun nodo esta desbloqueado al empezar: BF no tiene donde aparecer.');
 			return problems;
 		}
 
-		var reached:Map<String, Bool> = simulateReachable(file);
+		var reached:Map<String, Bool> = simulateReachable(file, name);
 		for (node in file.nodes)
 			if (!reached.exists(node.id) && !flagged.exists(node.id))
 				problems.push({node: node.id, text: '"${node.id}": inalcanzable aunque completes todo lo que se puede.'});

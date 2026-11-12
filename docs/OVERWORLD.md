@@ -319,6 +319,30 @@ Si dentro de un submundo pones un nodo `world` que lleva de vuelta al mapa de fu
 funciona como salida (entras en ese mapa), pero no cuenta para superar el submundo ni para el
 contador. Para salir es mejor un `exit`, que te deja encima del nodo por el que entraste.
 
+### Warps (tuberías): nodos `warp`
+
+Un `warp` lleva a otro mundo **con ENTER**, como las tuberías de Mario: por donde se entra se
+sale. Ponle **Mundo destino** y, en ese mundo, otro `warp` con destino de vuelta a este: son
+**pareja**. BF se mete con su animación de *warp* y aparece **encima de la pareja**, no andando
+desde el borde. Desde ahí, ENTER le devuelve por el mismo sitio. No es un submundo: la pila no
+cambia y ESC sigue abriendo el menú. Si el destino no tiene pareja, BF aparece en su nodo inicial
+(*Comprobar mundo* lo avisa).
+
+Diferencia con las salidas `exit`: la salida se activa **al pisarla** (pensada para caminos que
+se van de la pantalla) y el warp **con ENTER** (una tubería, una estrella...).
+
+Un warp se desbloquea como cualquier nodo (por ejemplo, que lo abra el castillo del mundo con el
+modo ENLAZAR), **y además se abre solo cuando su pareja está abierta**. Así se monta un **mundo
+central**:
+
+1. En cada mundo, un `warp` con destino al mundo central, desbloqueado por su castillo.
+2. En el mundo central, un `warp` por mundo, con destino a ese mundo, **bloqueado y sin que nadie
+   lo desbloquee**: se abre solo en cuanto el castillo de ese mundo abre su pareja. El nodo
+   inicial del mundo central puede ser uno de ellos.
+
+Resultado: desde el mundo central solo se puede viajar a los mundos con el castillo derrumbado,
+y se aparece encima de su tubería.
+
 ---
 
 ## Mundo de pruebas: `test_graph`
@@ -343,11 +367,16 @@ abre el título, `play.bat` y `run-world.bat` sin nombre. Atajos en la carpeta `
 | T3 | bloqueado | T5 |
 | T4 | bloqueado | nada |
 | T5 | bloqueado | castillo |
-| castillo | bloqueado | meta y la salida hacia `test_world2` (cuando superas `test_subworld`) |
+| castillo | bloqueado | meta, la salida hacia `test_world2` y la tubería (cuando superas `test_subworld`) |
 
 Desde la meta sale un camino hacia abajo que se va de la pantalla: es una salida con destino
 `test_world2`. Ese mundo tiene dos niveles (Mundo 2 - 1 y 2 - 2) y su salida de vuelta está
 fuera de la pantalla por arriba.
+
+**Mundo central `test_hub`**: dos tuberías (`warp`), una hacia `test_graph` y otra hacia
+`test_world2`. Sus parejas son la tubería bajo Tutorial 1 (la abre el castillo) y la de bajo
+Mundo 2 - 1 (la abre Mundo 2 - 2, el último nivel de ese mundo). Para probar llegadas sin
+recorrer el mapa: `FNF2026Playground.exe -overworld test_hub -warp-from test_graph`.
 
 `test_subworld` son dos niveles en línea con dos salidas, una de cada tipo:
 
@@ -413,7 +442,7 @@ de la build al repo. También existe **Guardar como...** para elegir la ruta a m
     {
       "id": "n0",                     // único dentro del mundo
       "x": 80, "y": 160,              // centro del nodo, en píxeles del mapa
-      "type": "level",                // level | world | empty | exit
+      "type": "level",                // level | world | empty | exit | warp
       "image": "overworld/big",
       "anim": "idle",
       "animDone": "",                 // animación cuando ya está superado

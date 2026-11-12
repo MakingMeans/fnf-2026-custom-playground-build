@@ -11,22 +11,103 @@
 	"player": "overworld/overworld_bf",
 	"walkSpeed": 60,
 	"nodes": [
-		{"id": "a_test_graph", "x": 128, "y": -32, "type": "exit", "image": "", "anim": "", "animDone": "", "fps": 0, "name": "Vuelta al mundo 1", "song": "", "week": "", "difficulty": "", "world": "test_graph", "unlocked": true,
+		{
+			"id": "a_test_graph",
+			"x": 128,
+			"y": -32,
+			"type": "exit",
+			"image": "",
+			"anim": "",
+			"animDone": "",
+			"fps": 0,
+			"name": "Vuelta al mundo 1",
+			"song": "",
+			"week": "",
+			"difficulty": "",
+			"world": "test_graph",
+			"unlocked": true,
 			"unlocks": []
 		},
-		{"id": "m2_1", "x": 128, "y": 96, "type": "level", "image": "overworld/og_mario/level_tiles", "anim": "tile0002", "animDone": "tile0003", "fps": 0, "name": "Mundo 2 - 1", "song": "tutorial3", "week": "test_levels", "difficulty": "", "world": "", "unlocked": true,
-			"unlocks": ["m2_2"]
+		{
+			"id": "m2_1",
+			"x": 128,
+			"y": 96,
+			"type": "level",
+			"image": "overworld/og_mario/level_tiles",
+			"anim": "tile0002",
+			"animDone": "tile0003",
+			"fps": 0,
+			"name": "Mundo 2 - 1",
+			"song": "tutorial3",
+			"week": "test_levels",
+			"difficulty": "",
+			"world": "",
+			"unlocked": true,
+			"unlocks": [
+				"m2_2"
+			]
 		},
-		{"id": "m2_2", "x": 208, "y": 96, "type": "level", "image": "overworld/og_mario/level_tiles", "anim": "tile0002", "animDone": "tile0003", "fps": 0, "name": "Mundo 2 - 2", "song": "tutorial4", "week": "test_levels", "difficulty": "", "world": "", "unlocked": false,
+		{
+			"id": "m2_2",
+			"x": 208,
+			"y": 96,
+			"type": "level",
+			"image": "overworld/og_mario/level_tiles",
+			"anim": "tile0002",
+			"animDone": "tile0003",
+			"fps": 0,
+			"name": "Mundo 2 - 2",
+			"song": "tutorial4",
+			"week": "test_levels",
+			"difficulty": "",
+			"world": "",
+			"unlocked": false,
+			"unlocks": [
+				"tp2"
+			]
+		},
+		{
+			"id": "tp2",
+			"x": 128,
+			"y": 160,
+			"type": "warp",
+			"image": "overworld/pipe",
+			"anim": "idle",
+			"animDone": "",
+			"fps": 0,
+			"name": "Tuberia al mundo central",
+			"song": "",
+			"week": "",
+			"difficulty": "",
+			"world": "test_hub",
+			"unlocked": false,
 			"unlocks": []
 		}
 	],
 	"sprites": [],
 	"paths": [
-		{"a": "a_test_graph", "b": "m2_1", "dots": "overworld/dot", "dotAnim": "idle", "dotSpacing": 16,
+		{
+			"a": "a_test_graph",
+			"b": "m2_1",
+			"dots": "overworld/dot",
+			"dotAnim": "idle",
+			"dotSpacing": 16,
 			"points": []
 		},
-		{"a": "m2_1", "b": "m2_2", "dots": "overworld/dot", "dotAnim": "idle", "dotSpacing": 16,
+		{
+			"a": "m2_1",
+			"b": "m2_2",
+			"dots": "overworld/dot",
+			"dotAnim": "idle",
+			"dotSpacing": 16,
+			"points": []
+		},
+		{
+			"a": "m2_1",
+			"b": "tp2",
+			"dots": "overworld/dot",
+			"dotAnim": "idle",
+			"dotSpacing": 16,
 			"points": []
 		}
 	]

@@ -271,6 +271,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			case 'world': 0xFF7FD4FF;
 			case 'empty': 0xFFBBBBBB;
 			case 'exit': 0xFFFFA040;
+			case 'warp': 0xFF66FF99;
 			default: node.unlocked ? 0xFFFFE066 : 0xFFFF8080;
 		}
 	}
@@ -903,7 +904,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		tab.add(nodeIdInput);
 
 		label(tab, x + 120, y - 17, 'Tipo:');
-		nodeTypeDropDown = new PsychUIDropDownMenu(x + 120, y, ['level', 'world', 'empty', 'exit'], function(sel:Int, value:String)
+		nodeTypeDropDown = new PsychUIDropDownMenu(x + 120, y, ['level', 'world', 'empty', 'exit', 'warp'], function(sel:Int, value:String)
 		{
 			if (selectedNode == null) return;
 			pushUndo();
@@ -1074,6 +1075,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			+ '- sin semana salen todas las de la build
 '
 			+ '- con semana, solo las que ella declara'
+			+ '\nWarp: con ENTER, aparece en el warp del destino que apunta aqui.'
 			+ '\nSalida (exit) sin Mundo destino: vuelve al mapa de fuera.'
 			+ '\nCon destino: pasa a ese mundo y entra por su salida de vuelta.', 11));
 	}
@@ -2613,6 +2615,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		if (problemsTimer < PROBLEM_DELAY) return;
 
 		problemsDirty = false;
+		OverworldData.clearWarpCache(); // el otro extremo de un warp puede haberse guardado ahora
 		problems = OverworldData.checkWorldProblems(worldFile, worldName);
 		problemCursor = -1;
 		buildProblemMarkers();

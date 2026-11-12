@@ -1,0 +1,60 @@
+{
+	"displayName": "Mundo central",
+	"bg": "overworld/backgrounds/sea",
+	"bgAnim": "idle",
+	"bgFps": 6,
+	"bgTile": true,
+	"music": "freakyMenu",
+	"zoom": 3,
+	"gridSize": 16,
+	"startNode": "a_graph",
+	"player": "overworld/overworld_bf",
+	"walkSpeed": 60,
+	"nodes": [
+		{
+			"id": "a_graph",
+			"x": 80,
+			"y": 112,
+			"type": "warp",
+			"image": "overworld/pipe",
+			"anim": "idle",
+			"animDone": "",
+			"fps": 0,
+			"name": "Mundo 1 (Prueba del grafo)",
+			"song": "",
+			"week": "",
+			"difficulty": "",
+			"world": "test_graph",
+			"unlocked": false,
+			"unlocks": []
+		},
+		{
+			"id": "a_world2",
+			"x": 176,
+			"y": 112,
+			"type": "warp",
+			"image": "overworld/pipe",
+			"anim": "idle",
+			"animDone": "",
+			"fps": 0,
+			"name": "Mundo 2",
+			"song": "",
+			"week": "",
+			"difficulty": "",
+			"world": "test_world2",
+			"unlocked": false,
+			"unlocks": []
+		}
+	],
+	"sprites": [],
+	"paths": [
+		{
+			"a": "a_graph",
+			"b": "a_world2",
+			"dots": "overworld/dot",
+			"dotAnim": "idle",
+			"dotSpacing": 16,
+			"points": []
+		}
+	]
+}
