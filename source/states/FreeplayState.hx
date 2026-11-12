@@ -54,6 +54,10 @@ class FreeplayState extends MusicBeatState
 
 	override function create()
 	{
+		// las canciones de Freeplay nunca son del overworld: si quedaba la marca de una cancion del
+		// mapa (p. ej. tras pasar por el editor de charts), no debe completar ningun nodo
+		OverworldState.fromOverworld = false;
+
 		//Paths.clearStoredMemory();
 		//Paths.clearUnusedMemory();
 		

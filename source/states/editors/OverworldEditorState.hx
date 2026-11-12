@@ -9,6 +9,7 @@ import states.editors.content.FileDialogHandler;
 import flixel.FlxObject;
 import flixel.group.FlxGroup.FlxTypedGroup;
 import flixel.util.FlxSpriteUtil;
+import openfl.display.BitmapData;
 
 import flash.net.FileFilter;
 
@@ -31,6 +32,9 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 	static inline var PALETTE_WIDTH:Int = 300;
 
 	var worldName:String = 'nuevo_mundo';
+
+	/** El archivo del que salio el mundo abierto: guardar con otro nombre que ya exista pide confirmacion. */
+	var loadedName:String = null;
 	var worldFile:OverworldFile;
 
 	var camGame:FlxCamera;
@@ -148,8 +152,10 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		fileDialog = new FileDialogHandler();
 		add(fileDialog);
 
+		OverworldData.clearWorldCache();
 		worldFile = OverworldData.load(worldName);
-		if (worldFile == null) worldFile = OverworldData.createEmpty();
+		if (worldFile != null) loadedName = worldName;
+		else worldFile = OverworldData.createEmpty();
 
 		spritesBack = new FlxTypedGroup<FlxSprite>();
 		dotsGroup = new FlxTypedGroup<FlxSprite>();
@@ -194,36 +200,60 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		if (FlxG.sound.music == null || !FlxG.sound.music.playing)
 			FlxG.sound.playMusic(Paths.music('freakyMenu'), 0.4);
 
+		#if debug // autoprueba de "unir mundos" (-selftest): crea mundos zz_*, los comprueba y los borra
+		if (Sys.args().contains('-selftest')) runSelfTest();
+		#end
+
 		super.create();
 	}
 
 	// ------------------------------------------------------------------ mapa
-	function reloadMap()
+	/**
+	 * Vuelve a crear lo que se ve del mapa a partir de `worldFile`.
+	 * `graphOnly` rehace solo nodos, etiquetas, caminos y avisos: es lo que cambia al arrastrar,
+	 * enlazar o crear caminos, y no toca los decorados (un mapa pintado puede tener miles de
+	 * tiles; rehacerlos en cada pixel de un arrastre lo volvia injugable). El fondo y la rejilla
+	 * solo se rehacen si el mapa ha cambiado de tamaño.
+	 */
+	function reloadMap(?graphOnly:Bool = false)
 	{
-		OverworldData.applyDefaults(worldFile);
+		OverworldData.applyDefaults(worldFile, !graphOnly);
 
+		var oldWidth:Float = mapWidth;
+		var oldHeight:Float = mapHeight;
+		if (!graphOnly) rebuildBackground();
+
+		calcMapSize();
+		var resized:Bool = mapWidth != oldWidth || mapHeight != oldHeight;
+		if (graphOnly && resized)
+		{
+			rebuildBackground();
+			calcMapSize();
+		}
+		if (!graphOnly || resized) buildGrid();
+
+		if (!graphOnly) rebuildDecor();
+		rebuildGraph();
+	}
+
+	function rebuildBackground()
+	{
 		for (old in bgSprites)
 		{
-			remove(old);
+			remove(old, true);
 			old.destroy();
 		}
 		bgSprites = OverworldState.buildBackgroundSprites(worldFile);
 		for (i in 0...bgSprites.length) insert(i, bgSprites[i]);
 		bgSprite = bgSprites.length > 0 ? bgSprites[bgSprites.length - 1] : null;
+	}
 
-		calcMapSize();
-		buildGrid();
-
+	function rebuildDecor()
+	{
 		spritesBack.forEachAlive(function(spr:FlxSprite) spr.destroy());
 		spritesFront.forEachAlive(function(spr:FlxSprite) spr.destroy());
-		nodesGroup.forEachAlive(function(spr:FlxSprite) spr.destroy());
-		dotsGroup.forEachAlive(function(spr:FlxSprite) spr.destroy());
-		labelsGroup.forEachAlive(function(txt:FlxText) txt.destroy());
 		spritesBack.clear();
 		spritesFront.clear();
-		nodesGroup.clear();
-		dotsGroup.clear();
-		labelsGroup.clear();
 
 		for (data in worldFile.sprites)
 		{
@@ -241,6 +271,17 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			if (data.front) spritesFront.add(spr);
 			else spritesBack.add(spr);
 		}
+	}
+
+	/** Nodos, etiquetas, caminos, seleccion y avisos. */
+	function rebuildGraph()
+	{
+		nodesGroup.forEachAlive(function(spr:FlxSprite) spr.destroy());
+		dotsGroup.forEachAlive(function(spr:FlxSprite) spr.destroy());
+		labelsGroup.forEachAlive(function(txt:FlxText) txt.destroy());
+		nodesGroup.clear();
+		dotsGroup.clear();
+		labelsGroup.clear();
 
 		for (node in worldFile.nodes)
 		{
@@ -248,7 +289,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			spr.setPosition(node.x - spr.width * 0.5, node.y - spr.height * 0.5);
 			nodesGroup.add(spr);
 
-			var label:FlxText = new FlxText(node.x - 50, node.y + spr.height * 0.5 + 1, 100, node.id, 8);
+			var label:FlxText = new FlxText(node.x - 60, node.y + spr.height * 0.5 + 1, 120, nodeLabel(node), 8);
 			label.setFormat(Paths.font('vcr.ttf'), 8, labelColor(node), CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 			label.borderSize = 1;
 			labelsGroup.add(label);
@@ -262,6 +303,18 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		problemGroup.clear();
 		problemsDirty = true;
 		problemsTimer = 0;
+	}
+
+	/** La etiqueta de un nodo: su ID y, si lleva a otro mundo, a cual. */
+	function nodeLabel(node:OverworldNodeFile):String
+	{
+		var target:String = node.world != null ? node.world : '';
+		return switch (node.type)
+		{
+			case 'world' | 'warp': node.id + '\n> ' + (target.length > 0 ? target : '(sin destino)');
+			case 'exit': node.id + '\n> ' + (target.length > 0 ? target : 'mapa de fuera');
+			default: node.id;
+		}
 	}
 
 	function labelColor(node:OverworldNodeFile):FlxColor
@@ -300,13 +353,14 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 	{
 		if (gridSprite != null)
 		{
-			remove(gridSprite);
+			remove(gridSprite, true); // sin compactar, cada recarga dejaba un hueco en `members`
 			gridSprite.destroy();
 		}
 
 		var wid:Int = Std.int(mapWidth);
 		var hei:Int = Std.int(mapHeight);
 		gridSprite = new FlxSprite().makeGraphic(wid, hei, FlxColor.TRANSPARENT, true);
+		var bmp:BitmapData = gridSprite.pixels;
 
 		var grid:Int = worldFile.gridSize;
 		if (grid < 2) grid = 16;
@@ -314,18 +368,22 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		var x:Int = 0;
 		while (x <= wid)
 		{
-			FlxSpriteUtil.drawLine(gridSprite, x, 0, x, hei, {color: 0x33FFFFFF, thickness: 1});
+			plotLine(bmp, x, 0, x, hei, 0x33FFFFFF);
 			x += grid;
 		}
 
 		var y:Int = 0;
 		while (y <= hei)
 		{
-			FlxSpriteUtil.drawLine(gridSprite, 0, y, wid, y, {color: 0x33FFFFFF, thickness: 1});
+			plotLine(bmp, 0, y, wid, y, 0x33FFFFFF);
 			y += grid;
 		}
 
-		FlxSpriteUtil.drawRect(gridSprite, 0, 0, wid - 1, hei - 1, FlxColor.TRANSPARENT, {color: 0x66FF00FF, thickness: 1});
+		plotLine(bmp, 0, 0, wid - 1, 0, 0x66FF00FF);
+		plotLine(bmp, wid - 1, 0, wid - 1, hei - 1, 0x66FF00FF);
+		plotLine(bmp, wid - 1, hei - 1, 0, hei - 1, 0x66FF00FF);
+		plotLine(bmp, 0, hei - 1, 0, 0, 0x66FF00FF);
+		gridSprite.dirty = true;
 
 		gridSprite.visible = showGrid;
 		insert(members.indexOf(spritesBack), gridSprite);
@@ -379,6 +437,44 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		return [Math.floor(minX), Math.floor(minY), Math.ceil(maxX), Math.ceil(maxY)];
 	}
 
+	/**
+	 * Linea de 1 px pintada pixel a pixel (Bresenham). FlxSpriteUtil.drawLine hace un dibujo
+	 * vectorial entero por linea; con la rejilla, el rectangulo discontinuo y las flechas eran
+	 * cientos por recarga, y la recarga se repite en cada pixel de un arrastre.
+	 */
+	static function plotLine(bmp:BitmapData, x1:Float, y1:Float, x2:Float, y2:Float, color:FlxColor)
+	{
+		var x:Int = Math.round(x1);
+		var y:Int = Math.round(y1);
+		var endX:Int = Math.round(x2);
+		var endY:Int = Math.round(y2);
+		var dx:Int = Std.int(Math.abs(endX - x));
+		var dy:Int = -Std.int(Math.abs(endY - y));
+		var stepX:Int = x < endX ? 1 : -1;
+		var stepY:Int = y < endY ? 1 : -1;
+		var err:Int = dx + dy;
+		var width:Int = bmp.width;
+		var height:Int = bmp.height;
+
+		while (true)
+		{
+			if (x >= 0 && y >= 0 && x < width && y < height) bmp.setPixel32(x, y, color);
+			if (x == endX && y == endY) break;
+
+			var e2:Int = 2 * err;
+			if (e2 >= dy)
+			{
+				err += dy;
+				x += stepX;
+			}
+			if (e2 <= dx)
+			{
+				err += dx;
+				y += stepY;
+			}
+		}
+	}
+
 	function dashedLine(target:FlxSprite, x1:Float, y1:Float, x2:Float, y2:Float, color:FlxColor, ?dash:Float = 4, ?gap:Float = 3)
 	{
 		var dx:Float = x2 - x1;
@@ -389,10 +485,11 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		var ux:Float = dx / length;
 		var uy:Float = dy / length;
 		var pos:Float = 0;
+		var bmp:BitmapData = target.pixels;
 		while (pos < length)
 		{
 			var end:Float = Math.min(pos + dash, length);
-			FlxSpriteUtil.drawLine(target, x1 + ux * pos, y1 + uy * pos, x1 + ux * end, y1 + uy * end, {color: color, thickness: 1});
+			plotLine(bmp, x1 + ux * pos, y1 + uy * pos, x1 + ux * end, y1 + uy * end, color);
 			pos += dash + gap;
 		}
 	}
@@ -428,9 +525,8 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 				dashedLine(linesSprite, x1, y1, x2, y2, UNLOCK_COLOR);
 
 				// punta de flecha
-				var style = {color: UNLOCK_COLOR, thickness: 1.0};
-				FlxSpriteUtil.drawLine(linesSprite, x2, y2, x2 - ux * 5 - uy * 3, y2 - uy * 5 + ux * 3, style);
-				FlxSpriteUtil.drawLine(linesSprite, x2, y2, x2 - ux * 5 + uy * 3, y2 - uy * 5 - ux * 3, style);
+				plotLine(linesSprite.pixels, x2, y2, x2 - ux * 5 - uy * 3, y2 - uy * 5 + ux * 3, UNLOCK_COLOR);
+				plotLine(linesSprite.pixels, x2, y2, x2 - ux * 5 + uy * 3, y2 - uy * 5 - ux * 3, UNLOCK_COLOR);
 			}
 		}
 	}
@@ -439,7 +535,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 	{
 		if (linesSprite != null)
 		{
-			remove(linesSprite);
+			remove(linesSprite, true); // sin compactar, cada recarga dejaba un hueco en `members`
 			linesSprite.destroy();
 		}
 
@@ -478,11 +574,13 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			var line:Array<Array<Float>> = OverworldState.buildLine(pth, nodeA, nodeB);
 
 			for (i in 0...line.length - 1)
-				FlxSpriteUtil.drawLine(linesSprite, line[i][0] - ox, line[i][1] - oy, line[i + 1][0] - ox, line[i + 1][1] - oy, {color: color, thickness: 1});
+				plotLine(linesSprite.pixels, line[i][0] - ox, line[i][1] - oy, line[i + 1][0] - ox, line[i + 1][1] - oy, color);
 
+			// puntos de curva: un cuadradito de 4x4
 			if (pth.points != null)
 				for (point in pth.points)
-					FlxSpriteUtil.drawRect(linesSprite, point[0] - 2 - ox, point[1] - 2 - oy, 4, 4, color);
+					for (row in 0...4)
+						plotLine(linesSprite.pixels, point[0] - 2 - ox, point[1] - 2 + row - oy, point[0] + 1 - ox, point[1] - 2 + row - oy, color);
 
 			// vista previa de los puntitos del camino
 			for (point in OverworldState.getDotPositions(pth, nodeA, nodeB))
@@ -495,6 +593,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		}
 
 		if (showUnlocks) drawUnlockArrows(ox, oy);
+		linesSprite.dirty = true;
 	}
 
 	function updateSelectionBox()
@@ -655,6 +754,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			+ '   (otro clic en un destino quita el enlace; clic en el vacio termina;\n'
 			+ '    L otra vez, V o ESC salen del modo)\n'
 			+ 'P  mostrar / ocultar la paleta de tiles\n'
+			+ 'CTRL+clic en la paleta  ese tile como aspecto del nodo elegido (+SHIFT: al completarlo)\n'
 			+ 'Punto de curva         arrastrar = moverlo, clic derecho = borrarlo (modos V y C)\n'
 			+ 'E                     ir al siguiente aviso (nodos con contorno rojo)\n\n'
 			+ 'Clic derecho          borrar lo que hay bajo el raton\n'
@@ -794,7 +894,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		{
 			pushUndo();
 			for (node in worldFile.nodes) node.unlocked = true;
-			reloadMap();
+			reloadMap(true);
 			updateUI();
 			showOutput('Todos los nodos quedan accesibles desde el principio');
 		}, 155));
@@ -827,29 +927,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		worldsDropDown = new PsychUIDropDownMenu(x + 110, y, worldList, function(sel:Int, value:String)
 		{
 			if (value == null || value.length < 1) return;
-			if (!confirmDiscard('cargar "$value"'))
-			{
-				worldsDropDown.selectedLabel = worldName;
-				return;
-			}
-
-			var loaded:OverworldFile = OverworldData.load(value);
-			if (loaded == null)
-			{
-				showOutput('No se pudo cargar "$value"', true);
-				return;
-			}
-
-			worldName = value;
-			worldFile = loaded;
-			selectedNode = null;
-			selectedSprite = null;
-			selectedPath = null;
-			resetHistory();
-			unsavedProgress = false;
-			reloadMap();
-			updateUI();
-			showOutput('Mundo "$value" cargado');
+			if (!openWorld(value, 'cargar "$value"')) worldsDropDown.selectedLabel = worldName;
 		}, 170);
 		tab.add(worldsDropDown);
 	}
@@ -895,10 +973,11 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 					node.unlocks = [for (target in node.unlocks) target == oldId ? newId : target];
 
 			if (worldFile.startNode == oldId) worldFile.startNode = newId;
+			OverworldData.renameProgress(worldName, oldId, newId); // el progreso va con el nodo
 			unsavedProgress = true;
 			showOutput('Nodo "$oldId" renombrado a "$newId"');
 			selectedNode.id = newId;
-			reloadMap();
+			reloadMap(true);
 			refreshNodeIdLists();
 		};
 		tab.add(nodeIdInput);
@@ -913,15 +992,25 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 
 			// Por defecto una salida es invisible: se coloca fuera de la pantalla y BF se va
 			// andando por su camino. Si se quiere una salida visible (un tubo), se le pone sprite.
-			if (value == 'exit' && selectedNode.image == OverworldData.createNode('', 0, 0).image)
+			var defaultImage:String = OverworldData.createNode('', 0, 0).image;
+			if (value == 'exit' && selectedNode.image == defaultImage)
 			{
 				selectedNode.image = '';
 				selectedNode.anim = '';
 				showOutput('Salida invisible: colocala fuera de la pantalla o ponle un sprite (un tubo...)');
 			}
 
+			// un warp sin sprite propio se ve como una tuberia
+			if (value == 'warp' && (selectedNode.image == defaultImage || selectedNode.image == '') && OverworldData.imageExists('overworld/pipe'))
+			{
+				selectedNode.image = 'overworld/pipe';
+				selectedNode.anim = 'idle';
+				selectedNode.animDone = '';
+				showOutput('Warp: elige su Mundo destino y pulsa "Crear pareja" para poner la tuberia de vuelta');
+			}
+
 			unsavedProgress = true;
-			reloadMap();
+			reloadMap(true);
 			updateUI();
 		}, 100);
 		tab.add(nodeTypeDropDown);
@@ -938,7 +1027,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		{
 			if (selectedNode == null) return;
 			moveNodeTo(selectedNode, nodeXStepper.value, selectedNode.y);
-			reloadMap();
+			reloadMap(true);
 		};
 		tab.add(nodeXStepper);
 
@@ -947,7 +1036,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		{
 			if (selectedNode == null) return;
 			moveNodeTo(selectedNode, selectedNode.x, nodeYStepper.value);
-			reloadMap();
+			reloadMap(true);
 		};
 		tab.add(nodeYStepper);
 
@@ -977,6 +1066,8 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			if (selectedNode == null) return;
 			selectedNode.world = value;
 			unsavedProgress = true;
+			reloadMap(true); // la etiqueta del nodo muestra su destino
+			updateNodeButtons();
 		}, 180);
 		tab.add(nodeWorldDropDown);
 
@@ -997,7 +1088,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			nodeAnimDropDown.selectedLabel = selectedNode.anim;
 			nodeDoneDropDown.selectedLabel = '';
 			lastNodeAnim = selectedNode.anim;
-			reloadMap();
+			reloadMap(true);
 		}, 150);
 		tab.add(nodeImageDropDown);
 
@@ -1008,7 +1099,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			if (selectedNode == null) return;
 			selectedNode.fps = Std.int(nodeFpsStepper.value);
 			lastNodeFps = selectedNode.fps;
-			reloadMap();
+			reloadMap(true);
 		};
 		tab.add(nodeFpsStepper);
 
@@ -1019,7 +1110,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			if (selectedNode == null) return;
 			selectedNode.anim = value;
 			lastNodeAnim = value;
-			reloadMap();
+			reloadMap(true);
 		}, 130);
 		tab.add(nodeAnimDropDown);
 
@@ -1035,7 +1126,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		{
 			if (selectedNode == null) return;
 			selectedNode.unlocked = nodeUnlockedCheck.checked;
-			reloadMap();
+			reloadMap(true);
 		});
 		tab.add(nodeUnlockedCheck);
 
@@ -1067,6 +1158,12 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 
 		y += 40;
 		tab.add(new PsychUIButton(x, y, 'Borrar nodo', function() deleteSelectedNode(), 100));
+
+		// unir mundos: el texto y si se ven dependen del nodo (updateNodeButtons)
+		nodeLinkButton = new PsychUIButton(x + 108, y, 'Crear submundo', function() linkNodeWorld(), 120);
+		tab.add(nodeLinkButton);
+		nodeGotoButton = new PsychUIButton(x + 236, y, 'Ir al destino', function() gotoDestination(), 104);
+		tab.add(nodeGotoButton);
 
 		y += 40;
 		tab.add(new FlxText(x, y, 340,
@@ -1133,7 +1230,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		{
 			if (selectedSprite == null) return;
 			selectedSprite.x = decorXStepper.value;
-			reloadMap();
+			moveDecorSprite(selectedSprite);
 		};
 		tab.add(decorXStepper);
 
@@ -1142,7 +1239,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		{
 			if (selectedSprite == null) return;
 			selectedSprite.y = decorYStepper.value;
-			reloadMap();
+			moveDecorSprite(selectedSprite);
 		};
 		tab.add(decorYStepper);
 
@@ -1234,7 +1331,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			pathDotAnimDropDown.list = [''].concat(anims);
 			selectedPath.dotAnim = anims.length > 0 ? anims[0] : '';
 			pathDotAnimDropDown.selectedLabel = selectedPath.dotAnim;
-			reloadMap();
+			reloadMap(true);
 		}, 180);
 		tab.add(pathDotsDropDown);
 
@@ -1244,7 +1341,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		{
 			if (selectedPath == null) return;
 			selectedPath.dotAnim = value;
-			reloadMap();
+			reloadMap(true);
 		}, 140);
 		tab.add(pathDotAnimDropDown);
 
@@ -1254,7 +1351,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		{
 			if (selectedPath == null) return;
 			selectedPath.dotSpacing = pathSpacingStepper.value;
-			reloadMap();
+			reloadMap(true);
 		};
 		tab.add(pathSpacingStepper);
 
@@ -1264,7 +1361,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			if (selectedPath == null || selectedPath.points.length < 1) return;
 			pushUndo();
 			selectedPath.points.pop();
-			reloadMap();
+			reloadMap(true);
 		}, 140));
 
 		tab.add(new PsychUIButton(x + 150, y, 'Limpiar puntos', function()
@@ -1272,7 +1369,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			if (selectedPath == null) return;
 			pushUndo();
 			selectedPath.points = [];
-			reloadMap();
+			reloadMap(true);
 		}, 130));
 
 		y += 36;
@@ -1282,7 +1379,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			pushUndo();
 			worldFile.paths.remove(selectedPath);
 			selectedPath = null;
-			reloadMap();
+			reloadMap(true);
 			updateUI();
 		}, 140));
 
@@ -1449,6 +1546,42 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		discardAskedAt = now;
 		showOutput('"$worldName" tiene cambios sin guardar.\nGuarda con CTRL+S, o repite $action para descartarlos', true);
 		return false;
+	}
+
+	/** Abre otro mundo en el editor (con historial nuevo). false si no se ha abierto. */
+	function openWorld(name:String, action:String):Bool
+	{
+		if (!confirmDiscard(action)) return false;
+
+		var loaded:OverworldFile = OverworldData.load(name);
+		if (loaded == null)
+		{
+			showOutput('No se pudo cargar "$name"', true);
+			return false;
+		}
+
+		OverworldData.clearWorldCache();
+		worldName = name;
+		loadedName = name;
+		worldFile = loaded;
+		selectedNode = null;
+		selectedSprite = null;
+		selectedPath = null;
+		resetHistory();
+		unsavedProgress = false;
+		reloadMap();
+		updateUI();
+		showOutput('Mundo "$name" cargado');
+		return true;
+	}
+
+	function refreshWorldLists()
+	{
+		worldList = OverworldData.listWorlds();
+		worldsDropDown.list = worldList;
+		worldsDropDown.selectedLabel = worldName;
+		nodeWorldDropDown.list = [''].concat(worldList);
+		if (selectedNode != null) nodeWorldDropDown.selectedLabel = selectedNode.world;
 	}
 
 	function uniqueWorldName(base:String):String
@@ -1725,12 +1858,54 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		var index:Int = row * paletteColumns + col;
 		if (index < 0 || index >= paletteFrames.length) return;
 
+		// CTRL+clic con un nodo elegido: ese tile pasa a ser su aspecto (SHIFT: al completarlo). El
+		// desplegable de animaciones solo ofrece prefijos, no "tile0002". Va con CTRL porque elegir
+		// un nodo abre su pestana, y un clic normal en la paleta tiene que seguir siendo "pintar".
+		if (FlxG.keys.pressed.CONTROL)
+		{
+			if (selectedNode == null) showOutput('CTRL+clic en la paleta pone el tile a un nodo: elige antes el nodo (V)', true);
+			else setNodeTile(selectedNode, paletteImage, paletteFrames[index], FlxG.keys.pressed.SHIFT);
+			return;
+		}
+
 		paletteSelected = index;
 		paletteCursor.visible = true;
 		paletteCursor.setPosition(col * paletteCell, row * paletteCell);
 
 		curMode = MODE_TILE;
 		showOutput('Tile ${paletteFrames[index]} (${index + 1}/${paletteFrames.length}) elegido. Clic en el mapa para pintar.');
+	}
+
+	/**
+	 * Pone un tile de la paleta como aspecto de un nodo. `asDone` lo pone como aspecto al
+	 * completarlo, que tiene que salir del mismo atlas que el normal (un nodo tiene una imagen).
+	 */
+	function setNodeTile(node:OverworldNodeFile, image:String, frame:String, asDone:Bool)
+	{
+		if (asDone && node.image != image)
+		{
+			showOutput('El aspecto de completado tiene que ser del mismo atlas que el normal.\nElige antes el normal (CTRL+clic sin SHIFT) en este tileset', true);
+			return;
+		}
+
+		pushUndo();
+		if (asDone) node.animDone = frame;
+		else
+		{
+			if (node.image != image) node.animDone = '';
+			node.image = image;
+			node.anim = frame;
+			node.fps = 0;
+
+			// los nodos nuevos salen con este aspecto
+			lastNodeImage = image;
+			lastNodeAnim = frame;
+			lastNodeFps = 0;
+		}
+		unsavedProgress = true;
+		reloadMap(true);
+		updateUI();
+		showOutput(asDone ? '"${node.id}": al completarlo se vera "$frame"' : '"${node.id}" usa el tile "$frame" (CTRL+SHIFT+clic en otro = su aspecto al completarlo)');
 	}
 
 	function paintTile(mouseX:Float, mouseY:Float)
@@ -1742,22 +1917,22 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		var py:Float = Math.floor(mouseY / size) * size;
 		var frame:String = paletteFrames[paletteSelected];
 
+		// solo se sustituye otro tile pintado en la misma casilla: un decorado puesto a mano
+		// (un castillo con B) no se borra por pintar encima
 		var existing:OverworldSpriteFile = null;
 		for (data in worldFile.sprites)
 		{
-			if (data.front == paintFront && data.x == px && data.y == py)
+			if (data.front == paintFront && data.x == px && data.y == py && isPaintedTile(data))
 			{
 				existing = data;
 				break;
 			}
 		}
 
-		var needsReload:Bool = false;
 		if (existing != null)
 		{
 			if (existing.image == paletteImage && existing.anim == frame) return; // ya esta pintado
-			worldFile.sprites.remove(existing);
-			needsReload = true;
+			removeDecor(existing);
 		}
 
 		var data:OverworldSpriteFile = OverworldData.createSprite(paletteImage, px, py);
@@ -1767,9 +1942,14 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		worldFile.sprites.push(data);
 		unsavedProgress = true;
 
-		if (needsReload || px + size > mapWidth || py + size > mapHeight) reloadMap();
-		else addDecorSprite(data);
+		// incremental: rehacer miles de tiles por cada celda pintada era injugable
+		addDecorSprite(data);
+		if (px + size > mapWidth || py + size > mapHeight) reloadMap(true); // el mapa crece
 	}
+
+	/** Un tile pintado desde la paleta: un fotograma concreto ("tile0042") y 0 FPS. */
+	static function isPaintedTile(data:OverworldSpriteFile):Bool
+		return data.fps == 0 && data.anim != null && ~/[0-9]$/.match(data.anim);
 
 	function addDecorSprite(data:OverworldSpriteFile):FlxSprite
 	{
@@ -1882,7 +2062,11 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			nodeWorldDropDown.selectedLabel = selectedNode.world;
 			nodeImageDropDown.selectedLabel = selectedNode.image;
 
+			// un tile concreto ("tile0002", elegido desde la paleta) no es un prefijo de animacion:
+			// se anade a la lista para que el desplegable lo muestre
 			var anims:Array<String> = [''].concat(OverworldData.listAnimations(selectedNode.image));
+			for (frame in [selectedNode.anim, selectedNode.animDone])
+				if (frame != null && frame.length > 0 && !anims.contains(frame)) anims.push(frame);
 			nodeAnimDropDown.list = anims;
 			nodeDoneDropDown.list = anims;
 			nodeAnimDropDown.selectedLabel = selectedNode.anim;
@@ -1893,6 +2077,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			nodeXStepper.value = selectedNode.x;
 			nodeYStepper.value = selectedNode.y;
 		}
+		updateNodeButtons();
 
 		if (selectedSprite != null)
 		{
@@ -1927,14 +2112,19 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 	{
 		var hadFocus:Bool = (PsychUIInputText.focusOn != null);
 
-		// un clic puede cambiar el mundo desde la UI: se guarda como estaba antes de procesarlo
-		var beforeClick:String = FlxG.mouse.justPressed ? snapshot() : null;
+		// Un clic en el panel (o con un desplegable abierto) puede cambiar el mundo desde la UI: se
+		// guarda como estaba antes de procesarlo. Solo entonces: con miles de tiles, copiar el mundo
+		// cuesta decenas de ms, y los clics en el mapa ya guardan su propio paso de deshacer.
+		var clickOnUI:Bool = FlxG.mouse.justPressed && (mouseOnUI() || PsychUIInputText.focusOn != null);
+		var beforeClick:String = clickOnUI ? snapshot() : null;
 		var worldBefore:OverworldFile = worldFile;
+		uiEventThisFrame = false;
 
 		super.update(elapsed);
 
-		// si el clic cambio de mundo (cargar / nuevo), su historial ya se reinicio: no se apila
-		if (beforeClick != null && worldFile == worldBefore) recordUIChange(beforeClick);
+		// si el clic cambio de mundo (cargar / nuevo), su historial ya se reinicio: no se apila.
+		// Sin ningun evento de la UI no pudo cambiar nada: se ahorra la segunda copia.
+		if (beforeClick != null && uiEventThisFrame && worldFile == worldBefore) recordUIChange(beforeClick);
 		trackFocusEdits();
 
 		// CTRL+Z / CTRL+Y tambien con un campo de texto activo (el campo no los usa): se sale del
@@ -2032,7 +2222,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 				if (!showUnlocks)
 				{
 					showUnlocks = true;
-					reloadMap();
+					reloadMap(true);
 				}
 				showOutput('ENLAZAR: clic en el nodo que desbloquea y luego en los que abre\n(L, V o ESC para salir del modo)');
 			}
@@ -2056,7 +2246,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		if (FlxG.keys.justPressed.U)
 		{
 			showUnlocks = !showUnlocks;
-			reloadMap();
+			reloadMap(true);
 			showOutput(showUnlocks ? 'Flechas de desbloqueo visibles' : 'Flechas de desbloqueo ocultas');
 		}
 
@@ -2157,7 +2347,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 					point[0] = newX;
 					point[1] = newY;
 					unsavedProgress = true;
-					reloadMap();
+					reloadMap(true);
 				}
 			}
 			else if (selectedNode != null)
@@ -2173,7 +2363,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 					nodeXStepper.value = newX;
 					nodeYStepper.value = newY;
 					unsavedProgress = true;
-					reloadMap();
+					reloadMap(true);
 				}
 			}
 			else if (selectedSprite != null)
@@ -2190,7 +2380,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 					decorXStepper.value = newX;
 					decorYStepper.value = newY;
 					unsavedProgress = true;
-					reloadMap();
+					moveDecorSprite(selectedSprite);
 				}
 			}
 			return;
@@ -2256,17 +2446,56 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		return best;
 	}
 
+	/**
+	 * Posicion de cada decorado dentro de su grupo (los de delante y los de detras van en grupos
+	 * distintos, en el mismo orden que en `worldFile.sprites`). Una sola pasada: con miles de
+	 * tiles, recontarlo por cada decorado eran millones de vueltas en cada clic.
+	 */
+	function decorLocalIndices():Array<Int>
+	{
+		var result:Array<Int> = [];
+		var front:Int = 0;
+		var back:Int = 0;
+		for (data in worldFile.sprites) result.push(data.front ? front++ : back++);
+		return result;
+	}
+
+	/** El sprite que dibuja un decorado, o null. */
+	function decorSpriteOf(data:OverworldSpriteFile):FlxSprite
+	{
+		var index:Int = worldFile.sprites.indexOf(data);
+		if (index < 0) return null;
+
+		var local:Int = decorLocalIndices()[index];
+		var group = data.front ? spritesFront : spritesBack;
+		return local < group.length ? group.members[local] : null;
+	}
+
+	/** Mueve solo el sprite de un decorado (no hace falta rehacer los demas). */
+	function moveDecorSprite(data:OverworldSpriteFile)
+	{
+		var spr:FlxSprite = decorSpriteOf(data);
+		if (spr == null)
+		{
+			reloadMap();
+			return;
+		}
+		spr.setPosition(data.x, data.y);
+
+		// si se sale del mapa, el fondo y la rejilla tienen que crecer
+		if (data.x + 64 > mapWidth || data.y + 64 > mapHeight) reloadMap(true);
+		updateSelectionBox();
+	}
+
 	function spriteUnderMouse(mouseX:Float, mouseY:Float):OverworldSpriteFile
 	{
+		var locals:Array<Int> = decorLocalIndices();
 		var index:Int = worldFile.sprites.length - 1;
 		while (index >= 0)
 		{
 			var data:OverworldSpriteFile = worldFile.sprites[index];
 			var group = data.front ? spritesFront : spritesBack;
-
-			var localIndex:Int = 0;
-			for (i in 0...index)
-				if (worldFile.sprites[i].front == data.front) localIndex++;
+			var localIndex:Int = locals[index];
 
 			if (localIndex < group.length)
 			{
@@ -2346,7 +2575,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		selectedSprite = null;
 		unsavedProgress = true;
 
-		reloadMap();
+		reloadMap(true);
 		UI_box.selectedName = 'Nodo';
 		updateUI();
 		showOutput('Nodo "${node.id}" creado');
@@ -2403,7 +2632,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 				selectedPath = existing;
 				pathStart = null;
 				UI_box.selectedName = 'Camino';
-				reloadMap();
+				reloadMap(true);
 				updateUI();
 				showOutput('Ese camino ya existia, lo he seleccionado');
 				return;
@@ -2417,7 +2646,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			unsavedProgress = true;
 
 			UI_box.selectedName = 'Camino';
-			reloadMap();
+			reloadMap(true);
 			updateUI();
 			showOutput('Camino creado: ${pth.a} <-> ${pth.b}');
 			return;
@@ -2429,7 +2658,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			pushUndo();
 			selectedPath.points.push([snap(mouseX), snap(mouseY)]);
 			unsavedProgress = true;
-			reloadMap();
+			reloadMap(true);
 			updateUI();
 			return;
 		}
@@ -2509,7 +2738,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		dragOffsetY = pth.points[index][1] - mouseY;
 
 		UI_box.selectedName = 'Camino';
-		reloadMap();
+		reloadMap(true);
 		updateUI();
 		showOutput('Punto ${index + 1} de ${pth.a} <-> ${pth.b}: arrastra para moverlo, clic derecho para borrarlo');
 		return true;
@@ -2527,7 +2756,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		pth.points.splice(index, 1);
 		selectedPath = pth;
 		unsavedProgress = true;
-		reloadMap();
+		reloadMap(true);
 		updateUI();
 		showOutput('Punto borrado de ${pth.a} <-> ${pth.b}');
 		return true;
@@ -2598,7 +2827,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		}
 
 		unsavedProgress = true;
-		reloadMap();
+		reloadMap(true);
 		updateUI();
 		showOutput(message);
 	}
@@ -2615,7 +2844,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		if (problemsTimer < PROBLEM_DELAY) return;
 
 		problemsDirty = false;
-		OverworldData.clearWarpCache(); // el otro extremo de un warp puede haberse guardado ahora
+		// los otros mundos salen de la cache (se vacia al guardar y al abrir un mundo): releerlos
+		// todos de disco en cada comprobacion se notaba con mapas pintados
 		problems = OverworldData.checkWorldProblems(worldFile, worldName);
 		problemCursor = -1;
 		buildProblemMarkers();
@@ -2676,6 +2906,431 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		showOutput('AVISO ${problemCursor + 1}/${problems.length}: ${problem.text}', true);
 	}
 
+	// ------------------------------------------------------- unir mundos (bloque B)
+	var nodeLinkButton:PsychUIButton;
+	var nodeGotoButton:PsychUIButton;
+
+	/**
+	 * El mundo al que lleva un nodo: su destino, o para una salida sin destino, el mapa del que
+	 * se entra a este (su padre). null si no lleva a ninguno.
+	 */
+	function nodeDestination(node:OverworldNodeFile):String
+	{
+		if (node == null) return null;
+		var target:String = (node.world != null && node.world.length > 0) ? node.world : null;
+		return switch (node.type)
+		{
+			case 'world' | 'warp': target;
+			case 'exit':
+				if (target != null) target;
+				else
+				{
+					var parent:Array<String> = OverworldData.findParentWorld(worldName);
+					parent != null ? parent[0] : null;
+				}
+			default: null;
+		}
+	}
+
+	/** En el mundo `dest`, el nodo por el que se vuelve aqui desde `node` (su pareja). */
+	function returnNodeIn(dest:OverworldFile, node:OverworldNodeFile):OverworldNodeFile
+	{
+		for (other in dest.nodes)
+		{
+			switch (node.type)
+			{
+				case 'world': // dentro del submundo, su salida sin destino
+					if (other.type == 'exit' && (other.world == null || other.world.length < 1)) return other;
+				case 'exit':
+					if (node.world == null || node.world.length < 1)
+					{
+						if (other.type == 'world' && other.world == worldName) return other; // el castillo de fuera
+					}
+					else if (other.type == 'exit' && other.world == worldName) return other;
+				case 'warp':
+					if (other.type == 'warp' && other.world == worldName) return other;
+			}
+		}
+		return null;
+	}
+
+	/** Que botones de "unir mundos" tienen sentido para el nodo elegido, y con que texto. */
+	function updateNodeButtons()
+	{
+		if (nodeLinkButton == null) return;
+
+		var node:OverworldNodeFile = selectedNode;
+		var action:String = null;
+		if (node != null)
+		{
+			var target:String = (node.world != null && node.world.length > 0) ? node.world : null;
+			if (node.type == 'world' && target == null) action = 'Crear submundo';
+			else if ((node.type == 'exit' || node.type == 'warp') && target != null)
+			{
+				var dest:OverworldFile = OverworldData.load(target);
+				if (dest != null && returnNodeIn(dest, node) == null) action = 'Crear pareja';
+			}
+		}
+		nodeLinkButton.visible = nodeLinkButton.active = action != null;
+		if (action != null) nodeLinkButton.label = action;
+
+		var destination:String = nodeDestination(node);
+		nodeGotoButton.visible = nodeGotoButton.active = destination != null && OverworldData.exists(destination);
+	}
+
+	function linkNodeWorld()
+	{
+		if (selectedNode == null) return;
+		if (selectedNode.type == 'world') createSubWorld();
+		else createPartner();
+	}
+
+	/**
+	 * Unir mundos escribe en dos archivos, y el otro necesita ver este en disco (una salida sin
+	 * destino busca a su padre; un warp, a su pareja): por eso este mundo se guarda a la vez.
+	 */
+	function canWriteLinkedWorlds():Bool
+	{
+		if (worldName == null || worldName.trim().length < 1)
+		{
+			showOutput('Ponle antes un nombre de archivo a este mundo (pestana Mundo)', true);
+			return false;
+		}
+		// el guardado de este mundo se frenaria por sobrescribir otro: que se resuelva antes
+		if (worldName != loadedName && OverworldData.exists(worldName))
+		{
+			showOutput('Ya existe otro mundo "$worldName". Guarda antes este (CTRL+S) o cambiale el nombre', true);
+			return false;
+		}
+		return true;
+	}
+
+	/** Un mundo nuevo con los ajustes de este y un primer nivel con el aspecto de sus niveles. */
+	function buildStarterWorld(display:String):OverworldFile
+	{
+		var file:OverworldFile = OverworldData.createEmpty();
+		file.displayName = display;
+		file.bg = worldFile.bg;
+		file.bgAnim = worldFile.bgAnim;
+		file.bgFps = worldFile.bgFps;
+		file.bgTile = worldFile.bgTile;
+		file.music = worldFile.music;
+		file.zoom = worldFile.zoom;
+		file.gridSize = worldFile.gridSize;
+		file.player = worldFile.player;
+		file.walkSpeed = worldFile.walkSpeed;
+
+		var first:OverworldNodeFile = file.nodes[0];
+		first.id = 'n0';
+		first.name = 'Nivel 1';
+		first.x = 128;
+		first.y = 128;
+		var style:OverworldNodeFile = Lambda.find(worldFile.nodes, n -> n.type == 'level');
+		if (style != null)
+		{
+			first.image = style.image;
+			first.anim = style.anim;
+			first.animDone = style.animDone;
+			first.fps = style.fps;
+			first.week = style.week;
+			first.song = style.song;
+		}
+		file.startNode = first.id;
+		return file;
+	}
+
+	/** Un punto fuera de lo que se ve en el juego, a la izquierda de `from` y a su altura. */
+	function offscreenLeftOf(file:OverworldFile, from:OverworldNodeFile):Array<Float>
+	{
+		var size:Array<Float> = OverworldState.mapSize(file);
+		var area:Array<Float> = OverworldState.cameraArea(size[0], size[1], file.zoom);
+		var grid:Int = file.gridSize > 1 ? file.gridSize : 16;
+		return [Math.floor((area[0] - 24) / grid) * grid, from.y];
+	}
+
+	/** Un hueco libre junto a `from` (abajo, a la derecha, arriba o a la izquierda). */
+	function freeSpotNear(file:OverworldFile, from:OverworldNodeFile):Array<Float>
+	{
+		var grid:Int = file.gridSize > 1 ? file.gridSize : 16;
+		var step:Float = grid * 3;
+		for (offset in [[0, step], [step, 0], [0, -step], [-step, 0], [step, step], [-step, step]])
+		{
+			var x:Float = from.x + offset[0];
+			var y:Float = from.y + offset[1];
+			if (!Lambda.exists(file.nodes, n -> Math.abs(n.x - x) < grid && Math.abs(n.y - y) < grid)) return [x, y];
+		}
+		return [from.x, from.y + step * 2];
+	}
+
+	/** "Crear submundo": mundo nuevo con un nivel y su salida invisible fuera de la pantalla. */
+	function createSubWorld()
+	{
+		var node:OverworldNodeFile = selectedNode;
+		if (node == null || node.type != 'world' || !canWriteLinkedWorlds()) return;
+
+		var subName:String = uniqueWorldName(OverworldData.toWorldFileName(worldName + '_' + node.id));
+		var sub:OverworldFile = buildStarterWorld(node.name != null && node.name.length > 0 ? node.name : subName);
+		var first:OverworldNodeFile = sub.nodes[0];
+
+		// la salida: sin destino vuelve al mapa de fuera, encima de este nodo
+		var spot:Array<Float> = offscreenLeftOf(sub, first);
+		var exit:OverworldNodeFile = OverworldData.createNode('salida', spot[0], spot[1]);
+		exit.type = 'exit';
+		exit.image = '';
+		exit.anim = '';
+		exit.name = 'Salida';
+		exit.song = '';
+		exit.week = '';
+		exit.unlocked = true;
+		sub.nodes.push(exit);
+		sub.paths.push(OverworldData.createPath(first.id, exit.id));
+
+		if (OverworldData.saveWorldFiles(subName, sub).length < 1)
+		{
+			showOutput('No se pudo crear el archivo de "$subName"', true);
+			return;
+		}
+
+		pushUndo();
+		node.world = subName;
+		reloadMap(true);
+		updateUI();
+		if (!saveWorld()) return; // su mensaje explica por que
+		showOutput('Submundo "$subName" creado con un nivel y su salida (se ha guardado "$worldName").\n"Ir al destino" para editarlo');
+	}
+
+	/** "Crear pareja": la salida o el warp de vuelta en el mundo destino, unido a su nodo inicial. */
+	function createPartner()
+	{
+		var node:OverworldNodeFile = selectedNode;
+		if (node == null || (node.type != 'exit' && node.type != 'warp') || !canWriteLinkedWorlds()) return;
+		if (node.world == null || node.world.length < 1) return;
+
+		var destName:String = node.world;
+		var dest:OverworldFile = OverworldData.load(destName);
+		if (dest == null)
+		{
+			showOutput('No se pudo cargar "$destName"', true);
+			return;
+		}
+		if (returnNodeIn(dest, node) != null)
+		{
+			showOutput('"$destName" ya tiene la pareja de este nodo');
+			return;
+		}
+
+		var start:OverworldNodeFile = OverworldData.findNode(dest, dest.startNode);
+		if (start == null && dest.nodes.length > 0) start = dest.nodes[0];
+		if (start == null)
+		{
+			showOutput('"$destName" no tiene nodos donde enganchar la pareja', true);
+			return;
+		}
+
+		var partner:OverworldNodeFile = OverworldData.createNode(OverworldData.uniqueNodeId(dest, 'vuelta'), 0, 0);
+		partner.type = node.type;
+		partner.world = worldName;
+		partner.name = 'Hacia ' + worldFile.displayName;
+		partner.song = '';
+		partner.week = '';
+
+		var spot:Array<Float>;
+		if (node.type == 'warp')
+		{
+			// tuberia visible junto al nodo inicial; se abre sola cuando este warp esta abierto
+			partner.image = node.image;
+			partner.anim = node.anim;
+			partner.animDone = '';
+			partner.fps = node.fps;
+			partner.unlocked = false;
+			spot = freeSpotNear(dest, start);
+		}
+		else
+		{
+			// salida invisible fuera de la pantalla: abierta, o BF no podria entrar andando por ella
+			partner.image = '';
+			partner.anim = '';
+			partner.unlocked = true;
+			spot = offscreenLeftOf(dest, start);
+		}
+		partner.x = spot[0];
+		partner.y = spot[1];
+		dest.nodes.push(partner);
+		dest.paths.push(OverworldData.createPath(start.id, partner.id));
+
+		if (!saveWorld()) return; // su mensaje explica por que
+		if (OverworldData.saveWorldFiles(destName, dest).length < 1)
+		{
+			showOutput('No se pudo guardar "$destName"', true);
+			return;
+		}
+		updateUI();
+		showOutput('Pareja "${partner.id}" creada en "$destName" junto a "${start.id}" (se ha guardado "$worldName").\n"Ir al destino" para colocarla donde quieras');
+	}
+
+	/** "Ir al destino": abre el otro mundo y selecciona el nodo por el que se vuelve aqui. */
+	function gotoDestination()
+	{
+		var node:OverworldNodeFile = selectedNode;
+		var destination:String = nodeDestination(node);
+		if (destination == null) return;
+
+		var from:String = worldName;
+		var probe:OverworldNodeFile = Reflect.copy(node);
+		if (!openWorld(destination, '"Ir al destino"')) return;
+
+		// returnNodeIn compara con el mundo abierto: aqui hay que buscar el que apunta a `from`
+		var back:OverworldNodeFile = null;
+		for (other in worldFile.nodes)
+		{
+			var points:Bool = switch (probe.type)
+			{
+				case 'world': other.type == 'exit' && (other.world == null || other.world.length < 1);
+				case 'warp': other.type == 'warp' && other.world == from;
+				case 'exit': (probe.world == null || probe.world.length < 1) ? (other.type == 'world' && other.world == from)
+					: (other.type == 'exit' && other.world == from);
+				default: false;
+			}
+			if (points)
+			{
+				back = other;
+				break;
+			}
+		}
+
+		if (back != null)
+		{
+			selectedNode = back;
+			UI_box.selectedName = 'Nodo';
+			updateUI();
+			updateSelectionBox();
+			camGame.scroll.set(back.x - camGame.width * 0.5, back.y - camGame.height * 0.5);
+			showOutput('Mundo "$destination" cargado: "${back.id}" lleva de vuelta a "$from"');
+		}
+	}
+
+	#if debug // autoprueba de "unir mundos" (-selftest): crea mundos zz_*, los comprueba y los borra
+	function runSelfTest()
+	{
+		var fails:Int = 0;
+		function check(ok:Bool, what:String)
+		{
+			trace((ok ? 'SELFTEST OK   ' : 'SELFTEST FAIL ') + what);
+			if (!ok) fails++;
+		}
+		function nodeIn(file:OverworldFile, id:String) return file == null ? null : OverworldData.findNode(file, id);
+
+		// otro mundo sencillo en disco, destino de una salida y un warp
+		var other:OverworldFile = OverworldData.createEmpty();
+		other.nodes[0].id = 'o0';
+		other.startNode = 'o0';
+		OverworldData.saveWorldFiles('zz_other', other);
+
+		// mundo de prueba: un nodo world sin destino, una salida y un warp hacia zz_other
+		worldName = 'zz_self';
+		loadedName = null;
+		worldFile = OverworldData.createEmpty();
+		worldFile.nodes[0].id = 'n0';
+		worldFile.startNode = 'n0';
+		var w:OverworldNodeFile = OverworldData.createNode('w', 160, 128);
+		w.type = 'world';
+		var e:OverworldNodeFile = OverworldData.createNode('e', 128, 192);
+		e.type = 'exit';
+		e.world = 'zz_other';
+		var p:OverworldNodeFile = OverworldData.createNode('p', 96, 128);
+		p.type = 'warp';
+		p.world = 'zz_other';
+		p.image = 'overworld/pipe';
+		p.anim = 'idle';
+		p.unlocked = false;
+		worldFile.nodes[0].unlocks = ['p'];
+		for (n in [w, e, p]) worldFile.nodes.push(n);
+		for (n in ['w', 'e', 'p']) worldFile.paths.push(OverworldData.createPath('n0', n));
+		check(saveWorld(), 'guardar zz_self');
+		reloadMap();
+
+		// 1. crear submundo
+		selectedNode = OverworldData.findNode(worldFile, 'w');
+		updateUI();
+		check(nodeLinkButton.visible && nodeLinkButton.label == 'Crear submundo', 'boton "Crear submundo" visible en un world sin destino');
+		createSubWorld();
+		var subName:String = selectedNode.world;
+		var sub:OverworldFile = OverworldData.load(subName);
+		check(subName == 'zz_self_w' && sub != null, 'submundo creado en disco: $subName');
+		var salida:OverworldNodeFile = nodeIn(sub, 'salida');
+		check(salida != null && salida.type == 'exit' && salida.world == '' && salida.unlocked, 'el submundo tiene su salida sin destino, abierta');
+		check(salida != null && OverworldData.findNode(sub, sub.startNode) != null && sub.paths.length == 1, 'la salida esta unida al nivel inicial');
+		var area:Array<Float> = OverworldState.cameraArea(OverworldState.mapSize(sub)[0], OverworldState.mapSize(sub)[1], sub.zoom);
+		check(salida != null && salida.x < area[0], 'la salida queda fuera de la pantalla (x=${salida.x}, vista desde ${area[0]})');
+		check(OverworldData.checkWorld(sub, subName).length == 0, 'el submundo no da avisos: ' + OverworldData.checkWorld(sub, subName).join(' | '));
+		check(OverworldData.findParentWorld(subName) != null && OverworldData.findParentWorld(subName)[0] == 'zz_self', 'el submundo encuentra a su padre en disco');
+		updateUI();
+		check(!nodeLinkButton.visible && nodeGotoButton.visible, 'con submundo: sin "Crear", con "Ir al destino"');
+
+		// 2. crear pareja de la salida
+		selectedNode = OverworldData.findNode(worldFile, 'e');
+		updateUI();
+		check(nodeLinkButton.visible && nodeLinkButton.label == 'Crear pareja', 'boton "Crear pareja" en una salida con destino');
+		createPartner();
+		var otherNow:OverworldFile = OverworldData.load('zz_other');
+		var backExit:OverworldNodeFile = otherNow == null ? null : Lambda.find(otherNow.nodes, n -> n.type == 'exit' && n.world == 'zz_self');
+		check(backExit != null && backExit.unlocked, 'zz_other tiene la salida de vuelta, abierta');
+		check(backExit != null && Lambda.exists(otherNow.paths, pth -> pth.a == 'o0' && pth.b == backExit.id), 'la salida de vuelta esta unida al nodo inicial');
+
+		// 3. crear pareja del warp
+		selectedNode = OverworldData.findNode(worldFile, 'p');
+		updateUI();
+		createPartner();
+		otherNow = OverworldData.load('zz_other');
+		var backWarp:OverworldNodeFile = otherNow == null ? null : Lambda.find(otherNow.nodes, n -> n.type == 'warp' && n.world == 'zz_self');
+		check(backWarp != null && !backWarp.unlocked && backWarp.image == 'overworld/pipe', 'zz_other tiene la tuberia de vuelta (bloqueada, abre por pareja)');
+		check(backWarp != null && Math.abs(backWarp.x - 128) + Math.abs(backWarp.y - 128) > 1, 'la tuberia no cae encima del nodo inicial');
+		OverworldData.clearWorldCache();
+		check(OverworldData.checkWorld(OverworldData.load('zz_other'), 'zz_other').length == 0, 'zz_other no da avisos: ' + OverworldData.checkWorld(OverworldData.load('zz_other'), 'zz_other').join(' | '));
+		check(OverworldData.checkWorld(worldFile, worldName).length == 0, 'zz_self no da avisos: ' + OverworldData.checkWorld(worldFile, worldName).join(' | '));
+		updateUI();
+		check(!nodeLinkButton.visible, 'con pareja ya creada no se ofrece crearla otra vez');
+
+		// 4. etiquetas con destino
+		check(nodeLabel(OverworldData.findNode(worldFile, 'w')) == 'w\n> zz_self_w', 'etiqueta del castillo con su destino');
+
+		// 5. ir al destino y volver
+		selectedNode = OverworldData.findNode(worldFile, 'w');
+		gotoDestination();
+		check(worldName == 'zz_self_w' && selectedNode != null && selectedNode.id == 'salida', 'ir al submundo selecciona su salida');
+		gotoDestination();
+		check(worldName == 'zz_self' && selectedNode != null && selectedNode.id == 'w', 'desde la salida se vuelve al castillo');
+		selectedNode = OverworldData.findNode(worldFile, 'p');
+		gotoDestination();
+		check(worldName == 'zz_other' && selectedNode != null && selectedNode.type == 'warp', 'ir por el warp selecciona su pareja');
+
+		// 6. aspecto de un nodo desde la paleta (CTRL+clic / CTRL+SHIFT+clic)
+		var tiled:OverworldNodeFile = worldFile.nodes[0];
+		selectedNode = tiled;
+		setNodeTile(tiled, 'overworld/og_mario/level_tiles', 'tile0002', false);
+		check(tiled.image == 'overworld/og_mario/level_tiles' && tiled.anim == 'tile0002' && tiled.fps == 0, 'tile concreto como aspecto del nodo');
+		setNodeTile(tiled, 'overworld/og_mario/overworld_tiles', 'tile0003', true);
+		check(tiled.animDone == '', 'el aspecto de completado de otro tileset se rechaza');
+		setNodeTile(tiled, 'overworld/og_mario/level_tiles', 'tile0003', true);
+		check(tiled.animDone == 'tile0003', 'aspecto de completado del mismo tileset');
+		updateUI();
+		check(nodeAnimDropDown.list.contains('tile0002') && nodeDoneDropDown.list.contains('tile0003'), 'los desplegables muestran los tiles concretos');
+		undo();
+		check(worldFile.nodes[0].animDone == '', 'CTRL+Z deshace el aspecto de completado');
+
+		// 7. guardar con el nombre de otro mundo existente pide confirmacion
+		worldName = 'zz_self';
+		unsavedProgress = false;
+		check(!saveWorld(), 'guardar zz_other como "zz_self" (que existe) se frena la primera vez');
+
+		// limpieza: build y repo
+		for (name in ['zz_self', 'zz_self_w', 'zz_other'])
+			for (folder in [Paths.getSharedPath('overworlds/'), '../../../../assets/shared/overworlds/'])
+				if (FileSystem.exists('$folder$name.json')) FileSystem.deleteFile('$folder$name.json');
+		trace('SELFTEST FIN: ' + (fails == 0 ? 'todo correcto' : '$fails fallos'));
+	}
+	#end
+
 	function findPath(a:String, b:String):OverworldPathFile
 	{
 		for (pth in worldFile.paths)
@@ -2707,7 +3362,14 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 		pushUndo();
 		var id:String = selectedNode.id;
+
+		// un camino o un enlace a medias desde este nodo se quedaria apuntando a un nodo borrado
+		if (pathStart == selectedNode) pathStart = null;
+		if (linkStart == selectedNode) linkStart = null;
 		worldFile.nodes.remove(selectedNode);
+
+		// su progreso se olvida: otro nodo que reciba este ID no debe heredarlo
+		OverworldData.setCompleted(worldName, id, false);
 
 		var index:Int = worldFile.paths.length - 1;
 		while (index >= 0)
@@ -2731,7 +3393,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		selectedPath = null;
 		unsavedProgress = true;
 
-		reloadMap();
+		reloadMap(true);
 		updateUI();
 		showOutput('Nodo "$id" borrado');
 	}
@@ -2741,67 +3403,66 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		if (selectedSprite == null) return;
 
 		pushUndo();
-		worldFile.sprites.remove(selectedSprite);
+		removeDecor(selectedSprite);
 		selectedSprite = null;
 		unsavedProgress = true;
-
-		reloadMap();
 		updateUI();
 	}
 
-	// ------------------------------------------------------------------ guardar
-	function assetsFolder():String
-		return Paths.getSharedPath('${OverworldData.FOLDER}/');
-
-	/** Si el juego corre desde export/.../bin, devuelve la carpeta equivalente del repo. */
-	function repoFolder():String
+	/**
+	 * Quita un decorado y solo su sprite: es la goma del modo tiles, y rehacer miles de tiles
+	 * por cada uno borrado costaba casi un segundo.
+	 */
+	function removeDecor(data:OverworldSpriteFile)
 	{
-		#if sys
-		var root:String = '../../../../';
-		if (FileSystem.exists('${root}Project.xml')) return '${root}assets/shared/${OverworldData.FOLDER}/';
-		#end
-		return null;
+		var spr:FlxSprite = decorSpriteOf(data);
+		worldFile.sprites.remove(data);
+		if (spr == null)
+		{
+			reloadMap();
+			return;
+		}
+
+		(data.front ? spritesFront : spritesBack).remove(spr, true);
+		spr.destroy();
+		updateSelectionBox();
 	}
 
-	function saveWorld()
+	// ------------------------------------------------------------------ guardar
+	var overwriteAskedAt:Float = -999;
+
+	/** Guarda en la build y en el repo. false si no se ha guardado. */
+	function saveWorld():Bool
 	{
 		if (worldName == null || worldName.trim().length < 1)
 		{
 			showOutput('Ponle un nombre de archivo al mundo', true);
-			return;
+			return false;
 		}
 
-		var data:String = OverworldData.stringify(worldFile);
-		var saved:Array<String> = [];
-
-		#if sys
-		for (folder in [assetsFolder(), repoFolder()])
+		// otro nombre que ya existe en disco: se sobrescribiria otro mundo sin querer
+		if (worldName != loadedName && OverworldData.exists(worldName))
 		{
-			if (folder == null) continue;
-
-			try
+			var now:Float = haxe.Timer.stamp();
+			if (now - overwriteAskedAt > 5)
 			{
-				if (!FileSystem.exists(folder)) FileSystem.createDirectory(folder);
-				File.saveContent('$folder$worldName.json', data);
-				saved.push('$folder$worldName.json');
+				overwriteAskedAt = now;
+				showOutput('Ya existe un mundo "$worldName" y lo sobrescribirias.\nCambia el nombre de archivo, o guarda otra vez para sobrescribirlo', true);
+				return false;
 			}
-			catch (e:Dynamic)
-			{
-				trace('OverworldEditor: no se pudo guardar en $folder -> $e');
-			}
+			overwriteAskedAt = -999;
 		}
-		#end
 
+		var saved:Array<String> = OverworldData.saveWorldFiles(worldName, worldFile);
 		if (saved.length < 1)
 		{
 			showOutput('No se pudo guardar, prueba con "Guardar como..."', true);
-			return;
+			return false;
 		}
 
+		loadedName = worldName;
 		unsavedProgress = false;
-		worldList = OverworldData.listWorlds();
-		worldsDropDown.list = worldList;
-		nodeWorldDropDown.list = [''].concat(worldList);
+		refreshWorldLists();
 
 		var problems:Array<String> = checkWorld();
 		if (problems.length > 0)
@@ -2813,6 +3474,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 '), true);
 		}
 		else showOutput('Guardado en: ' + saved.join('  +  '));
+		return true;
 	}
 
 	function saveWorldAs()
@@ -2828,11 +3490,13 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 	function testWorld()
 	{
-		saveWorld();
+		// sin guardar se probaria la version vieja del archivo (o la de otro mundo)
+		if (!saveWorld()) return;
 
 		OverworldState.reset();
 		OverworldState.curWorld = worldName;
 		OverworldState.returnToEditor = true;
+		OverworldState.editorWorld = worldName;
 		MusicBeatState.switchState(new OverworldState(worldName));
 	}
 
@@ -2847,8 +3511,12 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		outputTimer = new FlxTimer().start(5, function(_:FlxTimer) if (outputTxt != null) outputTxt.text = '');
 	}
 
+	/** Algun control de la UI ha lanzado un evento en este fotograma (ver update). */
+	var uiEventThisFrame:Bool = false;
+
 	public function UIEvent(id:String, sender:Dynamic)
 	{
+		uiEventThisFrame = true;
 		switch (id)
 		{
 			case PsychUIInputText.CHANGE_EVENT, PsychUINumericStepper.CHANGE_EVENT, PsychUICheckBox.CLICK_EVENT, PsychUIDropDownMenu.CLICK_EVENT:

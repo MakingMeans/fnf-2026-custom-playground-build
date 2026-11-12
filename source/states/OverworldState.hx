@@ -28,6 +28,9 @@ class OverworldState extends MusicBeatState
 	/** true cuando se entra desde el editor: BACK devuelve al editor en vez de al menu. */
 	public static var returnToEditor:Bool = false;
 
+	/** El mundo que estaba abierto en el editor al pulsar CTRL+T: BACK vuelve a el. */
+	public static var editorWorld:String = null;
+
 	static var worldStack:Array<Array<String>> = [];
 	static var lastMusic:String = null;
 
@@ -103,6 +106,7 @@ class OverworldState extends MusicBeatState
 		pendingReveal = null;
 		arrivingFrom = null;
 		arrivingByWarp = null;
+		editorWorld = null;
 		worldStack = [];
 	}
 
@@ -170,7 +174,13 @@ class OverworldState extends MusicBeatState
 	{
 		fromOverworld = false;
 
-		OverworldData.clearWarpCache(); // las parejas de warp se leen de nuevo en cada mapa
+		OverworldData.clearWorldCache(); // las parejas de warp se leen de nuevo en cada mapa
+
+		// la pila nunca puede contener el mapa actual (p. ej. una partida guardada con una pila
+		// corrupta de versiones anteriores): se recorta desde donde aparezca
+		var self:Int = stackIndexOf(curWorld);
+		if (self > -1) worldStack = worldStack.slice(0, self);
+
 		worldFile = OverworldData.load(curWorld);
 		if (worldFile == null)
 		{
@@ -502,6 +512,14 @@ class OverworldState extends MusicBeatState
 			result.push(pendingReveal[1]);
 		pendingReveal = null;
 		return result;
+	}
+
+	/** Posicion de un mundo en la pila de submundos, o -1 si no esta. */
+	static function stackIndexOf(world:String):Int
+	{
+		for (i in 0...worldStack.length)
+			if (worldStack[i][0] == world) return i;
+		return -1;
 	}
 
 	/** Los mundos por encima del actual en la pila: un nodo que lleve a ellos es una salida. */
@@ -925,8 +943,9 @@ class OverworldState extends MusicBeatState
 	{
 		if (returnToEditor)
 		{
-			// el editor tenia abierto el mundo de la base de la pila, no el submundo actual
-			var edited:String = worldStack.length > 0 ? worldStack[0][0] : curWorld;
+			// vuelve al mundo que se estaba editando, aunque se haya pasado a otro por el camino
+			var edited:String = editorWorld != null ? editorWorld : (worldStack.length > 0 ? worldStack[0][0] : curWorld);
+			editorWorld = null;
 			returnToEditor = false;
 			worldStack = [];
 			MusicBeatState.switchState(new states.editors.OverworldEditorState(edited));
@@ -956,6 +975,11 @@ class OverworldState extends MusicBeatState
 			}
 
 			arrivingFrom = curWorld;
+
+			// de lado hacia un mapa de mas arriba en la cadena: lo de debajo de el ya no vale
+			var ancestor:Int = stackIndexOf(exit.world);
+			if (ancestor > -1) worldStack = worldStack.slice(0, ancestor);
+
 			curWorld = exit.world;
 			curNodeId = null;
 			MusicBeatState.switchState(new OverworldState());
@@ -1233,9 +1257,22 @@ class OverworldState extends MusicBeatState
 
 				busy = true;
 				FlxG.sound.play(Paths.sound('confirmMenu'));
-				worldStack.push([curWorld, curNodeId]);
+
+				// Si el destino ya esta en la cadena (un nodo que vuelve a un mapa de mas arriba),
+				// se vuelve a el recortando la pila: apilarlo otra vez la corrompia (el castillo
+				// dejaba de superarse y R dejaba de reiniciar).
+				var ancestor:Int = stackIndexOf(node.world);
+				if (ancestor > -1)
+				{
+					curNodeId = worldStack[ancestor][1];
+					worldStack = worldStack.slice(0, ancestor);
+				}
+				else
+				{
+					worldStack.push([curWorld, curNodeId]);
+					curNodeId = null;
+				}
 				curWorld = node.world;
-				curNodeId = null;
 				MusicBeatState.switchState(new OverworldState());
 
 			case 'level':
@@ -1280,6 +1317,9 @@ class OverworldState extends MusicBeatState
 			arrivingByWarp = from;
 			curWorld = target;
 			curNodeId = null;
+			// un warp es un salto global (p. ej. al mundo central): la pila de submundos de donde
+			// se venia ya no vale. Las salidas sin pila encuentran su mapa de fuera solas.
+			worldStack = [];
 			MusicBeatState.switchState(new OverworldState());
 		});
 	}

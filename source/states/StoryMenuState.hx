@@ -45,6 +45,8 @@ class StoryMenuState extends MusicBeatState
 
 	override function create()
 	{
+		OverworldState.fromOverworld = false; // las semanas del modo historia no son del overworld
+
 		Paths.clearStoredMemory();
 		Paths.clearUnusedMemory();
 

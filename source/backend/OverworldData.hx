@@ -132,6 +132,46 @@ class OverworldData
 	public static function stringify(file:OverworldFile):String
 		return PsychJsonPrinter.print(file, ['nodes', 'sprites', 'paths', 'points', 'unlocks']);
 
+	/**
+	 * Guarda un mundo en la build (lo que lee el juego) y, si el juego corre desde
+	 * export/.../bin, tambien en el repo (lo que se commitea). Devuelve las rutas escritas.
+	 */
+	public static function saveWorldFiles(name:String, file:OverworldFile):Array<String>
+	{
+		var saved:Array<String> = [];
+		#if sys
+		var data:String = stringify(file);
+		var folders:Array<String> = [Paths.getSharedPath('$FOLDER/')];
+		if (FileSystem.exists('../../../../Project.xml')) folders.push('../../../../assets/shared/$FOLDER/');
+
+		for (folder in folders)
+		{
+			try
+			{
+				if (!FileSystem.exists(folder)) FileSystem.createDirectory(folder);
+				File.saveContent('$folder$name.json', data);
+				saved.push('$folder$name.json');
+			}
+			catch (e:Dynamic)
+			{
+				trace('OverworldData: no se pudo guardar en $folder -> $e');
+			}
+		}
+		#end
+		clearWorldCache(); // las parejas de warp se leen de disco: que vean lo recien guardado
+		return saved;
+	}
+
+	/** Nombre de archivo valido para un mundo: minusculas, cifras y guiones bajos. */
+	public static function toWorldFileName(text:String):String
+	{
+		var clean:String = ~/[^a-z0-9_]+/g.replace(text.toLowerCase(), '_');
+		clean = ~/_+/g.replace(clean, '_');
+		while (clean.startsWith('_')) clean = clean.substr(1);
+		while (clean.endsWith('_')) clean = clean.substr(0, clean.length - 1);
+		return clean.length > 0 ? clean : 'mundo';
+	}
+
 	public static function createEmpty():OverworldFile
 	{
 		var file:OverworldFile = {
@@ -205,7 +245,11 @@ class OverworldData
 		};
 	}
 
-	public static function applyDefaults(file:OverworldFile)
+	/**
+	 * Rellena los campos que falten con sus valores por defecto. `includeSprites` a false se salta
+	 * los decorados: con miles de tiles pintados es lo caro, y no cambian al editar el grafo.
+	 */
+	public static function applyDefaults(file:OverworldFile, ?includeSprites:Bool = true)
 	{
 		if (file == null) return;
 
@@ -228,11 +272,14 @@ class OverworldData
 			if (node.unlocks == null) node.unlocks = [];
 		}
 
-		var spriteBase:OverworldSpriteFile = createSprite('', 0, 0);
-		for (spr in file.sprites)
-			for (field in Reflect.fields(spriteBase))
-				if (Reflect.field(spr, field) == null)
-					Reflect.setField(spr, field, Reflect.field(spriteBase, field));
+		if (includeSprites)
+		{
+			var spriteBase:OverworldSpriteFile = createSprite('', 0, 0);
+			for (spr in file.sprites)
+				for (field in Reflect.fields(spriteBase))
+					if (Reflect.field(spr, field) == null)
+						Reflect.setField(spr, field, Reflect.field(spriteBase, field));
+		}
 
 		var pathBase:OverworldPathFile = createPath('', '');
 		for (pth in file.paths)
@@ -317,7 +364,7 @@ class OverworldData
 		for (other in file.nodes)
 		{
 			if (ignoreCompleted != null && ignoreCompleted.contains(other.id)) continue;
-			if (other.unlocks != null && other.unlocks.contains(node.id) && isCompleted(world, other.id))
+			if (other.unlocks != null && other.unlocks.contains(node.id) && isNodeCompleted(world, other))
 				return true;
 		}
 
@@ -328,17 +375,35 @@ class OverworldData
 		return false;
 	}
 
-	// ------------------------------------------------------------- warps (tuberias)
-	static var warpCache:Map<String, OverworldFile> = new Map<String, OverworldFile>();
-
-	/** Olvida los mundos leidos para los warps (llamar al entrar a un mapa o tras guardar). */
-	public static function clearWarpCache()
-		warpCache.clear();
-
-	static function loadCached(name:String):OverworldFile
+	/**
+	 * Completado guardado o, para un nodo 'world', que su mundo ya este superado aunque BF no haya
+	 * vuelto todavia al mapa de fuera (quien lo guarda en la partida es syncWorldNodes al volver).
+	 * Asi, salir de un castillo superado por un warp ya abre la tuberia del mundo central.
+	 */
+	public static function isNodeCompleted(world:String, node:OverworldNodeFile):Bool
 	{
-		if (!warpCache.exists(name)) warpCache.set(name, load(name));
-		return warpCache.get(name);
+		if (isCompleted(world, node.id)) return true;
+		return node.type == 'world' && node.world != null && node.world.length > 0 && node.world != world
+			&& isWorldCleared(node.world, [world]);
+	}
+
+	// ------------------------------------------------------------- mundos leidos de disco
+	static var worldCache:Map<String, OverworldFile> = new Map<String, OverworldFile>();
+
+	/**
+	 * Olvida los mundos leidos de disco para consultar otros mundos (parejas, castillos, padres).
+	 * Llamar al entrar a un mapa y despues de guardar: un mundo pintado son cientos de KB, y
+	 * releerlos todos en cada comprobacion se notaba.
+	 */
+	public static function clearWorldCache()
+		worldCache.clear();
+
+	/** Un mundo de disco, leido una sola vez hasta el siguiente clearWorldCache(). No modificarlo. */
+	public static function loadCached(name:String):OverworldFile
+	{
+		if (name == null) return null;
+		if (!worldCache.exists(name)) worldCache.set(name, load(name));
+		return worldCache.get(name);
 	}
 
 	/**
@@ -370,7 +435,7 @@ class OverworldData
 
 		var destFile:OverworldFile = loadCached(node.world);
 		for (other in destFile.nodes)
-			if (other.unlocks != null && other.unlocks.contains(partner.id) && isCompleted(node.world, other.id))
+			if (other.unlocks != null && other.unlocks.contains(partner.id) && isNodeCompleted(node.world, other))
 				return true;
 		return false;
 	}
@@ -386,7 +451,7 @@ class OverworldData
 		if (visiting == null) visiting = [];
 		if (visiting.contains(name)) return false;
 
-		var file:OverworldFile = load(name);
+		var file:OverworldFile = loadCached(name);
 		if (file == null) return false;
 
 		visiting = visiting.concat([name]);
@@ -420,13 +485,24 @@ class OverworldData
 		for (world in listWorlds())
 		{
 			if (world == name) continue;
-			var file:OverworldFile = load(world);
+			var file:OverworldFile = loadCached(world);
 			if (file == null) continue;
 
 			for (node in file.nodes)
 				if (node.type == 'world' && node.world == name) return [world, node.id];
 		}
 		return null;
+	}
+
+	/** Al renombrar un nodo, su progreso pasa al ID nuevo (y un nodo futuro con el viejo no lo hereda). */
+	public static function renameProgress(world:String, oldId:String, newId:String)
+	{
+		if (world == null || !isCompleted(world, oldId)) return;
+		var progress:Map<String, Bool> = getProgress();
+		progress.remove('$world::$oldId');
+		progress.set('$world::$newId', true);
+		FlxG.save.data.overworldProgress = progress;
+		FlxG.save.flush();
 	}
 
 	/**
@@ -443,7 +519,7 @@ class OverworldData
 			if (result.contains(current) || (exclude != null && exclude.contains(current))) continue;
 			result.push(current);
 
-			var file:OverworldFile = load(current);
+			var file:OverworldFile = loadCached(current);
 			if (file == null) continue;
 			for (node in file.nodes)
 				if (node.type == 'world' && node.world != null && node.world.length > 0 && !result.contains(node.world))
@@ -545,6 +621,11 @@ class OverworldData
 			while (pending.length > 0)
 			{
 				var id:String = pending.pop();
+
+				// pisar una salida saca del mapa: no se sigue andando a traves de ella
+				var here:OverworldNodeFile = findNode(file, id);
+				if (here != null && here.type == 'exit' && id != start.id) continue;
+
 				for (pth in file.paths)
 				{
 					var other:String = (pth.a == id) ? pth.b : ((pth.b == id) ? pth.a : null);
@@ -649,10 +730,14 @@ class OverworldData
 			// warp: tuberia de ida y vuelta con un warp del mundo destino que apunte aqui
 			if (node.type == 'warp')
 			{
-				var dest:OverworldFile = (node.world != null && node.world.length > 0) ? load(node.world) : null;
+				var dest:OverworldFile = (node.world != null && node.world.length > 0) ? loadCached(node.world) : null;
+				var partner:OverworldNodeFile = (dest != null && name != null) ? warpPartner(name, node) : null;
 				if (dest == null) warn(node.id, '"${node.id}": el warp no tiene mundo destino o ese mundo no existe.');
-				else if (name != null && warpPartner(name, node) == null)
+				else if (name != null && partner == null)
 					warn(node.id, '"${node.id}": "${node.world}" no tiene ningun warp que vuelva aqui, asi que BF aparecera alli en su nodo inicial.');
+				// los dos extremos esperando al otro: ninguno se abre nunca
+				else if (partner != null && !node.unlocked && !anyoneUnlocks(file, node.id) && !partner.unlocked && !anyoneUnlocks(dest, partner.id))
+					warn(node.id, '"${node.id}": ni este warp ni su pareja de "${node.world}" se abren nunca: que algo desbloquee uno de los dos (p. ej. el castillo).');
 			}
 
 			if (node.type == 'level' && (node.song == null || node.song.length < 1))
@@ -660,16 +745,28 @@ class OverworldData
 
 			if (node.type == 'world')
 			{
-				var target:OverworldFile = (node.world != null && node.world.length > 0) ? load(node.world) : null;
+				var target:OverworldFile = (node.world != null && node.world.length > 0) ? loadCached(node.world) : null;
 				if (target == null) warn(node.id, '"${node.id}": apunta a un mundo que no existe.');
 				else if (!Lambda.exists(target.nodes, n -> canBeCompleted(n)))
 					warn(node.id, '"${node.id}": el mundo "${node.world}" no tiene nada que superar, asi que este nodo nunca se completa.');
+				// dos nodos 'world' que se apuntan entre si: el padre pareceria hijo de su hijo
+				else if (name != null && Lambda.exists(target.nodes, n -> n.type == 'world' && n.world == name))
+					warn(node.id, '"${node.id}": "${node.world}" tiene a su vez un nodo "world" que vuelve aqui. Para volver de un submundo usa una salida "exit" sin destino.');
+			}
+
+			// dos warps (o dos salidas con destino) hacia el mismo mundo: las parejas y las
+			// llegadas se buscan por mundo, asi que siempre ganaria el primero
+			if ((node.type == 'warp' || node.type == 'exit') && node.world != null && node.world.length > 0)
+			{
+				var first:OverworldNodeFile = Lambda.find(file.nodes, n -> n.type == node.type && n.world == node.world);
+				if (first != null && first != node)
+					warn(node.id, '"${node.id}": ya hay otro ${node.type} hacia "${node.world}" ("${first.id}"). Solo se empareja el primero: usa uno por mundo.');
 			}
 
 			// salida con destino: transicion de lado a otro mundo
 			if (node.type == 'exit' && node.world != null && node.world.length > 0)
 			{
-				var dest:OverworldFile = load(node.world);
+				var dest:OverworldFile = loadCached(node.world);
 				if (dest == null) warn(node.id, '"${node.id}": la salida lleva a "${node.world}", que no existe.');
 				else if (name != null && !Lambda.exists(dest.nodes, n -> n.type == 'exit' && n.world == name))
 					warn(node.id, '"${node.id}": "${node.world}" no tiene ninguna salida de vuelta hacia aqui, asi que BF aparecera alli en su nodo inicial.');
@@ -763,12 +860,23 @@ class OverworldData
 	}
 	#end
 
-	/** Prefijos de animacion de un atlas Sparrow (quita los digitos del final). */
+	static var animCache:Map<String, Array<String>> = new Map<String, Array<String>>();
+
+	/**
+	 * Prefijos de animacion de un atlas Sparrow (quita los digitos del final). Va en cache: el
+	 * editor lo pide en cada seleccion, y un atlas de 2000 tiles es un XML grande de analizar.
+	 * Se devuelve una copia para que quien la reciba pueda modificarla.
+	 */
 	public static function listAnimations(image:String):Array<String>
 	{
-		var list:Array<String> = [];
-		if (image == null || image.length < 1) return list;
+		if (image == null || image.length < 1) return [];
+		if (!animCache.exists(image)) animCache.set(image, readAnimations(image));
+		return animCache.get(image).copy();
+	}
 
+	static function readAnimations(image:String):Array<String>
+	{
+		var list:Array<String> = [];
 		var txt:String = Paths.getTextFromFile('images/$image.xml');
 		if (txt == null) return list;
 
@@ -799,7 +907,10 @@ class OverworldData
 	static var infoCache:Map<String, OverworldImageInfo> = new Map<String, OverworldImageInfo>();
 
 	public static function clearImageCache()
+	{
 		infoCache.clear();
+		animCache.clear();
+	}
 
 	/** Tamaño, numero de frames y animaciones de una imagen (con o sin atlas). */
 	public static function imageInfo(key:String):OverworldImageInfo

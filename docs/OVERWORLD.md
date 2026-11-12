@@ -90,10 +90,33 @@ varios clics seguidos en un mismo contador cuentan como un paso. Con un campo de
 CTRL+Z / CTRL+Y salen del campo y deshacen en el mundo. Al deshacer se mantiene seleccionado lo que
 tenías elegido.
 
-**Cambiar de mundo** (cargar otro o *Mundo nuevo*) empieza un historial nuevo. Si hay cambios sin
-guardar, la primera vez solo avisa: repite la acción para descartarlos. *Mundo nuevo* le pone un
-nombre de archivo libre (`mundo_nuevo`, `mundo_nuevo2`...), así un CTRL+S no puede machacar el
-mundo que tenías abierto.
+**Cambiar de mundo** (cargar otro, *Mundo nuevo* o *Ir al destino*) empieza un historial nuevo. Si
+hay cambios sin guardar, la primera vez solo avisa: repite la acción para descartarlos. *Mundo
+nuevo* le pone un nombre de archivo libre (`mundo_nuevo`, `mundo_nuevo2`...). Y **guardar con el
+nombre de otro mundo que ya existe** avisa la primera vez: hay que guardar otra vez para
+sobrescribirlo (antes lo machacaba sin decir nada, en la build y en el repo).
+
+### Unir mundos desde el editor
+
+En la pestaña **Nodo**, junto a *Borrar nodo*, salen dos botones según el nodo elegido:
+
+| Nodo | Botón | Qué hace |
+|---|---|---|
+| `world` sin *Mundo destino* | **Crear submundo** | Crea el archivo `<este mundo>_<id del nodo>` con los ajustes de este mundo, un primer nivel con el aspecto de tus niveles y su **salida invisible fuera de la pantalla** ya unida a él. Lo pone de destino del nodo. |
+| `exit` o `warp` con destino, sin pareja allí | **Crear pareja** | En el otro mundo, junto a su nodo inicial, pone la salida de vuelta (invisible, fuera de pantalla, abierta) o la tubería de vuelta (con el mismo sprite, bloqueada: se abre por su pareja), unida con un camino. |
+| `world`, `exit` o `warp` con destino (o una salida sin destino dentro de un submundo) | **Ir al destino** | Abre ese mundo en el editor y selecciona el nodo por el que se vuelve aquí. Desde ahí, *Ir al destino* te devuelve. |
+
+*Crear submundo* y *Crear pareja* **guardan también este mundo**: el otro necesita verlo en disco
+(una salida sin destino busca a su mapa de fuera; un warp, a su pareja). Las etiquetas de estos
+nodos muestran a dónde llevan (`sub` / `> test_subworld`).
+
+### Aspecto de un nodo desde la paleta
+
+Con un nodo elegido, **CTRL+clic en un tile de la paleta** se lo pone como aspecto, y
+**CTRL+SHIFT+clic** como aspecto al completarlo (tiene que ser del mismo tileset). Es la forma de
+usar un tile concreto, como el círculo amarillo de `level_tiles` y su versión roja: el desplegable
+de *Animación* solo ofrece prefijos. Los nodos nuevos salen con el último tile elegido. Un clic
+normal en la paleta sigue siendo elegir tile para pintar.
 
 ### Modo ENLAZAR (L): desbloqueos con el ratón
 
@@ -200,6 +223,10 @@ Esta es la forma cómoda de dibujar el terreno, en vez de ir colocando sprites s
 5. Clic derecho borra el tile de debajo. Mientras pintas, el clic derecho **nunca borra un nodo**,
    solo tiles y decorados. **P** oculta la paleta cuando estorbe.
 
+Pintar encima de otro **tile pintado** lo sustituye; un decorado puesto a mano (un castillo con
+**B**) no se borra por pintar en su casilla. Pintar, borrar y mover decorados no rehace el resto
+del mapa, así que va fluido aunque tengas miles de tiles.
+
 Marca **Pintar por delante de BF** para los tiles que deban taparlo (copas de árbol, puentes...).
 
 Cada tile pintado es un decorado normal: en modo **V** puedes seleccionarlo y cambiarle escala,
@@ -214,8 +241,8 @@ Tilesets que vienen preparados en `overworld/og_mario/`:
 | `og_mario/level_tiles` | 16x16 (88) | Círculos de nivel, estrellas, tuberías, números |
 | `og_mario/level_blocks` | 32x32 (36) | Castillos, fortalezas y casas fantasma enteros |
 
-Sirven igual para los **nodos**: en la pestaña *Nodo*, elige de **Sprite** uno de estos tilesets y
-en **Animación** el nombre del tile concreto (`tile0007`, etc.).
+Sirven igual para los **nodos**: con el nodo elegido, CTRL+clic en el tile de la paleta
+(CTRL+SHIFT+clic para su aspecto al completarlo). Ver *Aspecto de un nodo desde la paleta*.
 
 ### Paso 4 — decorar a mano
 
@@ -247,6 +274,8 @@ Dos botones en la pestaña **Mundo** para esto:
     desbloquea nada. Los desbloqueos van en un `level` o en un `world`;
   - nodos `world` que llevan a un mundo sin nada que superar (nunca se completarían);
   - submundos sin ningún nodo `exit` (BF no podría salir);
+  - warps sin pareja, dos warps emparejados que no se abren nunca, dos warps (o dos salidas con
+    destino) hacia el mismo mundo, y un nodo `world` que hace bucle con su propio submundo;
   - IDs repetidos, caminos repetidos o hacia nodos que no existen, nodo inicial bloqueado.
 
   También salta solo al guardar. En pantalla caben 4 avisos; la lista completa sale por consola.
@@ -313,20 +342,27 @@ Un nodo `world` **cuenta como superado cuando está superado todo lo de su mundo
 si tiene, sus propios nodos `world` (las salidas no cuentan). Así funciona como el castillo de
 una zona de SMW: le pones en *Desbloquea al completarlo* lo que debe abrirse en el mapa de fuera,
 y al salir del submundo tras superar su último nivel, ese camino aparece con la misma animación
-de puntitos.
+de puntitos. Lo que el castillo desbloquea **cuenta ya en cuanto el submundo está superado**,
+aunque salgas de él por un warp en vez de volver andando (así la tubería del mundo central se abre
+igual); la animación del camino sale la próxima vez que pises el mapa de fuera.
 
-Si dentro de un submundo pones un nodo `world` que lleva de vuelta al mapa de fuera, también
-funciona como salida (entras en ese mapa), pero no cuenta para superar el submundo ni para el
-contador. Para salir es mejor un `exit`, que te deja encima del nodo por el que entraste.
+**Para volver de un submundo usa siempre una salida `exit`.** Un nodo `world` dentro del submundo
+que apunte al mapa de fuera te lleva de vuelta a él (no te mete "otra vez dentro"), pero
+*Comprobar mundo* lo avisa: el mapa de fuera parecería hijo de su propio submundo.
 
 ### Warps (tuberías): nodos `warp`
 
 Un `warp` lleva a otro mundo **con ENTER**, como las tuberías de Mario: por donde se entra se
 sale. Ponle **Mundo destino** y, en ese mundo, otro `warp` con destino de vuelta a este: son
 **pareja**. BF se mete con su animación de *warp* y aparece **encima de la pareja**, no andando
-desde el borde. Desde ahí, ENTER le devuelve por el mismo sitio. No es un submundo: la pila no
-cambia y ESC sigue abriendo el menú. Si el destino no tiene pareja, BF aparece en su nodo inicial
-(*Comprobar mundo* lo avisa).
+desde el borde. Desde ahí, ENTER le devuelve por el mismo sitio. No es un submundo: ESC sigue
+abriendo el menú, y un warp es un salto "global" que olvida de qué castillos venías (si vuelves a
+entrar a un submundo por un warp, su salida sabe sola a qué mapa de fuera llevar). Si el destino
+no tiene pareja, BF aparece en su nodo inicial (*Comprobar mundo* lo avisa).
+
+**Un warp por mundo destino** (y una salida con destino por mundo): la pareja se busca por mundo,
+así que una segunda tubería hacia el mismo mundo se emparejaría con la primera. *Comprobar mundo*
+lo avisa, y también si dos warps emparejados se esperan el uno al otro y ninguno se abre nunca.
 
 Diferencia con las salidas `exit`: la salida se activa **al pisarla** (pensada para caminos que
 se van de la pantalla) y el warp **con ENTER** (una tubería, una estrella...).
@@ -338,7 +374,12 @@ central**:
 1. En cada mundo, un `warp` con destino al mundo central, desbloqueado por su castillo.
 2. En el mundo central, un `warp` por mundo, con destino a ese mundo, **bloqueado y sin que nadie
    lo desbloquee**: se abre solo en cuanto el castillo de ese mundo abre su pareja. El nodo
-   inicial del mundo central puede ser uno de ellos.
+   inicial del mundo central puede ser uno de ellos. Lo más rápido: en el warp del paso 1, pon
+   el destino y pulsa **Crear pareja**.
+
+El mundo central solo se puede pisar llegando por una tubería: si lo abres directamente sin
+ninguna tubería abierta, dirá que no tiene ningún nodo desbloqueado. No lo pongas como mundo por
+defecto.
 
 Resultado: desde el mundo central solo se puede viajar a los mundos con el castillo derrumbado,
 y se aparece encima de su tubería.
