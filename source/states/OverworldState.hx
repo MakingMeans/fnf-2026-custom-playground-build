@@ -277,6 +277,9 @@ class OverworldState extends MusicBeatState
 		if (!walking) savePosition();
 
 		camGame.zoom = worldFile.zoom;
+		// dibujo ajustado al pixel: con la camara en una posicion fraccionaria, entre tile y tile
+		// pintado se veian rayitas del fondo
+		camGame.pixelPerfectRender = true;
 		applyCameraBounds();
 		camGame.follow(camFollow, LOCKON, 0.12);
 		camGame.snapToTarget();
@@ -805,6 +808,10 @@ class OverworldState extends MusicBeatState
 		}
 	}
 
+	#if debug
+	var shotTimer:Float = 0;
+	#end
+
 	/** Punto que mira la camara mientras se revela un camino que se sale de la pantalla. */
 	var revealFocus:Array<Float> = null;
 
@@ -1023,6 +1030,19 @@ class OverworldState extends MusicBeatState
 		if (player.animation.getByName('walk_down') == null && anims.length > 0)
 			player.animation.addByPrefix('walk_down', anims[0], 8, true);
 
+		// un jugador sin animacion de warp propia (dead_overworld_bf): gira sobre si mismo con el
+		// primer fotograma de cada direccion, que es lo que hace la de overworld_bf
+		if (player.animation.getByName('warp') == null)
+		{
+			var spin:Array<Int> = [];
+			for (dir in ['walk_down', 'walk_right', 'walk_up', 'walk_left'])
+			{
+				var walk = player.animation.getByName(dir);
+				if (walk != null && walk.frames.length > 0) spin.push(walk.frames[0]);
+			}
+			if (spin.length == 4) player.animation.add('warp', spin, 8, true);
+		}
+
 		player.animation.play('walk_down');
 		player.animation.pause();
 		player.updateHitbox();
@@ -1111,6 +1131,23 @@ class OverworldState extends MusicBeatState
 		}
 
 		super.update(elapsed);
+
+		#if debug
+		// -shot: a los 3 s guarda una captura del mapa en world_shot.png y cierra (para revisar un
+		// mundo sin depender de capturar la ventana desde fuera)
+		if (shotTimer >= 0 && Sys.args().contains('-shot'))
+		{
+			shotTimer += elapsed;
+			if (shotTimer > 3)
+			{
+				shotTimer = -1;
+				var bmp:openfl.display.BitmapData = new openfl.display.BitmapData(FlxG.stage.stageWidth, FlxG.stage.stageHeight, false, 0xFF000000);
+				bmp.draw(FlxG.stage);
+				sys.io.File.saveBytes('world_shot.png', bmp.encode(bmp.rect, new openfl.display.PNGEncoderOptions()));
+				Sys.exit(0);
+			}
+		}
+		#end
 
 		if (iris != null && iris.visible)
 		{

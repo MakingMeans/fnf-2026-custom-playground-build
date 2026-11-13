@@ -548,8 +548,11 @@ class OverworldPlaytest extends FlxBasic
 		expectUnlocked('G', false);
 		shot('10_reglas');
 
-		// --- R1 sin fallos: salida secreta. Su camino baja fuera de la pantalla y la camara lo sigue
-		beatWith(0, 1);
+		// --- R1 admite 2 fallos: con 3 no hay secreta; con 2, si. Su camino baja fuera de la
+		// pantalla y la camara lo sigue
+		beatWith(3, 0.9);
+		expectSecret(RULES_WORLD, 'R1', false);
+		beatWith(2, 0.9);
 		expectCompleted(RULES_WORLD, 'R1', true);
 		expectSecret(RULES_WORLD, 'R1', true);
 		expectUnlocked('S', true);
@@ -572,7 +575,7 @@ class OverworldPlaytest extends FlxBasic
 		expectPath('R2', 'G', true);
 
 		// --- repetirlo con 95% saca la secreta
-		beatWith(0, 0.95);
+		beatWith(7, 0.95);
 		expectSecret(RULES_WORLD, 'R2', true);
 		expectUnlocked('S2', true);
 
@@ -585,6 +588,29 @@ class OverworldPlaytest extends FlxBasic
 		walk(0, 1, 'abajo por el atajo (G)');
 		expectAt(RULES_WORLD, 'G');
 		shot('12_reglas_final');
+
+		// --- el otro sprite de jugador (dead_overworld_bf) tiene las mismas animaciones; la de
+		// warp, que no trae, se monta con sus fotogramas de andar
+		add('cambiar el jugador a dead_overworld_bf', function()
+		{
+			var file:OverworldFile = OverworldData.load(RULES_WORLD);
+			file.player = 'overworld/dead_overworld_bf';
+			OverworldData.saveWorldFiles(RULES_WORLD, file);
+			MusicBeatState.switchState(new OverworldState(RULES_WORLD, 'R2'));
+			return true;
+		}, true);
+		expectAt(RULES_WORLD, 'R2');
+		add('animaciones de dead_overworld_bf', function()
+		{
+			var anim = map().player.animation;
+			var missing:Array<String> = [for (name in ['walk_down', 'walk_up', 'walk_left', 'walk_right', 'enter', 'warp']) if (anim.getByName(name) == null) name];
+			check(missing.length == 0, 'dead_overworld_bf tiene andar, entrar y warp' + (missing.length > 0 ? ' (faltan: ' + missing.join(', ') + ')' : ''));
+			check(anim.curAnim != null && anim.curAnim.name == 'walk_down' && !anim.paused, 'parado, camina en el sitio igual que el normal');
+			return true;
+		});
+		walk(1, 0, 'a la derecha con el otro jugador (R3)');
+		expectAt(RULES_WORLD, 'R3');
+		shot('13_dead_bf');
 		add('fin', () -> true);
 	}
 
@@ -776,6 +802,13 @@ class OverworldPlaytest extends FlxBasic
 
 		link(r1, [r2]);
 		link(r2, [r3]);
+
+		// R1: secreta con 2 fallos como mucho
+		ed.selectedNode = r1;
+		ed.updateUI();
+		ed.nodeSecretAccStepper.value = 2;
+		ed.nodeSecretAccStepper.onValueChange();
+		check(r1.secretMisses == 2 && r1.secretMode == 'fc', 'maximo de fallos de la salida secreta puesto con el editor');
 
 		// salidas secretas con el modo ENLAZAR (SHIFT+clic)
 		ed.linkStart = null;

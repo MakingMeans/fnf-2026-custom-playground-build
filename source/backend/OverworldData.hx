@@ -24,7 +24,8 @@ typedef OverworldNodeFile =
 	var unlocks:Array<String>; // ids que se desbloquean al completarlo
 	var needLevels:Int;     // ademas, se abre al tener N nodos superados en este mundo (0 = no)
 	var secretUnlocks:Array<String>; // 'level': ids que abre su salida secreta
-	var secretMode:String;  // salida secreta: 'fc' (sin fallos) | 'accuracy' (precision minima)
+	var secretMode:String;  // salida secreta: 'fc' (pocos fallos) | 'accuracy' (precision minima)
+	var secretMisses:Int;   // con 'fc': fallos maximos permitidos (0 = sin fallos)
 	var secretAccuracy:Float; // con 'accuracy': % minimo (0-100)
 }
 
@@ -245,6 +246,7 @@ class OverworldData
 			needLevels: 0,
 			secretUnlocks: [],
 			secretMode: 'fc',
+			secretMisses: 0,
 			secretAccuracy: 95
 		};
 	}
@@ -401,7 +403,7 @@ class OverworldData
 	{
 		if (node == null) return false;
 		if (node.secretMode == 'accuracy') return accuracy * 100 + 0.0001 >= node.secretAccuracy;
-		return misses == 0;
+		return misses <= node.secretMisses;
 	}
 
 	public static function isCompleted(world:String, id:String):Bool

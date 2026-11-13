@@ -1317,15 +1317,23 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		tab.add(nodeNeedStepper);
 
 		label(tab, x + 90, y - 17, 'Salida secreta:');
-		nodeSecretModeDropDown = new PsychUIDropDownMenu(x + 90, y, ['sin fallos', 'precision'], function(sel:Int, value:String)
+		nodeSecretModeDropDown = new PsychUIDropDownMenu(x + 90, y, ['fallos', 'precision'], function(sel:Int, value:String)
 		{
-			if (selectedNode != null) selectedNode.secretMode = (value == 'precision') ? 'accuracy' : 'fc';
+			if (selectedNode == null) return;
+			selectedNode.secretMode = (value == 'precision') ? 'accuracy' : 'fc';
+			updateUI(); // el contador de al lado pasa a ser el de este modo
 		}, 110);
 		tab.add(nodeSecretModeDropDown);
 
-		label(tab, x + 210, y - 17, '% minimo:');
-		nodeSecretAccStepper = new PsychUINumericStepper(x + 210, y, 1, 95, 0, 100, 0, 50);
-		nodeSecretAccStepper.onValueChange = function() if (selectedNode != null) selectedNode.secretAccuracy = nodeSecretAccStepper.value;
+		// un solo contador: con "fallos" son los fallos maximos; con "precision", el % minimo
+		label(tab, x + 210, y - 17, 'Max fallos / % min:');
+		nodeSecretAccStepper = new PsychUINumericStepper(x + 210, y, 1, 0, 0, 999, 0, 50);
+		nodeSecretAccStepper.onValueChange = function()
+		{
+			if (selectedNode == null) return;
+			if (selectedNode.secretMode == 'accuracy') selectedNode.secretAccuracy = Math.min(100, nodeSecretAccStepper.value);
+			else selectedNode.secretMisses = Std.int(nodeSecretAccStepper.value);
+		};
 		tab.add(nodeSecretAccStepper);
 
 		y += 36;
@@ -1360,7 +1368,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		tab.add(new FlxText(x, y, 340,
 			'La semana filtra las canciones (sin semana: todas las de la build).\n'
 			+ 'N superados: ademas se abre al tener N superados en este mundo.\n'
-			+ 'Salida secreta: superar el nivel sin fallos o con ese % de precision.', 11));
+			+ 'Salida secreta: superar el nivel con esos fallos como mucho, o ese % minimo.', 11));
 	}
 
 	function addDecorTab()
@@ -2447,8 +2455,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			nodeUnlockedCheck.checked = selectedNode.unlocked;
 			nodeUnlocksInput.text = selectedNode.unlocks.join(', ');
 			nodeNeedStepper.value = selectedNode.needLevels;
-			nodeSecretModeDropDown.selectedLabel = selectedNode.secretMode == 'accuracy' ? 'precision' : 'sin fallos';
-			nodeSecretAccStepper.value = selectedNode.secretAccuracy;
+			nodeSecretModeDropDown.selectedLabel = selectedNode.secretMode == 'accuracy' ? 'precision' : 'fallos';
+			nodeSecretAccStepper.value = selectedNode.secretMode == 'accuracy' ? selectedNode.secretAccuracy : selectedNode.secretMisses;
 			nodeSecretInput.text = selectedNode.secretUnlocks.join(', ');
 			nodeXStepper.value = selectedNode.x;
 			nodeYStepper.value = selectedNode.y;

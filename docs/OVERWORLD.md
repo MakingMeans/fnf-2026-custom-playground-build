@@ -158,7 +158,7 @@ Además de *Desbloqueado al empezar* y *Desbloquea al completarlo*, hay tres reg
 |---|---|---|
 | **N superados** | Pestaña Nodo, contador *N superados* | El nodo también se abre en cuanto tienes N nodos superados **en este mundo** (niveles y castillos). Al intentar ir hacia él antes de tiempo, el mapa dice cuántos llevas. |
 | **Camino con condición propia** | Pestaña Camino (*Solo se abre al completar*), o modo L + clic en el camino | El camino no aparece hasta completar ese nodo, aunque sus dos extremos ya estén abiertos. Sirve para atajos. En el editor se ve **discontinuo** (naranja; amarillo si es de salida secreta). |
-| **Salida secreta** | Pestaña Nodo: *Salida secreta* (`sin fallos` o `precision` con su *% mínimo*) y *Su salida secreta desbloquea*; o modo L + SHIFT+clic | Al superar el nivel cumpliendo la condición (0 fallos, o al menos ese % de precisión), además se abre lo de su salida secreta. Puede sacarse repitiendo el nivel. En *practice* o *botplay* no cuenta. |
+| **Salida secreta** | Pestaña Nodo: *Salida secreta* (`fallos` o `precision`), el contador de al lado (*Max fallos / % min*) y *Su salida secreta desbloquea*; o modo L + SHIFT+clic | Al superar el nivel cumpliendo la condición que tú pones (como mucho N fallos, o al menos ese % de precisión), además se abre lo de su salida secreta. Puede sacarse repitiendo el nivel. En *practice* o *botplay* no cuenta. |
 
 En el juego, un nivel con salida secreta muestra `?` junto a su nombre hasta que la sacas, y
 después **SECRETO** en amarillo; al volver de la canción sale "¡Salida secreta!", y a la derecha
@@ -551,7 +551,8 @@ de la build al repo. También existe **Guardar como...** para elegir la ruta a m
       "unlocks": ["n1"],
       "needLevels": 0,                // >0: tambien se abre con N superados en este mundo
       "secretUnlocks": [],            // lo que abre su salida secreta (solo niveles)
-      "secretMode": "fc",             // "fc" = sin fallos | "accuracy" = precision minima
+      "secretMode": "fc",             // "fc" = pocos fallos | "accuracy" = precision minima
+      "secretMisses": 0,              // con "fc": fallos maximos permitidos
       "secretAccuracy": 95            // con "accuracy": % minimo
     }
   ],
@@ -607,12 +608,26 @@ El progreso se guarda en el `FlxG.save` del juego, con la clave `overworldProgre
 admiten `#`). Un nodo nuevo no hereda el progreso de uno borrado que tuviera su mismo ID,
 y renombrar un nodo se lleva su progreso al ID nuevo.
 
+## Isla piloto (`pilot_island`)
+
+Un mundo de muestra **sin niveles**, compuesto por código con los tiles de SMW: isla con costa
+curva y acantilado con espuma, una meseta alta, colinas, árboles, un claro de arena, un prado,
+estanques, un islote y rocas en el mar, sobre un fondo de mar animado hecho con el tile de agua
+(`overworld/backgrounds/smw_sea`). Se abre con `tests	est-pilot-island.bat`.
+
+Lo genera `tools/build_pilot_island.py` (necesita Pillow): el mapa se describe con celdas de la hoja
+original `art/overworld_source/smw_overworld_tiles.png` y funciones como `island()`, `cap()` y
+`stamp()`, y el script busca cada celda en el atlas y escribe el JSON. Con un nombre de archivo
+como argumento guarda además una vista previa. Tras regenerarlo hay que volver a compilar (o
+copiar el JSON a `export/.../assets/shared/overworlds/`) para verlo en el juego.
+
 ## Pruebas automáticas (solo build debug)
 
 Se lanzan desde `export/debug/windows/bin` (el juego busca `assets\` en su carpeta):
 
 | Argumentos | Qué hace |
 |---|---|
+| `-overworld <mundo> -shot` | Abre ese mapa, a los 3 s guarda una captura en `world_shot.png` junto al exe y se cierra. |
 | `-check-worlds` | Revisa todos los mundos de la build (también la partida entera), escribe el resultado en `check_worlds.txt` junto al exe y se cierra. |
 | `-overworld-editor test_graph -selftest` | Prueba los botones de unir mundos, el aspecto desde la paleta, deshacer (con progreso, tiles y submundos), pintar, grupos, el rectángulo, los avisos nuevos y los de la partida entera. Escribe `SELFTEST OK/FAIL` por consola (49 comprobaciones) y borra sus mundos `zz_*`. |
 | `-playtest` | Monta 5 mundos de demostración con las funciones del editor y los juega por código: una canción de verdad, castillo, tuberías, salida lateral, menú, R, un mapa sin nodos abiertos, probar desde un nodo cerrado, salidas secretas (sin fallos y por precisión), un nodo de N superados, un atajo con condición, la cámara del revelado y el iris (99 comprobaciones). Deja `playtest_result.txt` y capturas en `playtest_shots\` (también del editor), borra sus mundos `zz_demo*` y se cierra. En cada captura comprueba que ningún sprite use una imagen ya liberada. |
