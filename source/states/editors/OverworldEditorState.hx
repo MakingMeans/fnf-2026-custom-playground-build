@@ -153,6 +153,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		add(fileDialog);
 
 		OverworldData.clearWorldCache();
+		OverworldState.clearSpriteCache();
 		worldFile = OverworldData.load(worldName);
 		if (worldFile != null) loadedName = worldName;
 		else worldFile = OverworldData.createEmpty();
@@ -255,22 +256,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		spritesBack.clear();
 		spritesFront.clear();
 
-		for (data in worldFile.sprites)
-		{
-			var spr:FlxSprite = OverworldState.buildSprite(data.image, data.anim, data.fps);
-			spr.flipX = data.flipX;
-			spr.flipY = data.flipY;
-			spr.alpha = data.alpha;
-			if (data.scale != 1)
-			{
-				spr.scale.set(data.scale, data.scale);
-				spr.updateHitbox();
-			}
-			spr.setPosition(data.x, data.y);
-
-			if (data.front) spritesFront.add(spr);
-			else spritesBack.add(spr);
-		}
+		for (data in worldFile.sprites) addDecorSprite(data);
 	}
 
 	/** Nodos, etiquetas, caminos, seleccion y avisos. */
@@ -702,7 +688,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		songList = OverworldData.listSongs();
 		if (songList.length < 1) songList = [''];
 		weekList = [''].concat(OverworldData.listWeeks());
-		worldList = OverworldData.listWorlds();
+		worldList = OverworldData.listWorlds().copy();
 		if (worldList.length < 1) worldList = [''];
 
 		UI_box = new PsychUIBox(FlxG.width - 380, 10, 370, 600, ['Mundo', 'Nodo', 'Deco', 'Camino', 'Tiles']);
@@ -847,7 +833,11 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 
 		label(tab, x + 130, y - 17, 'Zoom:');
 		zoomStepper = new PsychUINumericStepper(x + 130, y, 0.5, worldFile.zoom, 0.5, 10, 1, 60);
-		zoomStepper.onValueChange = function() worldFile.zoom = zoomStepper.value;
+		zoomStepper.onValueChange = function()
+		{
+			worldFile.zoom = zoomStepper.value;
+			reloadMap(true); // el rectangulo "LO QUE SE VE" depende del zoom
+		};
 		tab.add(zoomStepper);
 
 		label(tab, x + 200, y - 17, 'Rejilla:');
@@ -871,7 +861,11 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 
 		y += 42;
 		label(tab, x, y - 17, 'Nodo inicial:');
-		startDropDown = new PsychUIDropDownMenu(x, y, nodeIdList(), function(sel:Int, value:String) worldFile.startNode = value, 150);
+		startDropDown = new PsychUIDropDownMenu(x, y, nodeIdList(), function(sel:Int, value:String)
+		{
+			worldFile.startNode = value;
+			reloadMap(true); // cambia los avisos
+		}, 150);
 		tab.add(startDropDown);
 
 		y += 46;
@@ -892,6 +886,11 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		y += 32;
 		tab.add(new PsychUIButton(x, y, 'Desbloquear todos', function()
 		{
+			if (!Lambda.exists(worldFile.nodes, n -> !n.unlocked))
+			{
+				showOutput('Ya estan todos desbloqueados');
+				return;
+			}
 			pushUndo();
 			for (node in worldFile.nodes) node.unlocked = true;
 			reloadMap(true);
@@ -913,6 +912,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 
 			// nombre de archivo libre: si conservara el del mundo abierto, CTRL+S lo machacaria
 			worldName = uniqueWorldName('mundo_nuevo');
+			loadedName = null; // no viene de ningun archivo: guardarlo encima de otro pide confirmacion
 			worldFile = OverworldData.createEmpty();
 			selectedNode = null;
 			selectedSprite = null;
@@ -1149,6 +1149,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			}
 			selectedNode.unlocks = list;
 			unsavedProgress = true;
+			reloadMap(true); // flechas de desbloqueo y avisos
 
 			// aviso en vivo: una errata en un ID deja ese nodo bloqueado para siempre
 			if (unknown.length > 0) showOutput('No existe ningun nodo: ' + unknown.join(', '), true);
@@ -1183,7 +1184,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		var x:Int = 10;
 		var y:Int = 20;
 
-		label(tab, x, y - 17, 'Sprite (se usa al crear nuevos):');
+		label(tab, x, y - 17, 'Sprite (del elegido y de los nuevos):');
 		decorImageDropDown = new PsychUIDropDownMenu(x, y + 2, imagesFor('decor'), function(sel:Int, value:String)
 		{
 			lastDecorImage = value;
@@ -1197,7 +1198,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			{
 				selectedSprite.image = value;
 				selectedSprite.anim = '';
-				reloadMap();
+				refreshDecorSprite(selectedSprite);
 			}
 		}, 180);
 		tab.add(decorImageDropDown);
@@ -1209,7 +1210,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			lastDecorAnim = value;
 			if (selectedSprite == null) return;
 			selectedSprite.anim = value;
-			reloadMap();
+			refreshDecorSprite(selectedSprite);
 		}, 150);
 		tab.add(decorAnimDropDown);
 
@@ -1219,7 +1220,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		{
 			if (selectedSprite == null) return;
 			selectedSprite.fps = Std.int(decorFpsStepper.value);
-			reloadMap();
+			refreshDecorSprite(selectedSprite);
 		};
 		tab.add(decorFpsStepper);
 
@@ -1249,7 +1250,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		{
 			if (selectedSprite == null) return;
 			selectedSprite.scale = decorScaleStepper.value;
-			reloadMap();
+			refreshDecorSprite(selectedSprite);
 		};
 		tab.add(decorScaleStepper);
 
@@ -1259,7 +1260,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		{
 			if (selectedSprite == null) return;
 			selectedSprite.alpha = decorAlphaStepper.value;
-			reloadMap();
+			refreshDecorSprite(selectedSprite);
 		};
 		tab.add(decorAlphaStepper);
 
@@ -1268,7 +1269,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		{
 			if (selectedSprite == null) return;
 			selectedSprite.flipX = decorFlipXCheck.checked;
-			reloadMap();
+			refreshDecorSprite(selectedSprite);
 		});
 		tab.add(decorFlipXCheck);
 
@@ -1276,7 +1277,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		{
 			if (selectedSprite == null) return;
 			selectedSprite.flipY = decorFlipYCheck.checked;
-			reloadMap();
+			refreshDecorSprite(selectedSprite);
 		});
 		tab.add(decorFlipYCheck);
 
@@ -1306,7 +1307,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 
 			worldFile.sprites.push(copy);
 			selectedSprite = copy;
-			reloadMap();
+			addDecorSprite(copy); // al final de su grupo, igual que en worldFile.sprites
 			updateUI();
 		}, 90));
 	}
@@ -1366,7 +1367,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 
 		tab.add(new PsychUIButton(x + 150, y, 'Limpiar puntos', function()
 		{
-			if (selectedPath == null) return;
+			if (selectedPath == null || selectedPath.points.length < 1) return;
 			pushUndo();
 			selectedPath.points = [];
 			reloadMap(true);
@@ -1577,7 +1578,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 
 	function refreshWorldLists()
 	{
-		worldList = OverworldData.listWorlds();
+		worldList = OverworldData.listWorlds().copy();
 		worldsDropDown.list = worldList;
 		worldsDropDown.selectedLabel = worldName;
 		nodeWorldDropDown.list = [''].concat(worldList);
@@ -1616,8 +1617,12 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 
 		lastUIEditTime = now;
 		lastUITarget = target;
-		unsavedProgress = true;
+		// un boton que cambia y guarda a la vez (Crear submundo / pareja) deja el mundo guardado
+		if (!savedThisFrame) unsavedProgress = true;
 	}
+
+	/** saveWorld() ha guardado en este fotograma (ver recordUIChange). */
+	var savedThisFrame:Bool = false;
 
 	/**
 	 * Cambios tecleando en un campo: se aplican al mundo tecla a tecla, asi que se guarda el
@@ -1629,6 +1634,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		var focus:PsychUIInputText = PsychUIInputText.focusOn;
 		if (focus != lastFocus)
 		{
+			commitFocusEdit();
 			lastFocus = focus;
 			focusBefore = focus != null ? snapshot() : null;
 			focusRecorded = false;
@@ -1636,6 +1642,20 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		}
 
 		if (focus == null || focusRecorded || FlxG.keys.firstJustPressed() == -1) return;
+		if (snapshot() == focusBefore) return;
+
+		pushUndo(focusBefore);
+		focusRecorded = true;
+		unsavedProgress = true;
+	}
+
+	/**
+	 * Un contador aplica su valor al salir del campo (Enter o clic fuera), despues de la ultima
+	 * tecla: si eso cambio el mundo y no se habia apilado, se apila ahora como su paso.
+	 */
+	function commitFocusEdit()
+	{
+		if (lastFocus == null || focusBefore == null || focusRecorded) return;
 		if (snapshot() == focusBefore) return;
 
 		pushUndo(focusBefore);
@@ -1671,17 +1691,38 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 
 	function applySnapshot(json:String)
 	{
-		// la seleccion se conserva por posicion: tras deshacer un renombrado el nodo sigue elegido
+		// La seleccion se busca por ID (por posicion, al deshacer un borrado quedaba elegido otro
+		// nodo y el siguiente SUPR borraba ese). Si el ID ya no existe (deshacer un renombrado),
+		// por posicion, siempre que el numero de nodos no haya cambiado.
+		var oldNodes:Int = worldFile.nodes.length;
+		var oldSprites:Int = worldFile.sprites.length;
+		var oldPaths:Int = worldFile.paths.length;
 		var nodeIndex:Int = worldFile.nodes.indexOf(selectedNode);
 		var spriteIndex:Int = worldFile.sprites.indexOf(selectedSprite);
 		var pathIndex:Int = worldFile.paths.indexOf(selectedPath);
+		var nodeId:String = selectedNode != null ? selectedNode.id : null;
+		var sprite:OverworldSpriteFile = selectedSprite;
+		var pathEnds:Array<String> = selectedPath != null ? [selectedPath.a, selectedPath.b] : null;
 
 		worldFile = cast haxe.Json.parse(json);
 		OverworldData.applyDefaults(worldFile);
 
-		selectedNode = (nodeIndex > -1 && nodeIndex < worldFile.nodes.length) ? worldFile.nodes[nodeIndex] : null;
-		selectedSprite = (spriteIndex > -1 && spriteIndex < worldFile.sprites.length) ? worldFile.sprites[spriteIndex] : null;
-		selectedPath = (pathIndex > -1 && pathIndex < worldFile.paths.length) ? worldFile.paths[pathIndex] : null;
+		selectedNode = OverworldData.findNode(worldFile, nodeId);
+		if (selectedNode == null && nodeIndex > -1 && worldFile.nodes.length == oldNodes) selectedNode = worldFile.nodes[nodeIndex];
+
+		selectedSprite = null;
+		if (sprite != null)
+		{
+			selectedSprite = Lambda.find(worldFile.sprites, d -> d.x == sprite.x && d.y == sprite.y && d.image == sprite.image && d.anim == sprite.anim && d.front == sprite.front);
+			if (selectedSprite == null && spriteIndex > -1 && worldFile.sprites.length == oldSprites) selectedSprite = worldFile.sprites[spriteIndex];
+		}
+
+		selectedPath = null;
+		if (pathEnds != null)
+		{
+			selectedPath = Lambda.find(worldFile.paths, p -> p.a == pathEnds[0] && p.b == pathEnds[1]);
+			if (selectedPath == null && pathIndex > -1 && worldFile.paths.length == oldPaths) selectedPath = worldFile.paths[pathIndex];
+		}
 		pathStart = null;
 		linkStart = null;
 		dragging = false;
@@ -1929,11 +1970,14 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			}
 		}
 
-		if (existing != null)
+		if (existing != null && existing.image == paletteImage && existing.anim == frame) return; // ya esta pintado
+
+		if (strokeUndoPending)
 		{
-			if (existing.image == paletteImage && existing.anim == frame) return; // ya esta pintado
-			removeDecor(existing);
+			pushUndo();
+			strokeUndoPending = false;
 		}
+		if (existing != null) removeDecor(existing);
 
 		var data:OverworldSpriteFile = OverworldData.createSprite(paletteImage, px, py);
 		data.anim = frame;
@@ -1947,11 +1991,41 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		if (px + size > mapWidth || py + size > mapHeight) reloadMap(true); // el mapa crece
 	}
 
+	/** Al empezar un trazo: falta guardar su paso de deshacer (antes de la primera casilla que cambie). */
+	var strokeUndoPending:Bool = false;
+
 	/** Un tile pintado desde la paleta: un fotograma concreto ("tile0042") y 0 FPS. */
 	static function isPaintedTile(data:OverworldSpriteFile):Bool
 		return data.fps == 0 && data.anim != null && ~/[0-9]$/.match(data.anim);
 
 	function addDecorSprite(data:OverworldSpriteFile):FlxSprite
+	{
+		var spr:FlxSprite = buildDecorSprite(data);
+		if (data.front) spritesFront.add(spr);
+		else spritesBack.add(spr);
+		return spr;
+	}
+
+	/**
+	 * Rehace solo el sprite de un decorado (imagen, animacion, escala, alpha, flips): rehacer los
+	 * miles de tiles pintados en cada clic de un contador tardaba mas de medio segundo.
+	 */
+	function refreshDecorSprite(data:OverworldSpriteFile)
+	{
+		var old:FlxSprite = decorSpriteOf(data);
+		if (old == null)
+		{
+			reloadMap();
+			return;
+		}
+
+		var group = data.front ? spritesFront : spritesBack;
+		group.replace(old, buildDecorSprite(data));
+		old.destroy();
+		updateSelectionBox();
+	}
+
+	function buildDecorSprite(data:OverworldSpriteFile):FlxSprite
 	{
 		var spr:FlxSprite = OverworldState.buildSprite(data.image, data.anim, data.fps);
 		spr.flipX = data.flipX;
@@ -1963,9 +2037,6 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			spr.updateHitbox();
 		}
 		spr.setPosition(data.x, data.y);
-
-		if (data.front) spritesFront.add(spr);
-		else spritesBack.add(spr);
 		return spr;
 	}
 
@@ -1977,6 +2048,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		var previous:String = selectedNode.song;
 		selectedNode.song = value;
 		unsavedProgress = true;
+		markProblemsDirty(); // un nivel sin cancion es un aviso
 
 		var visible:String = selectedNode.name;
 		if (visible == null || visible.length < 1 || visible == 'Nivel' || visible == 'Tutorial'
@@ -2082,7 +2154,10 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		if (selectedSprite != null)
 		{
 			decorImageDropDown.selectedLabel = selectedSprite.image;
-			decorAnimDropDown.list = [''].concat(OverworldData.listAnimations(selectedSprite.image));
+			var decorAnims:Array<String> = [''].concat(OverworldData.listAnimations(selectedSprite.image));
+			if (selectedSprite.anim != null && selectedSprite.anim.length > 0 && !decorAnims.contains(selectedSprite.anim))
+				decorAnims.push(selectedSprite.anim); // un tile pintado usa un fotograma exacto ("tile0042")
+			decorAnimDropDown.list = decorAnims;
 			decorAnimDropDown.selectedLabel = selectedSprite.anim;
 			decorFpsStepper.value = selectedSprite.fps;
 			decorXStepper.value = selectedSprite.x;
@@ -2107,6 +2182,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 	// ------------------------------------------------------------------ update
 	var lastFocusWasUI:Bool = false;
+	var lastTab:Dynamic = null;
 
 	override function update(elapsed:Float)
 	{
@@ -2119,8 +2195,17 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		var beforeClick:String = clickOnUI ? snapshot() : null;
 		var worldBefore:OverworldFile = worldFile;
 		uiEventThisFrame = false;
+		savedThisFrame = false;
 
 		super.update(elapsed);
+
+		// un campo o desplegable de la pestana que se deja ya no se actualiza, asi que nunca soltaria
+		// el foco y el mapa y los atajos se quedarian bloqueados
+		if (UI_box.selectedTab != lastTab)
+		{
+			lastTab = UI_box.selectedTab;
+			if (PsychUIInputText.focusOn != null) PsychUIInputText.focusOn = null;
+		}
 
 		// si el clic cambio de mundo (cargar / nuevo), su historial ya se reinicio: no se apila.
 		// Sin ningun evento de la UI no pudo cambiar nada: se ahorra la segunda copia.
@@ -2133,6 +2218,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		{
 			var redoKey:Bool = FlxG.keys.justPressed.Y || FlxG.keys.pressed.SHIFT;
 			PsychUIInputText.focusOn = null;
+			// lo tecleado y aun sin apilar es lo primero que se deshace
+			commitFocusEdit();
 			lastFocus = null;
 			redoKey ? redo() : undo();
 			updateSelectionBox();
@@ -2317,7 +2404,9 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		// pintar tiles: continuo mientras se arrastra
 		if (curMode == MODE_TILE && FlxG.mouse.pressed)
 		{
-			if (FlxG.mouse.justPressed) pushUndo();
+			// el paso de deshacer se guarda al pintar la primera casilla que cambia: un clic sobre
+			// lo mismo (o sin tile elegido) no debe gastar un paso ni borrar el rehacer
+			if (FlxG.mouse.justPressed) strokeUndoPending = true;
 			paintTile(mouseX, mouseY);
 			return;
 		}
@@ -2571,6 +2660,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		if (worldFile.nodes.length < 1) node.unlocked = true;
 
 		worldFile.nodes.push(node);
+		OverworldData.clearStaleProgress(worldName, node.id); // no hereda el de un nodo borrado
 		selectedNode = node;
 		selectedSprite = null;
 		unsavedProgress = true;
@@ -2599,7 +2689,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		selectedNode = null;
 		unsavedProgress = true;
 
-		reloadMap();
+		addDecorSprite(data);
+		if (data.x + 64 > mapWidth || data.y + 64 > mapHeight) reloadMap(true); // el mapa crece
 		updateUI();
 	}
 
@@ -2809,7 +2900,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		{
 			linkStart.unlocks.remove(node.id);
 			message = '"${linkStart.id}" ya no desbloquea "${node.id}"';
-			if (!node.unlocked && !OverworldData.anyoneUnlocks(worldFile, node.id))
+			// un warp que se abre por su pareja no se reabre: empezaba cerrado a proposito
+			if (!node.unlocked && !OverworldData.anyoneUnlocks(worldFile, node.id) && !OverworldData.opensByPartner(worldName, node))
 			{
 				node.unlocked = true;
 				message += ' (nadie mas lo desbloquea: vuelve a empezar abierto)';
@@ -2851,6 +2943,13 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		buildProblemMarkers();
 	}
 
+	/** Los avisos se recalculan en un momento (cambios que no rehacen el grafo). */
+	function markProblemsDirty()
+	{
+		problemsDirty = true;
+		problemsTimer = 0;
+	}
+
 	/** Contorno rojo alrededor de cada nodo con algun aviso. */
 	function buildProblemMarkers()
 	{
@@ -2882,7 +2981,13 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 	/** E: salta al siguiente aviso, centra la camara en su nodo y lo selecciona. */
 	function gotoNextProblem()
 	{
-		if (problemsDirty) problems = OverworldData.checkWorldProblems(worldFile, worldName);
+		if (problemsDirty)
+		{
+			problemsDirty = false;
+			problems = OverworldData.checkWorldProblems(worldFile, worldName);
+			problemCursor = -1;
+			buildProblemMarkers();
+		}
 		if (problems.length < 1)
 		{
 			showOutput('Todo correcto: el mundo se puede recorrer entero.');
@@ -2967,7 +3072,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			if (node.type == 'world' && target == null) action = 'Crear submundo';
 			else if ((node.type == 'exit' || node.type == 'warp') && target != null)
 			{
-				var dest:OverworldFile = OverworldData.load(target);
+				var dest:OverworldFile = target == worldName ? null : OverworldData.loadCached(target);
 				if (dest != null && returnNodeIn(dest, node) == null) action = 'Crear pareja';
 			}
 		}
@@ -3090,6 +3195,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			showOutput('No se pudo crear el archivo de "$subName"', true);
 			return;
 		}
+		OverworldData.resetProgress(subName); // sin restos de un mundo borrado con el mismo nombre
 
 		pushUndo();
 		node.world = subName;
@@ -3107,6 +3213,11 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		if (node.world == null || node.world.length < 1) return;
 
 		var destName:String = node.world;
+		if (destName == worldName)
+		{
+			showOutput('"${node.id}" lleva a este mismo mundo: cambia su "Mundo destino"', true);
+			return;
+		}
 		var dest:OverworldFile = OverworldData.load(destName);
 		if (dest == null)
 		{
@@ -3165,6 +3276,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			return;
 		}
 		updateUI();
+		markProblemsDirty(); // el aviso de "sin pareja" ya no vale
 		showOutput('Pareja "${partner.id}" creada en "$destName" junto a "${start.id}" (se ha guardado "$worldName").\n"Ir al destino" para colocarla donde quieras');
 	}
 
@@ -3219,6 +3331,9 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			if (!ok) fails++;
 		}
 		function nodeIn(file:OverworldFile, id:String) return file == null ? null : OverworldData.findNode(file, id);
+
+		// la partida simulada empieza en el mundo de prueba (y no en el de por defecto)
+		OverworldData.simStartWorld = 'zz_self';
 
 		// otro mundo sencillo en disco, destino de una salida y un warp
 		var other:OverworldFile = OverworldData.createEmpty();
@@ -3323,10 +3438,72 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		unsavedProgress = false;
 		check(!saveWorld(), 'guardar zz_other como "zz_self" (que existe) se frena la primera vez');
 
+		// 8. partida completa: un mundo al que solo se llega por una tuberia que abre ese mismo
+		// mundo. Cada mundo por separado parece correcto; jugando desde el principio no se llega.
+		var dead:OverworldFile = OverworldData.createEmpty();
+		dead.nodes[0].id = 'd0';
+		dead.startNode = 'd0';
+		var back:OverworldNodeFile = OverworldData.createNode('r', 176, 124);
+		back.type = 'warp';
+		back.world = 'zz_self';
+		back.song = '';
+		back.unlocked = false;
+		dead.nodes.push(back);
+		dead.nodes[0].unlocks = ['r'];
+		dead.paths.push(OverworldData.createPath('d0', 'r'));
+		OverworldData.saveWorldFiles('zz_dead', dead);
+
+		var selfFile:OverworldFile = OverworldData.load('zz_self');
+		var pipe:OverworldNodeFile = OverworldData.createNode('q', 64, 160);
+		pipe.type = 'warp';
+		pipe.world = 'zz_dead';
+		pipe.song = '';
+		pipe.unlocked = false;
+		selfFile.nodes.push(pipe);
+		selfFile.paths.push(OverworldData.createPath(selfFile.startNode, 'q'));
+		var selfProblems:Array<OverworldProblem> = OverworldData.checkWorldProblems(selfFile, 'zz_self');
+		check(Lambda.exists(selfProblems, pr -> pr.node == 'q' && pr.text.indexOf('jugando desde el principio') > -1),
+			'partida completa: se detecta la tuberia que espera a su propio mundo: ' + [for (pr in selfProblems) pr.text].join(' | '));
+		var deadProblems:Array<String> = OverworldData.checkWorld(OverworldData.load('zz_dead'), 'zz_dead');
+		check(Lambda.exists(deadProblems, t -> t.indexOf('nunca se llega a este mundo') > -1), 'partida completa: se detecta el mundo al que no se llega');
+
+		// 9. deshacer un borrado deja elegido el mismo nodo (antes, por posicion, otro distinto)
+		if (worldFile.nodes.length >= 2)
+		{
+			selectedNode = worldFile.nodes[0];
+			deleteSelectedNode();
+			selectedNode = worldFile.nodes[worldFile.nodes.length - 1];
+			var kept:String = selectedNode.id;
+			undo();
+			check(selectedNode != null && selectedNode.id == kept, 'deshacer un borrado conserva la seleccion ("$kept")');
+		}
+
+		// 10. pintar encima del mismo tile no gasta un paso de deshacer ni borra el rehacer
+		if (paletteFrames.length > 0)
+		{
+			paletteSelected = 0;
+			var size:Float = paletteTileSize;
+			strokeUndoPending = true;
+			paintTile(size * 0.5, size * 0.5);
+			strokeUndoPending = true;
+			paintTile(size * 1.5, size * 0.5);
+			undo();
+			var undoCount:Int = undoStack.length;
+			var redoCount:Int = redoStack.length;
+			strokeUndoPending = true;
+			paintTile(size * 0.5, size * 0.5);
+			check(redoCount > 0 && undoStack.length == undoCount && redoStack.length == redoCount, 'pintar encima del mismo tile no gasta deshacer ni borra el rehacer');
+		}
+
 		// limpieza: build y repo
-		for (name in ['zz_self', 'zz_self_w', 'zz_other'])
+		for (name in ['zz_self', 'zz_self_w', 'zz_other', 'zz_dead'])
+		{
 			for (folder in [Paths.getSharedPath('overworlds/'), '../../../../assets/shared/overworlds/'])
 				if (FileSystem.exists('$folder$name.json')) FileSystem.deleteFile('$folder$name.json');
+			OverworldData.resetProgress(name);
+		}
+		OverworldData.clearWorldCache();
+		OverworldData.simStartWorld = null;
 		trace('SELFTEST FIN: ' + (fails == 0 ? 'todo correcto' : '$fails fallos'));
 	}
 	#end
@@ -3417,6 +3594,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 	{
 		var spr:FlxSprite = decorSpriteOf(data);
 		worldFile.sprites.remove(data);
+		if (selectedSprite == data) selectedSprite = null;
 		if (spr == null)
 		{
 			reloadMap();
@@ -3462,6 +3640,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 		loadedName = worldName;
 		unsavedProgress = false;
+		savedThisFrame = true;
 		refreshWorldLists();
 
 		var problems:Array<String> = checkWorld();
@@ -3516,11 +3695,9 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 	public function UIEvent(id:String, sender:Dynamic)
 	{
+		// la marca de "sin guardar" no se pone aqui: elegir tileset, cargar un mundo de la lista o
+		// las casillas de vista no cambian el mundo. La ponen recordUIChange / trackFocusEdits
+		// cuando el mundo de verdad ha cambiado.
 		uiEventThisFrame = true;
-		switch (id)
-		{
-			case PsychUIInputText.CHANGE_EVENT, PsychUINumericStepper.CHANGE_EVENT, PsychUICheckBox.CLICK_EVENT, PsychUIDropDownMenu.CLICK_EVENT:
-				unsavedProgress = true;
-		}
 	}
 }

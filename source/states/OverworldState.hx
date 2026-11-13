@@ -7,6 +7,8 @@ import backend.WeekData;
 
 import flixel.FlxObject;
 import flixel.addons.display.FlxBackdrop;
+import flixel.graphics.frames.FlxAtlasFrames;
+import flixel.graphics.frames.FlxFrame;
 import flixel.group.FlxGroup.FlxTypedGroup;
 import flixel.text.FlxText.FlxTextFormat;
 import flixel.text.FlxText.FlxTextFormatMarkerPair;
@@ -52,12 +54,30 @@ class OverworldState extends MusicBeatState
 	 * proxima vez que se abra el juego. No guarda mientras se prueba desde el editor, ni encima
 	 * de una salida (solo se pisa de paso al entrar andando a un mundo).
 	 */
+	/** R: reinicia el progreso de este mundo y de sus submundos (no el de los mapas de los que vienes). */
+	function resetWorldProgress()
+	{
+		// tambien los submundos: si no, un submundo ya superado volveria a marcar su nodo al momento
+		for (world in OverworldData.worldTree(curWorld, parentWorlds())) OverworldData.resetProgress(world);
+		FlxG.sound.play(Paths.sound('cancelMenu'));
+		// switchState y no resetState: el primer mapa lo crea Main con los argumentos de arranque,
+		// y resetState los volveria a aplicar (-from, -warp-from o la posicion guardada)
+		MusicBeatState.switchState(new OverworldState());
+	}
+
+	/** Momento del primer R: el progreso solo se borra si se vuelve a pulsar enseguida. */
+	var resetAskedAt:Float = -100;
+
 	function savePosition()
 	{
 		if (returnToEditor || curNodeId == null) return;
+		#if debug
+		if (OverworldPlaytest.running) return; // la prueba automatica no pisa la posicion de la partida
+		#end
 
+		// un nodo cerrado no se guarda: al volver, BF apareceria en un mapa sin sitio donde estar
 		var node:OverworldNodeFile = OverworldData.findNode(worldFile, curNodeId);
-		if (node == null || node.type == 'exit') return;
+		if (node == null || node.type == 'exit' || !OverworldData.isUnlocked(curWorld, worldFile, node)) return;
 
 		FlxG.save.data.overworldPosition = {world: curWorld, node: curNodeId, stack: [for (entry in worldStack) entry.copy()]};
 		FlxG.save.flush();
@@ -97,6 +117,8 @@ class OverworldState extends MusicBeatState
 
 	public static function reset()
 	{
+		OverworldData.clearWorldCache(); // empieza una partida: los mundos se leen de nuevo
+		clearSpriteCache();
 		curWorld = OverworldData.DEFAULT_WORLD;
 		curNodeId = null;
 		fromOverworld = false;
@@ -174,14 +196,15 @@ class OverworldState extends MusicBeatState
 	{
 		fromOverworld = false;
 
-		OverworldData.clearWorldCache(); // las parejas de warp se leen de nuevo en cada mapa
-
 		// la pila nunca puede contener el mapa actual (p. ej. una partida guardada con una pila
 		// corrupta de versiones anteriores): se recorta desde donde aparezca
 		var self:Int = stackIndexOf(curWorld);
 		if (self > -1) worldStack = worldStack.slice(0, self);
 
-		worldFile = OverworldData.load(curWorld);
+		// de cache: los archivos solo cambian al guardar en el editor (que la vacia), y un mundo
+		// pintado tarda en leerse cada vez que BF vuelve de una cancion
+		worldFile = OverworldData.loadCached(curWorld);
+		if (worldFile != null && !returnToEditor) escapeClosedWorld();
 		if (worldFile == null)
 		{
 			var msg:String = 'NO SE PUDO CARGAR EL MUNDO "$curWorld"\n\nassets/shared/overworlds/$curWorld.json\n\nACCEPT: abrir el editor de mundos\nBACK: menu principal';
@@ -222,14 +245,53 @@ class OverworldState extends MusicBeatState
 
 		if (worldFile.music != null && worldFile.music.length > 0)
 		{
-			if (lastMusic != worldFile.music || FlxG.sound.music == null || !FlxG.sound.music.playing)
+			// se sigue con la que suena solo si es de verdad la del mapa: el menu, Freeplay o el
+			// menu de editores la cambian o la bajan a 0 sin que este mapa se entere
+			var current:FlxSound = FlxG.sound.music;
+			var same:Bool = lastMusic == worldFile.music && current != null && current.playing
+				&& lastMusicSound != null && @:privateAccess current._sound == lastMusicSound;
+			if (!same)
 			{
 				FlxG.sound.playMusic(Paths.music(worldFile.music));
 				lastMusic = worldFile.music;
+				lastMusicSound = @:privateAccess FlxG.sound.music._sound;
 			}
+			FlxG.sound.music.volume = 1;
 		}
 
 		super.create();
+	}
+
+	static var lastMusicSound:openfl.media.Sound = null;
+
+	/**
+	 * Un mapa sin ningun nodo abierto dejaria a BF atrapado para siempre (p. ej. la posicion
+	 * guardada en el mundo central despues de reiniciar el mundo que abria su tuberia): se vuelve
+	 * al mapa de fuera o, si no hay, al mundo por defecto. Probando desde el editor no, alli se
+	 * quiere ver el aviso.
+	 */
+	function escapeClosedWorld()
+	{
+		var tries:Int = 0;
+		while (worldFile != null && !Lambda.exists(worldFile.nodes, n -> OverworldData.isUnlocked(curWorld, worldFile, n)) && tries++ < 8)
+		{
+			if (worldStack.length > 0)
+			{
+				var parent:Array<String> = worldStack.pop();
+				curWorld = parent[0];
+				curNodeId = parent[1];
+			}
+			else if (curWorld != OverworldData.DEFAULT_WORLD && OverworldData.exists(OverworldData.DEFAULT_WORLD))
+			{
+				curWorld = OverworldData.DEFAULT_WORLD;
+				curNodeId = null;
+			}
+			else return;
+
+			arrivingFrom = null;
+			arrivingByWarp = null;
+			worldFile = OverworldData.loadCached(curWorld);
+		}
 	}
 
 	/**
@@ -790,16 +852,60 @@ class OverworldState extends MusicBeatState
 
 		if (anim != null && anim.length > 0 && OverworldData.hasAtlas(image))
 		{
-			spr.frames = Paths.getSparrowAtlas(image);
-			spr.animation.addByPrefix('idle', anim, fps > 0 ? fps : 6, loop);
-			if (spr.animation.getByName('idle') != null) spr.animation.play('idle');
-			else spr.loadGraphic(Paths.image(image));
+			var atlas:FlxAtlasFrames = atlasFrames(image);
+			spr.frames = atlas;
+
+			// un fotograma concreto ("tile0042", lo que pinta la paleta): se coge directamente.
+			// addByPrefix recorreria todos los fotogramas del atlas (2188) por cada tile.
+			var exact:FlxFrame = atlas.getByName(anim);
+			if (exact != null && !hasLongerName(atlas, anim)) spr.frame = exact;
+			else
+			{
+				spr.animation.addByPrefix('idle', anim, fps > 0 ? fps : 6, loop);
+				if (spr.animation.getByName('idle') != null) spr.animation.play('idle');
+				else spr.loadGraphic(Paths.image(image));
+			}
 		}
 		else spr.loadGraphic(Paths.image(image));
 
 		spr.antialiasing = false;
 		spr.updateHitbox();
 		return spr;
+	}
+
+	/**
+	 * Fotogramas de cada atlas, leidos una vez por pantalla (el grafico vive mientras dure la
+	 * pantalla; Psych lo libera al cambiar). Paths.getSparrowAtlas comprueba el disco en cada
+	 * llamada, y con miles de tiles se notaba al volver al mapa y en el editor.
+	 */
+	static var framesCache:Map<String, FlxAtlasFrames> = new Map<String, FlxAtlasFrames>();
+
+	/** Olvida los atlas guardados: llamar al crear cada pantalla que use buildSprite. */
+	public static function clearSpriteCache()
+		framesCache.clear();
+
+	static function atlasFrames(image:String):FlxAtlasFrames
+	{
+		// PlayState libera las imagenes del mapa al empezar cada cancion. Una imagen destruida
+		// conserva su `bitmap` (flixel ignora el null), asi que se mira que siga registrada en
+		// FlxG.bitmap con su clave y sin destruir; si no, se vuelve a cargar.
+		var cached:FlxAtlasFrames = framesCache.get(image);
+		if (cached != null && cached.frames != null && cached.parent != null && !cached.parent.isDestroyed
+			&& cached.parent.key != null && FlxG.bitmap.get(cached.parent.key) == cached.parent)
+			return cached;
+
+		var atlas:FlxAtlasFrames = Paths.getSparrowAtlas(image);
+		framesCache.set(image, atlas);
+		return atlas;
+	}
+
+	/** Hay otro fotograma cuyo nombre empieza por `name` (entonces `name` es un prefijo, no un tile suelto). */
+	static function hasLongerName(atlas:FlxAtlasFrames, name:String):Bool
+	{
+		// los tiles van numerados con 4 cifras: basta con mirar si existe "name0" .. "name9"
+		for (digit in 0...10)
+			if (atlas.getByName(name + digit) != null) return true;
+		return false;
 	}
 
 	function loadPlayerGraphic()
@@ -861,7 +967,7 @@ class OverworldState extends MusicBeatState
 		add(nameTxt);
 
 		var backHint:String = returnToEditor ? 'BACK: volver al editor' : 'BACK: menu';
-		hintTxt = new FlxText(10, FlxG.height - 22, FlxG.width - 20, 'ACCEPT: entrar    $backHint    R: reiniciar este mundo y sus submundos', 14);
+		hintTxt = new FlxText(10, FlxG.height - 22, FlxG.width - 20, 'ACCEPT: entrar    $backHint    R dos veces: reiniciar este mundo y sus submundos', 14);
 		hintTxt.setFormat(Paths.font('vcr.ttf'), 14, 0xFFCCCCCC, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		hintTxt.cameras = [camHUD];
 		add(hintTxt);
@@ -918,10 +1024,16 @@ class OverworldState extends MusicBeatState
 
 		if (FlxG.keys.justPressed.R)
 		{
-			// tambien los submundos: si no, un submundo ya superado volveria a marcar su nodo al momento
-			for (world in OverworldData.worldTree(curWorld, parentWorlds())) OverworldData.resetProgress(world);
-			FlxG.sound.play(Paths.sound('cancelMenu'));
-			MusicBeatState.resetState();
+			// borra el progreso de verdad: se pide confirmacion pulsando R otra vez
+			var now:Float = haxe.Timer.stamp();
+			if (now - resetAskedAt < 3)
+			{
+				resetWorldProgress();
+				return;
+			}
+			resetAskedAt = now;
+			FlxG.sound.play(Paths.sound('scrollMenu'));
+			showError('Pulsa R otra vez para borrar el progreso de este mundo y sus submundos');
 			return;
 		}
 
@@ -979,6 +1091,15 @@ class OverworldState extends MusicBeatState
 			// de lado hacia un mapa de mas arriba en la cadena: lo de debajo de el ya no vale
 			var ancestor:Int = stackIndexOf(exit.world);
 			if (ancestor > -1) worldStack = worldStack.slice(0, ancestor);
+			else
+			{
+				// de lado hacia un submundo de otro mapa: la pila de aqui no vale alli, y su salida
+				// sin destino llevaria al castillo equivocado. Se rehace desde sus castillos.
+				var parents:Array<Array<String>> = OverworldData.parentsOf(exit.world);
+				var top:String = worldStack.length > 0 ? worldStack[worldStack.length - 1][0] : null;
+				if (parents.length > 0 && !Lambda.exists(parents, p -> p[0] == top))
+					worldStack = OverworldData.parentChain(exit.world);
+			}
 
 			curWorld = exit.world;
 			curNodeId = null;
@@ -993,9 +1114,16 @@ class OverworldState extends MusicBeatState
 			return;
 		}
 
-		// si se llego aqui de lado desde otro submundo, la puerta correcta es la que lleva a este
-		var parentFile:OverworldFile = OverworldData.load(target[0]);
-		var door:OverworldNodeFile = parentFile == null ? null : Lambda.find(parentFile.nodes, n -> n.type == 'world' && n.world == curWorld);
+		// se vuelve encima del castillo por el que se entro; si se llego aqui de lado desde otro
+		// submundo, ese castillo lleva al otro, y la puerta correcta es la que lleva a este
+		var parentFile:OverworldFile = OverworldData.loadCached(target[0]);
+		var door:OverworldNodeFile = null;
+		if (parentFile != null)
+		{
+			var entered:OverworldNodeFile = OverworldData.findNode(parentFile, target[1]);
+			if (entered != null && entered.type == 'world' && entered.world == curWorld) door = entered;
+			else door = Lambda.find(parentFile.nodes, n -> n.type == 'world' && n.world == curWorld);
+		}
 
 		curWorld = target[0];
 		curNodeId = door != null ? door.id : target[1];
@@ -1007,6 +1135,7 @@ class OverworldState extends MusicBeatState
 		busy = false;
 		FlxG.sound.play(Paths.sound('cancelMenu'));
 		showError(message);
+		updateNameText();
 	}
 
 	/**
@@ -1207,6 +1336,9 @@ class OverworldState extends MusicBeatState
 		node = OverworldData.findNode(worldFile, worldFile.startNode);
 		if (node != null && OverworldData.isUnlocked(curWorld, worldFile, node)) return node;
 
+		// mejor no en una salida: suelen estar fuera de pantalla (y una invisible ni se ve)
+		for (other in worldFile.nodes)
+			if (other.type != 'exit' && OverworldData.isUnlocked(curWorld, worldFile, other)) return other;
 		for (other in worldFile.nodes)
 			if (OverworldData.isUnlocked(curWorld, worldFile, other)) return other;
 

@@ -29,6 +29,8 @@ class MasterEditorMenu extends MusicBeatState
 
 	override function create()
 	{
+		// una cancion que se pruebe desde aqui ya no es la del nodo del overworld
+		states.OverworldState.fromOverworld = false;
 		FlxG.camera.bgColor = FlxColor.BLACK;
 		#if DISCORD_ALLOWED
 		// Updating Discord Rich Presence

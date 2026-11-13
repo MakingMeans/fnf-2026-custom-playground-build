@@ -264,19 +264,37 @@ Un nodo queda bloqueado si tiene *Desbloqueado al empezar* sin marcar **y** ning
 lista en *Desbloquea al completarlo*. Si te pasa, BF se queda quieto porque no tiene a dónde ir.
 Dos botones en la pestaña **Mundo** para esto:
 
-- **Comprobar mundo**: **simula una partida entera** (sale del nodo inicial, completa todo lo que
-  alcanza y aplica los desbloqueos hasta que no se abre nada más) y lista lo que falla:
-  - nodos **inalcanzables** aunque completes todo lo demás;
+- **Comprobar mundo**: hace **dos simulaciones** y lista lo que falla.
+  - **Este mundo**: BF sale de cada sitio por el que puede aparecer en él (el nodo inicial, las
+    salidas por las que se llega de lado y las tuberías con pareja), completa todo lo que alcanza
+    y aplica los desbloqueos hasta que no se abre nada más. Un castillo solo cuenta como superado
+    si **todo lo de dentro** se puede superar.
+  - **La partida entera**: lo mismo, pero empezando en el mundo por defecto y pasando de un
+    mundo a otro como en el juego (castillos, salidas, tuberías). Encuentra los bloqueos **entre
+    mundos**, que mirando cada mundo por separado parecen correctos. Por ejemplo, un mundo al que
+    solo se llega por una tubería que abre ese mismo mundo.
+
+  Lo que avisa:
+  - nodos **inalcanzables** aunque completes todo lo demás, y nodos a los que **jugando desde el
+    principio** no se llega nunca (lo que los abre está en otro mundo al que no se llega antes);
+  - un mundo al que **no se llega** desde el mundo por defecto (normal mientras lo construyes:
+    enlázalo con un castillo, una salida o un warp);
   - nodos sin caminos, bloqueados que nadie desbloquea, niveles sin canción, nodos `world` que
-    apuntan a un mapa inexistente;
+    apuntan a un mapa inexistente o a este mismo mapa;
   - `unlocks` con IDs que no existen (una errata deja ese nodo bloqueado para siempre);
   - desbloqueos puestos en nodos `empty`: un punto de paso **nunca se completa**, así que no
     desbloquea nada. Los desbloqueos van en un `level` o en un `world`;
-  - nodos `world` que llevan a un mundo sin nada que superar (nunca se completarían);
-  - submundos sin ningún nodo `exit` (BF no podría salir);
+  - castillos (`world`) que no se pueden superar: su mundo no tiene nada que superar, o tiene
+    algo inalcanzable dentro;
+  - submundos sin ningún nodo `exit` (BF no podría salir), y salidas sin destino en un mundo al
+    que no lleva ningún castillo (no sabrían a dónde volver);
+  - un mundo al que se entra desde castillos de **varios mapas** (al superarlo se completan todos);
+  - una salida con destino que se puede pisar **antes** de que se abra su salida de vuelta (BF
+    llegaría al nodo inicial del otro mundo);
   - warps sin pareja, dos warps emparejados que no se abren nunca, dos warps (o dos salidas con
     destino) hacia el mismo mundo, y un nodo `world` que hace bucle con su propio submundo;
-  - IDs repetidos, caminos repetidos o hacia nodos que no existen, nodo inicial bloqueado.
+  - IDs repetidos, caminos repetidos o hacia nodos que no existen, nodo inicial bloqueado o que
+    es una salida.
 
   También salta solo al guardar. En pantalla caben 4 avisos; la lista completa sale por consola.
   En la build debug, además, cada mundo que se carga escribe sus avisos en la consola.
@@ -295,7 +313,8 @@ en bucle), como Mario en el mapa de SMW.
 
 - **CTRL+S** guarda (te dice abajo en verde las dos rutas donde ha escrito).
 - **CTRL+T** lo prueba de verdad: BF aparece en el nodo inicial. BACK te devuelve al editor.
-- Dentro del mapa, **R** reinicia el progreso para volver a probar los desbloqueos desde cero.
+- Dentro del mapa, **R dos veces** reinicia el progreso para volver a probar los desbloqueos
+  desde cero.
 
 ### Paso 6 — que sea el mapa principal
 
@@ -378,8 +397,9 @@ central**:
    el destino y pulsa **Crear pareja**.
 
 El mundo central solo se puede pisar llegando por una tubería: si lo abres directamente sin
-ninguna tubería abierta, dirá que no tiene ningún nodo desbloqueado. No lo pongas como mundo por
-defecto.
+ninguna tubería abierta, no hay dónde aparecer. En el juego, BF vuelve entonces al mapa de fuera
+o al mundo por defecto (probando desde el editor, en cambio, sale el aviso de que no hay ningún
+nodo desbloqueado). No lo pongas como mundo por defecto.
 
 Resultado: desde el mundo central solo se puede viajar a los mundos con el castillo derrumbado,
 y se aparece encima de su tubería.
@@ -491,7 +511,7 @@ de la build al repo. También existe **Guardar como...** para elegir la ruta a m
       "name": "Tutorial",
       "song": "tutorial",
       "week": "tutorial",
-      "difficulty": "",               // vacío = Normal
+      "difficulty": "",               // no se usa: esta build solo tiene Hard (ver Dificultad)
       "world": "",                    // solo para type "world"
       "unlocked": true,
       "unlocks": ["n1"]
@@ -529,11 +549,29 @@ de la build al repo. También existe **Guardar como...** para elegir la ruta a m
   mapa, también dentro de un submundo. BACK en ese menú te devuelve al mismo mapa y nodo.
 - **Nodo `exit`**: al llegar andando a él, BF sale del submundo (sin *Mundo destino*) o pasa al
   mundo que tenga de destino, entrando andando por la salida de vuelta.
-- **R**: reinicia el progreso del mundo actual **y de sus submundos** (útil mientras pruebas). No
-  toca los mapas de los que vienes.
+- **R dos veces seguidas** (la primera pide confirmación): reinicia el progreso del mundo actual
+  **y de sus submundos** (útil mientras pruebas). No toca los mapas de los que vienes. Ojo: lo que
+  se abría desde esos submundos en otros mapas (por ejemplo la tubería del mundo central) vuelve a
+  cerrarse.
+- **Mapa sin ningún nodo abierto**: si BF va a parar a un mapa donde no hay ningún nodo abierto
+  (por ejemplo, la posición guardada en el mundo central después de reiniciar el mundo que abría
+  su tubería), vuelve solo al mapa de fuera o al mundo por defecto, para no quedarse atrapado.
 
 El progreso se guarda en el `FlxG.save` del juego, con la clave `overworldProgress`
-(`"<mundo>::<nodo>"`).
+(`"<mundo>::<nodo>"`). Un nodo nuevo no hereda el progreso de uno borrado que tuviera su mismo ID,
+y renombrar un nodo se lleva su progreso al ID nuevo.
+
+## Pruebas automáticas (solo build debug)
+
+Se lanzan desde `export/debug/windows/bin` (el juego busca `assets\` en su carpeta):
+
+| Argumentos | Qué hace |
+|---|---|
+| `-check-worlds` | Revisa todos los mundos de la build (también la partida entera), escribe el resultado en `check_worlds.txt` junto al exe y se cierra. |
+| `-overworld-editor test_graph -selftest` | Prueba los botones de unir mundos, el aspecto desde la paleta, deshacer, pintar y los avisos de la partida entera. Escribe `SELFTEST OK/FAIL` por consola y borra sus mundos `zz_*`. |
+| `-playtest` | Monta 4 mundos de demostración con las funciones del editor y los juega por código (una canción de verdad, castillo, tuberías, salida lateral, menú, R). Deja `playtest_result.txt` y capturas en `playtest_shots\`, borra sus mundos `zz_demo*` y se cierra. En cada captura comprueba también que ningún sprite use una imagen ya liberada. |
+
+Ninguna toca la partida del usuario ni simula teclas.
 
 **Dónde está BF también se guarda** (clave `overworldPosition`: mundo, nodo y la pila de
 submundos): al abrir el juego otra vez, sigue en el mismo sitio, aunque sea dentro de un castillo.

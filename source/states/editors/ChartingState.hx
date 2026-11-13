@@ -218,6 +218,8 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 
 	override function create()
 	{
+		// probar o cambiar de chart desde aqui no debe completar el nodo del overworld de antes
+		states.OverworldState.fromOverworld = false;
 		if(Difficulty.list.length < 1) Difficulty.resetList();
 		_keysPressedBuffer.resize(keysArray.length);
 

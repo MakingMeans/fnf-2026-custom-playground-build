@@ -159,6 +159,36 @@ class Main extends Sprite
 		#if sys
 		var launchArgs:Array<String> = Sys.args();
 		var editorArg:Int = launchArgs.indexOf('-overworld-editor');
+		#if debug
+		// -check-worlds: revisa todos los mundos (con la partida completa), lo escribe en
+		// check_worlds.txt junto al exe y se cierra
+		if (launchArgs.contains('-check-worlds'))
+		{
+			firstState = function():flixel.FlxState
+			{
+				var lines:Array<String> = [];
+				for (world in backend.OverworldData.listWorlds())
+				{
+					var problems:Array<String> = backend.OverworldData.checkWorld(backend.OverworldData.load(world), world);
+					lines.push('$world: ' + (problems.length == 0 ? 'sin avisos' : '\n  - ' + problems.join('\n  - ')));
+				}
+				sys.io.File.saveContent('check_worlds.txt', lines.join('\n') + '\n');
+				Sys.exit(0);
+				return null;
+			};
+		}
+		else
+		// -playtest: prueba automatica del overworld (monta mundos de demostracion y los juega)
+		if (launchArgs.contains('-playtest'))
+		{
+			firstState = function():flixel.FlxState
+			{
+				states.OverworldPlaytest.start();
+				return new states.editors.OverworldEditorState('zz_demo');
+			};
+		}
+		else
+		#end
 		if (editorArg > -1)
 		{
 			var worldToOpen:String = null;
