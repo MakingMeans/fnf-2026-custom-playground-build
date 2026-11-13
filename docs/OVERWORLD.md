@@ -49,27 +49,29 @@ el título vuelve a llevar directamente al menú clásico de siempre.
 
 | Tecla / ratón | Qué hace |
 |---|---|
-| **V** | Modo SELECCIONAR: clic para elegir y arrastrar nodos o decorados |
+| **V** | Modo SELECCIONAR: clic para elegir y arrastrar nodos o decorados. **SHIFT+clic** suma o quita del grupo; **arrastrar en el vacío** dibuja un rectángulo que selecciona lo de dentro (con SHIFT, lo añade) |
 | **N** | Modo NODO: clic en el mapa crea un nodo nuevo |
 | **B** | Modo DECORADO: clic coloca el sprite elegido en la pestaña *Decorado* |
-| **C** | Modo CAMINO: clic en un nodo y luego en otro para unirlos |
+| **C** | Modo CAMINO: clic en un nodo y luego en otro para unirlos. Si no están alineados, el camino sale **en L** (con SHIFT en el segundo clic, primero en vertical) |
 | **T** | Modo PINTAR TILES: pinta con el tile elegido en la paleta (arrastra para pintar seguido) |
-| **L** | Modo ENLAZAR: clic en el nodo que desbloquea y luego en cada nodo que abre (ver abajo). L otra vez vuelve a SELECCIONAR |
+| **L** | Modo ENLAZAR: clic en el nodo que desbloquea y luego en cada nodo (o camino) que abre; SHIFT+clic = con su salida secreta (ver abajo). L otra vez vuelve a SELECCIONAR |
 | **P** | Mostrar / ocultar la paleta de tiles |
 | Clic derecho | Borra lo que haya bajo el ratón (en modo L solo cancela; sobre un punto de curva, borra ese punto) |
 | Arrastrar un punto de curva | Lo mueve (modos V y C) |
 | **E** | Ir al siguiente aviso: selecciona su nodo y centra la cámara en él |
-| SUPR | Borra la selección actual |
+| SUPR | Borra la selección actual (o el grupo entero, en un solo paso de deshacer) |
+| **CTRL+D** | Duplica la selección o el grupo un poco más abajo a la derecha. Los nodos copiados llevan IDs nuevos, y los caminos y desbloqueos entre ellos apuntan a las copias |
 | ALT (mantener) | Coloca sin ajustar a la rejilla |
 | Rueda del ratón | Zoom |
 | Botón central / flechas | Mover la cámara |
 | **G** | Mostrar / ocultar la rejilla |
-| **U** | Mostrar / ocultar las flechas rosas de desbloqueo (de cada nodo a los que desbloquea) |
+| **U** | Mostrar / ocultar las flechas de desbloqueo: rosas (lo que abre al completarlo), amarillas (lo que abre su salida secreta) y naranjas (de un nodo a la mitad del camino que abre) |
 | **CTRL+Z** / **CTRL+Y** | Deshacer / rehacer (también CTRL+SHIFT+Z, y hay botones en la pestaña *Mundo*). Funcionan aunque estés escribiendo en un campo |
 | **CTRL+S** | Guardar |
 | **CTRL+T** | Probar el mundo (BACK dentro del mapa te devuelve al editor) |
+| **CTRL+SHIFT+T** | Probar **desde el nodo elegido**, aunque con tu partida todavía esté cerrado (también el botón *Probar desde aquí* de la pestaña Nodo y *Probar desde el nodo* de la pestaña Mundo) |
 | **F1** | Ayuda en pantalla |
-| **ESC** | Salir del modo actual (vuelve a SELECCIONAR). En SELECCIONAR, volver al menú de editores; con cambios sin guardar avisa y hay que pulsarlo otra vez |
+| **ESC** | Soltar el grupo; si no hay, salir del modo actual (vuelve a SELECCIONAR). En SELECCIONAR, volver al menú de editores; con cambios sin guardar avisa y hay que pulsarlo otra vez |
 
 El **rectángulo blanco discontinuo** ("LO QUE SE VE EN EL JUEGO") marca hasta dónde puede llegar
 la cámara del juego con el zoom del mundo. Lo que quede fuera no se ve nunca: ahí van las salidas
@@ -88,7 +90,17 @@ horizontal, así una L sigue siendo una L.
 las pestañas: un renombrado o una lista de desbloqueos se deshace de una vez, no letra a letra, y
 varios clics seguidos en un mismo contador cuentan como un paso. Con un campo de texto activo,
 CTRL+Z / CTRL+Y salen del campo y deshacen en el mundo. Al deshacer se mantiene seleccionado lo que
-tenías elegido.
+tenías elegido. Además:
+
+- Deshacer el **borrado de un nodo** le devuelve su progreso de la partida (y el de su salida secreta).
+- Con miles de tiles pintados, deshacer un trazo solo quita y pone esos tiles: ya no rehace el mapa entero.
+- Si deshaces **Crear submundo** y guardas, el submundo que ya no usa nadie se borra (solo si nadie
+  lo ha tocado desde que se creó). Si vuelves a pulsar *Crear submundo*, se reutiliza su nombre.
+
+**Grupos**: SHIFT+clic o un rectángulo en modo V. Arrastrar cualquier cosa del grupo mueve todo
+(también las curvas de los caminos que van de un nodo del grupo a otro), **SUPR** lo borra y
+**CTRL+D** lo duplica. Las cajas azules marcan el grupo; la amarilla es el elegido, el que
+muestran las pestañas. **ESC** suelta el grupo.
 
 **Cambiar de mundo** (cargar otro, *Mundo nuevo* o *Ir al destino*) empieza un historial nuevo. Si
 hay cambios sin guardar, la primera vez solo avisa: repite la acción para descartarlos. *Mundo
@@ -130,9 +142,28 @@ normal en la paleta sigue siendo elegir tile para pintar.
 5. Para salir del modo: **L** otra vez, **V** o **ESC**.
 
 Enlazar **bloquea al destino** (si empezaba abierto, el desbloqueo no haría nada), y quitar su
-último enlace lo vuelve a dejar abierto. El nodo inicial no se puede enlazar como destino: tiene
-que empezar abierto. Es lo mismo que escribir los IDs en *Desbloquea al completarlo*, pero sin
-erratas.
+último enlace lo vuelve a dejar abierto (salvo que se abra por otra vía: un warp con pareja o un
+nodo de "N superados"). El nodo inicial no se puede enlazar como destino: tiene que empezar
+abierto. Es lo mismo que escribir los IDs en *Desbloquea al completarlo*, pero sin erratas.
+
+- **SHIFT+clic** en un nodo: lo abre la **salida secreta** del nodo de origen (tiene que ser un nivel).
+- **Clic en un camino**: ese camino **solo se abre al completar** el nodo de origen (un atajo entre
+  dos nodos que ya estaban abiertos). Con **SHIFT**, con su salida secreta. Otro clic igual lo quita.
+
+### Reglas de apertura avanzadas
+
+Además de *Desbloqueado al empezar* y *Desbloquea al completarlo*, hay tres reglas más:
+
+| Regla | Dónde se pone | Qué hace |
+|---|---|---|
+| **N superados** | Pestaña Nodo, contador *N superados* | El nodo también se abre en cuanto tienes N nodos superados **en este mundo** (niveles y castillos). Al intentar ir hacia él antes de tiempo, el mapa dice cuántos llevas. |
+| **Camino con condición propia** | Pestaña Camino (*Solo se abre al completar*), o modo L + clic en el camino | El camino no aparece hasta completar ese nodo, aunque sus dos extremos ya estén abiertos. Sirve para atajos. En el editor se ve **discontinuo** (naranja; amarillo si es de salida secreta). |
+| **Salida secreta** | Pestaña Nodo: *Salida secreta* (`sin fallos` o `precision` con su *% mínimo*) y *Su salida secreta desbloquea*; o modo L + SHIFT+clic | Al superar el nivel cumpliendo la condición (0 fallos, o al menos ese % de precisión), además se abre lo de su salida secreta. Puede sacarse repitiendo el nivel. En *practice* o *botplay* no cuenta. |
+
+En el juego, un nivel con salida secreta muestra `?` junto a su nombre hasta que la sacas, y
+después **SECRETO** en amarillo; al volver de la canción sale "¡Salida secreta!", y a la derecha
+de la barra se lee `Secretos: X/Y` del mundo. En el editor, su etiqueta lleva un `*` y la de un
+nodo de N superados, `(N sup.)`.
 
 ### Avisos sobre el mapa
 
@@ -286,6 +317,9 @@ Dos botones en la pestaña **Mundo** para esto:
     desbloquea nada. Los desbloqueos van en un `level` o en un `world`;
   - castillos (`world`) que no se pueden superar: su mundo no tiene nada que superar, o tiene
     algo inalcanzable dentro;
+  - nodos de "N superados" que piden más de los que hay en el mundo, salidas secretas puestas en
+    algo que no es un nivel o hacia IDs que no existen, y caminos que abre un nodo que no existe o
+    que nunca se completa;
   - submundos sin ningún nodo `exit` (BF no podría salir), y salidas sin destino en un mundo al
     que no lleva ningún castillo (no sabrían a dónde volver);
   - un mundo al que se entra desde castillos de **varios mapas** (al superarlo se completan todos);
@@ -514,7 +548,11 @@ de la build al repo. También existe **Guardar como...** para elegir la ruta a m
       "difficulty": "",               // no se usa: esta build solo tiene Hard (ver Dificultad)
       "world": "",                    // solo para type "world"
       "unlocked": true,
-      "unlocks": ["n1"]
+      "unlocks": ["n1"],
+      "needLevels": 0,                // >0: tambien se abre con N superados en este mundo
+      "secretUnlocks": [],            // lo que abre su salida secreta (solo niveles)
+      "secretMode": "fc",             // "fc" = sin fallos | "accuracy" = precision minima
+      "secretAccuracy": 95            // con "accuracy": % minimo
     }
   ],
 
@@ -525,7 +563,9 @@ de la build al repo. También existe **Guardar como...** para elegir la ruta a m
 
   "paths": [
     { "a": "n0", "b": "n1", "points": [[192, 160]],
-      "dots": "overworld/dot", "dotAnim": "idle", "dotSpacing": 16 }
+      "dots": "overworld/dot", "dotAnim": "idle", "dotSpacing": 16,
+      "unlockedBy": "",               // id del nodo que lo abre al completarse ("" = con sus nodos)
+      "secret": false }               // true: lo abre la salida secreta de unlockedBy
   ]
 }
 ```
@@ -549,6 +589,11 @@ de la build al repo. También existe **Guardar como...** para elegir la ruta a m
   mapa, también dentro de un submundo. BACK en ese menú te devuelve al mismo mapa y nodo.
 - **Nodo `exit`**: al llegar andando a él, BF sale del submundo (sin *Mundo destino*) o pasa al
   mundo que tenga de destino, entrando andando por la salida de vuelta.
+- **Transiciones**: al entrar a un nivel, a un castillo, a una tubería o a otro mapa, la pantalla se
+  cierra en un **círculo sobre BF** y el mapa siguiente se abre igual (también al volver de una
+  canción), como en Super Mario World.
+- **Cámara**: si un camino que se acaba de abrir se sale de la pantalla, la cámara va a mirarlo
+  mientras aparece y luego vuelve a BF.
 - **R dos veces seguidas** (la primera pide confirmación): reinicia el progreso del mundo actual
   **y de sus submundos** (útil mientras pruebas). No toca los mapas de los que vienes. Ojo: lo que
   se abría desde esos submundos en otros mapas (por ejemplo la tubería del mundo central) vuelve a
@@ -558,7 +603,8 @@ de la build al repo. También existe **Guardar como...** para elegir la ruta a m
   su tubería), vuelve solo al mapa de fuera o al mundo por defecto, para no quedarse atrapado.
 
 El progreso se guarda en el `FlxG.save` del juego, con la clave `overworldProgress`
-(`"<mundo>::<nodo>"`). Un nodo nuevo no hereda el progreso de uno borrado que tuviera su mismo ID,
+(`"<mundo>::<nodo>"`, y `"<mundo>::<nodo>#secret"` para las salidas secretas; por eso los IDs no
+admiten `#`). Un nodo nuevo no hereda el progreso de uno borrado que tuviera su mismo ID,
 y renombrar un nodo se lleva su progreso al ID nuevo.
 
 ## Pruebas automáticas (solo build debug)
@@ -568,8 +614,8 @@ Se lanzan desde `export/debug/windows/bin` (el juego busca `assets\` en su carpe
 | Argumentos | Qué hace |
 |---|---|
 | `-check-worlds` | Revisa todos los mundos de la build (también la partida entera), escribe el resultado en `check_worlds.txt` junto al exe y se cierra. |
-| `-overworld-editor test_graph -selftest` | Prueba los botones de unir mundos, el aspecto desde la paleta, deshacer, pintar y los avisos de la partida entera. Escribe `SELFTEST OK/FAIL` por consola y borra sus mundos `zz_*`. |
-| `-playtest` | Monta 4 mundos de demostración con las funciones del editor y los juega por código (una canción de verdad, castillo, tuberías, salida lateral, menú, R). Deja `playtest_result.txt` y capturas en `playtest_shots\`, borra sus mundos `zz_demo*` y se cierra. En cada captura comprueba también que ningún sprite use una imagen ya liberada. |
+| `-overworld-editor test_graph -selftest` | Prueba los botones de unir mundos, el aspecto desde la paleta, deshacer (con progreso, tiles y submundos), pintar, grupos, el rectángulo, los avisos nuevos y los de la partida entera. Escribe `SELFTEST OK/FAIL` por consola (49 comprobaciones) y borra sus mundos `zz_*`. |
+| `-playtest` | Monta 5 mundos de demostración con las funciones del editor y los juega por código: una canción de verdad, castillo, tuberías, salida lateral, menú, R, un mapa sin nodos abiertos, probar desde un nodo cerrado, salidas secretas (sin fallos y por precisión), un nodo de N superados, un atajo con condición, la cámara del revelado y el iris (99 comprobaciones). Deja `playtest_result.txt` y capturas en `playtest_shots\` (también del editor), borra sus mundos `zz_demo*` y se cierra. En cada captura comprueba que ningún sprite use una imagen ya liberada. |
 
 Ninguna toca la partida del usuario ni simula teclas.
 

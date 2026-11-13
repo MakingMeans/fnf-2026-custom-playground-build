@@ -232,7 +232,9 @@ class Paths
 		var bitmap:BitmapData = null;
 		if (currentTrackedAssets.exists(key))
 		{
-			localTrackedAssets.push(key);
+			// sin repetir: cada imagen ya cargada se apuntaba otra vez en cada uso, y en editores
+			// que rehacen miles de sprites la lista crecia sin parar (y con ella cada .contains)
+			if (!localTrackedAssets.contains(key)) localTrackedAssets.push(key);
 			return currentTrackedAssets.get(key);
 		}
 		return cacheBitmap(key, parentFolder, bitmap, allowGPU);
@@ -276,7 +278,7 @@ class Paths
 		graph.destroyOnNoUse = false;
 
 		currentTrackedAssets.set(key, graph);
-		localTrackedAssets.push(key);
+		if (!localTrackedAssets.contains(key)) localTrackedAssets.push(key);
 		return graph;
 	}
 
@@ -442,7 +444,7 @@ class Paths
 				return FlxAssets.getSound('flixel/sounds/beep');
 			}
 		}
-		localTrackedAssets.push(file);
+		if (!localTrackedAssets.contains(file)) localTrackedAssets.push(file);
 		return currentTrackedSounds.get(file);
 	}
 

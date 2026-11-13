@@ -2490,7 +2490,7 @@ class PlayState extends MusicBeatState
 
 				canResync = false;
 				if(!ClientPrefs.getGameplaySetting('practice') && !ClientPrefs.getGameplaySetting('botplay'))
-					states.OverworldState.completeCurrentNode();
+					states.OverworldState.completeCurrentNode(songMisses, ratingPercent); // fallos y precision: salida secreta
 
 				states.OverworldState.backToOverworld();
 				FlxG.sound.playMusic(Paths.music('freakyMenu'));

@@ -12,6 +12,7 @@ import flixel.graphics.frames.FlxFrame;
 import flixel.group.FlxGroup.FlxTypedGroup;
 import flixel.text.FlxText.FlxTextFormat;
 import flixel.text.FlxText.FlxTextFormatMarkerPair;
+import shaders.IrisShader;
 
 /**
  * Mapa estilo Super Mario World: BF camina de nodo en nodo por caminos y entra a los niveles.
@@ -32,6 +33,13 @@ class OverworldState extends MusicBeatState
 
 	/** El mundo que estaba abierto en el editor al pulsar CTRL+T: BACK vuelve a el. */
 	public static var editorWorld:String = null;
+
+	/**
+	 * "Probar desde aqui" del editor: BF aparece en ese nodo aunque con la partida actual aun este
+	 * cerrado (solo probando desde el editor).
+	 */
+	public static var testStartWorld:String = null;
+	public static var testStartNode:String = null;
 
 	static var worldStack:Array<Array<String>> = [];
 	static var lastMusic:String = null;
@@ -129,28 +137,55 @@ class OverworldState extends MusicBeatState
 		arrivingFrom = null;
 		arrivingByWarp = null;
 		editorWorld = null;
+		testStartWorld = null;
+		testStartNode = null;
 		worldStack = [];
 	}
 
 	/** Mundo del que viene BF por un warp: aqui aparece encima de su pareja. Main lo usa con -warp-from. */
 	public static var arrivingByWarp:String = null;
 
-	/** Llamado al terminar una cancion lanzada desde el overworld. */
-	public static function completeCurrentNode()
+	/**
+	 * Llamado al terminar una cancion lanzada desde el overworld. Con `misses` y `accuracy` (0-1) de
+	 * la partida se mira tambien la salida secreta del nivel (sin fallos o con precision minima).
+	 */
+	public static function completeCurrentNode(?misses:Int = -1, ?accuracy:Float = 0)
 	{
 		if (!fromOverworld || lastLevelNode == null) return;
 
-		// repetir un nivel ya superado no abre nada nuevo: solo se anima la primera vez
-		if (!OverworldData.isCompleted(curWorld, lastLevelNode)) pendingReveal = [curWorld, lastLevelNode];
+		var firstTime:Bool = !OverworldData.isCompleted(curWorld, lastLevelNode);
 		OverworldData.setCompleted(curWorld, lastLevelNode);
+
+		var file:OverworldFile = OverworldData.loadCached(curWorld);
+		var node:OverworldNodeFile = OverworldData.findNode(file, lastLevelNode);
+		var secretNow:Bool = misses >= 0 && node != null && OverworldData.hasSecret(file, node)
+			&& !OverworldData.isSecretCompleted(curWorld, node.id) && OverworldData.secretAchieved(node, misses, accuracy);
+		if (secretNow)
+		{
+			OverworldData.setCompleted(curWorld, node.id + OverworldData.SECRET);
+			secretMessage = true;
+		}
+
+		// repetir un nivel ya superado no abre nada nuevo: solo se anima la primera vez (o la
+		// primera vez que se saca su salida secreta, y entonces solo lo que abre ella)
+		if (firstTime) pendingReveal = [curWorld, lastLevelNode];
+		else if (secretNow) pendingReveal = [curWorld, lastLevelNode + OverworldData.SECRET];
 	}
 
-	/** Vuelve al mapa (usado por PlayState, pausa y game over). */
+	/** Al volver al mapa se avisa de que se acaba de sacar una salida secreta. */
+	static var secretMessage:Bool = false;
+
+	/** Vuelve al mapa (usado por PlayState, pausa y game over): el mapa se abre con el iris. */
 	public static function backToOverworld()
 	{
 		fromOverworld = false;
+		irisOpenNext = true;
+		FlxTransitionableState.skipNextTransOut = true;
 		MusicBeatState.switchState(new OverworldState());
 	}
+
+	/** El siguiente mapa se abre con el iris desde BF en vez del fundido de Psych. */
+	public static var irisOpenNext:Bool = false;
 
 	// ------------------------------------------------------------- construccion
 	var worldFile:OverworldFile;
@@ -207,6 +242,8 @@ class OverworldState extends MusicBeatState
 		if (worldFile != null && !returnToEditor) escapeClosedWorld();
 		if (worldFile == null)
 		{
+			irisOpenNext = false;
+			FlxTransitionableState.skipNextTransOut = false;
 			var msg:String = 'NO SE PUDO CARGAR EL MUNDO "$curWorld"\n\nassets/shared/overworlds/$curWorld.json\n\nACCEPT: abrir el editor de mundos\nBACK: menu principal';
 			FlxTransitionableState.skipNextTransIn = true;
 			MusicBeatState.switchState(new ErrorState(msg,
@@ -234,6 +271,7 @@ class OverworldState extends MusicBeatState
 
 		buildMap();
 		buildHUD();
+		buildIris();
 
 		// si BF esta entrando andando por una salida, se guarda al llegar al primer nodo
 		if (!walking) savePosition();
@@ -242,6 +280,19 @@ class OverworldState extends MusicBeatState
 		applyCameraBounds();
 		camGame.follow(camFollow, LOCKON, 0.12);
 		camGame.snapToTarget();
+
+		if (irisOpenNext)
+		{
+			irisOpenNext = false;
+			irisOpen();
+			if (revealing) revealTimer += IRIS_OPEN_TIME; // los caminos nuevos salen con el iris ya abierto
+		}
+
+		if (secretMessage)
+		{
+			secretMessage = false;
+			showError('¡Salida secreta!', 0xFFFFD84A);
+		}
 
 		if (worldFile.music != null && worldFile.music.length > 0)
 		{
@@ -613,7 +664,8 @@ class OverworldState extends MusicBeatState
 		if (nodeA == null || nodeB == null) return false;
 
 		return OverworldData.isUnlocked(curWorld, worldFile, nodeA, ignoreCompleted)
-			&& OverworldData.isUnlocked(curWorld, worldFile, nodeB, ignoreCompleted);
+			&& OverworldData.isUnlocked(curWorld, worldFile, nodeB, ignoreCompleted)
+			&& OverworldData.isPathUnlocked(curWorld, worldFile, pth, ignoreCompleted);
 	}
 
 	/** Crea los puntitos de un camino, de `a` hacia `b`, y los devuelve en ese orden. */
@@ -723,7 +775,11 @@ class OverworldState extends MusicBeatState
 			revealWaves.shift();
 			revealStep = 0;
 			revealTimer += REVEAL_DOT_TIME;
-			if (revealWaves.length < 1) revealing = false;
+			if (revealWaves.length < 1)
+			{
+				revealing = false;
+				endRevealFocus();
+			}
 		}
 	}
 
@@ -732,7 +788,28 @@ class OverworldState extends MusicBeatState
 		dot.visible = true;
 		dot.scale.set(0.2, 0.2);
 		FlxTween.tween(dot.scale, {x: 1, y: 1}, 0.2, {ease: FlxEase.backOut});
+
+		// un puntito que no se veria con la camara sobre BF: la camara va a el (y despues vuelve).
+		// Se mide desde BF y no desde la camara, para que dos caminos de la misma oleada no se la
+		// disputen; y uno fuera de lo que la camara puede ensenar (camino de una salida) no cuenta.
+		var x:Float = dot.x + dot.width * 0.5;
+		var y:Float = dot.y + dot.height * 0.5;
+		var halfW:Float = camGame.width / camGame.zoom * 0.5 - 24;
+		var halfH:Float = camGame.height / camGame.zoom * 0.5 - 24;
+		var area:Array<Float> = cameraArea(mapWidth, mapHeight, camGame.zoom);
+		var showable:Bool = x >= area[0] && x <= area[0] + area[2] && y >= area[1] && y <= area[1] + area[3];
+		if (showable && (Math.abs(x - playerX) > halfW || Math.abs(y - playerY) > halfH))
+		{
+			revealFocus = [x, y];
+			revealFollowed = true;
+		}
 	}
+
+	/** Punto que mira la camara mientras se revela un camino que se sale de la pantalla. */
+	var revealFocus:Array<Float> = null;
+
+	/** La camara ha ido a mirar algun camino revelado fuera de pantalla (lo comprueba la prueba automatica). */
+	var revealFollowed:Bool = false;
 
 	function finishReveal()
 	{
@@ -742,6 +819,14 @@ class OverworldState extends MusicBeatState
 
 		revealWaves = [];
 		revealing = false;
+		endRevealFocus();
+	}
+
+	/** Al acabar el revelado, la camara se queda un momento mirando y vuelve a BF. */
+	function endRevealFocus()
+	{
+		if (revealFocus == null) return;
+		new FlxTimer().start(0.5, function(_:FlxTimer) revealFocus = null);
 	}
 
 	// ------------------------------------------------------------- marca de superado
@@ -983,11 +1068,27 @@ class OverworldState extends MusicBeatState
 			add(progressTxt);
 		}
 
+		// salidas secretas del mundo, si tiene
+		var secrets:Array<Int> = OverworldData.secretCount(curWorld, worldFile);
+		if (secrets[1] > 0)
+		{
+			var secretTxt:FlxText = new FlxText(10, FlxG.height - 22, FlxG.width - 20, 'Secretos: ${secrets[0]}/${secrets[1]}', 14);
+			secretTxt.setFormat(Paths.font('vcr.ttf'), 14, secrets[0] >= secrets[1] ? SECRET_COLOR : 0xFFCCCCCC, RIGHT,
+				FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			secretTxt.cameras = [camHUD];
+			add(secretTxt);
+		}
+
 		updateNameText();
 	}
 
+	static inline final SECRET_COLOR:FlxColor = 0xFFFFD84A;
+
 	static inline final DONE_COLOR:FlxColor = 0xFF66FF66;
-	static final DONE_MARKUP:Array<FlxTextFormatMarkerPair> = [new FlxTextFormatMarkerPair(new FlxTextFormat(DONE_COLOR), '<g>')];
+	static final DONE_MARKUP:Array<FlxTextFormatMarkerPair> = [
+		new FlxTextFormatMarkerPair(new FlxTextFormat(DONE_COLOR), '<g>'),
+		new FlxTextFormatMarkerPair(new FlxTextFormat(SECRET_COLOR), '<y>')
+	];
 
 	// ------------------------------------------------------------- bucle
 	override function update(elapsed:Float)
@@ -1002,13 +1103,28 @@ class OverworldState extends MusicBeatState
 		else if (walking) updateWalk(elapsed);
 		else if (!busy) updateInput();
 
-		if (camFollow != null) camFollow.setPosition(playerX, playerY);
+		// mientras se revela un camino fuera de pantalla, la camara va a mirarlo
+		if (camFollow != null)
+		{
+			if (revealFocus != null) camFollow.setPosition(revealFocus[0], revealFocus[1]);
+			else camFollow.setPosition(playerX, playerY);
+		}
 
 		super.update(elapsed);
+
+		if (iris != null && iris.visible)
+		{
+			var center:Array<Float> = irisCenter();
+			irisShader.setIris(center[0], center[1], irisRadius);
+		}
 	}
 
 	function updateInput()
 	{
+		// tras un revelado, cualquier tecla devuelve la camara a BF sin esperar
+		if (revealFocus != null && (controls.ACCEPT || controls.BACK || controls.UI_LEFT_P || controls.UI_RIGHT_P || controls.UI_UP_P || controls.UI_DOWN_P))
+			revealFocus = null;
+
 		if (controls.BACK)
 		{
 			FlxG.sound.play(Paths.sound('cancelMenu'));
@@ -1101,9 +1217,13 @@ class OverworldState extends MusicBeatState
 					worldStack = OverworldData.parentChain(exit.world);
 			}
 
-			curWorld = exit.world;
-			curNodeId = null;
-			MusicBeatState.switchState(new OverworldState());
+			var lateral:String = exit.world;
+			irisClose(function()
+			{
+				curWorld = lateral;
+				curNodeId = null;
+				switchToMap();
+			});
 			return;
 		}
 
@@ -1125,9 +1245,13 @@ class OverworldState extends MusicBeatState
 			else door = Lambda.find(parentFile.nodes, n -> n.type == 'world' && n.world == curWorld);
 		}
 
-		curWorld = target[0];
-		curNodeId = door != null ? door.id : target[1];
-		MusicBeatState.switchState(new OverworldState());
+		var backNode:String = door != null ? door.id : target[1];
+		irisClose(function()
+		{
+			curWorld = target[0];
+			curNodeId = backNode;
+			switchToMap();
+		});
 	}
 
 	function failExit(message:String)
@@ -1164,6 +1288,7 @@ class OverworldState extends MusicBeatState
 
 				var other:OverworldNodeFile = (pth.a == door.id) ? nodeB : nodeA;
 				if (other.type == 'exit' || !OverworldData.isUnlocked(curWorld, worldFile, other)) continue;
+				if (!OverworldData.isPathUnlocked(curWorld, worldFile, pth)) continue;
 
 				var line:Array<Array<Float>> = buildLine(pth, nodeA, nodeB);
 				if (pth.b == door.id) line.reverse();
@@ -1186,6 +1311,7 @@ class OverworldState extends MusicBeatState
 		var bestTarget:OverworldNodeFile = null;
 		var bestScore:Float = MIN_DIRECTION_SCORE;
 		var lockedAhead:Bool = false;
+		var needAhead:OverworldNodeFile = null;
 
 		for (pth in worldFile.paths)
 		{
@@ -1202,9 +1328,13 @@ class OverworldState extends MusicBeatState
 			var score:Float = directionScore(line, dirX, dirY);
 			if (score <= MIN_DIRECTION_SCORE) continue;
 
+			// un camino con condicion propia que aun no se ha abierto no se ve: es como si no estuviera
+			if (!OverworldData.isPathUnlocked(curWorld, worldFile, pth)) continue;
+
 			if (!OverworldData.isUnlocked(curWorld, worldFile, other))
 			{
 				lockedAhead = true;
+				if (other.needLevels > 0) needAhead = other;
 				continue;
 			}
 			if (score <= bestScore) continue;
@@ -1217,6 +1347,9 @@ class OverworldState extends MusicBeatState
 		if (bestLine == null)
 		{
 			if (lockedAhead) FlxG.sound.play(Paths.sound('cancelMenu'));
+			// un nodo de "N superados": se dice cuantos faltan
+			if (needAhead != null)
+				showError('Hacen falta ${needAhead.needLevels} superados en este mundo (llevas ${OverworldData.completedCount(curWorld, worldFile)})');
 			return;
 		}
 
@@ -1332,6 +1465,7 @@ class OverworldState extends MusicBeatState
 	{
 		var node:OverworldNodeFile = OverworldData.findNode(worldFile, curNodeId);
 		if (node != null && OverworldData.isUnlocked(curWorld, worldFile, node)) return node;
+		if (node != null && returnToEditor && curWorld == testStartWorld && node.id == testStartNode) return node;
 
 		node = OverworldData.findNode(worldFile, worldFile.startNode);
 		if (node != null && OverworldData.isUnlocked(curWorld, worldFile, node)) return node;
@@ -1367,6 +1501,8 @@ class OverworldState extends MusicBeatState
 		if (node.type == 'world') text += '  >>';
 		if (node.type == 'warp') text += '  (ENTER: viajar)';
 		if (OverworldData.canBeCompleted(node) && OverworldData.isCompleted(curWorld, node.id)) text += '  <g>SUPERADO<g>';
+		if (OverworldData.hasSecret(worldFile, node))
+			text += OverworldData.isSecretCompleted(curWorld, node.id) ? '  <y>SECRETO<y>' : '  <y>?<y>';
 
 		nameTxt.applyMarkup(text, DONE_MARKUP);
 	}
@@ -1393,19 +1529,23 @@ class OverworldState extends MusicBeatState
 				// Si el destino ya esta en la cadena (un nodo que vuelve a un mapa de mas arriba),
 				// se vuelve a el recortando la pila: apilarlo otra vez la corrompia (el castillo
 				// dejaba de superarse y R dejaba de reiniciar).
-				var ancestor:Int = stackIndexOf(node.world);
-				if (ancestor > -1)
+				var target:String = node.world;
+				irisClose(function()
 				{
-					curNodeId = worldStack[ancestor][1];
-					worldStack = worldStack.slice(0, ancestor);
-				}
-				else
-				{
-					worldStack.push([curWorld, curNodeId]);
-					curNodeId = null;
-				}
-				curWorld = node.world;
-				MusicBeatState.switchState(new OverworldState());
+					var ancestor:Int = stackIndexOf(target);
+					if (ancestor > -1)
+					{
+						curNodeId = worldStack[ancestor][1];
+						worldStack = worldStack.slice(0, ancestor);
+					}
+					else
+					{
+						worldStack.push([curWorld, curNodeId]);
+						curNodeId = null;
+					}
+					curWorld = target;
+					switchToMap();
+				});
 
 			case 'level':
 				if (node.song == null || node.song.length < 1)
@@ -1444,7 +1584,7 @@ class OverworldState extends MusicBeatState
 
 		var from:String = curWorld;
 		var target:String = node.world;
-		new FlxTimer().start(0.5, function(_:FlxTimer)
+		new FlxTimer().start(0.3, function(_:FlxTimer) irisClose(function()
 		{
 			arrivingByWarp = from;
 			curWorld = target;
@@ -1452,8 +1592,8 @@ class OverworldState extends MusicBeatState
 			// un warp es un salto global (p. ej. al mundo central): la pila de submundos de donde
 			// se venia ya no vale. Las salidas sin pila encuentran su mapa de fuera solas.
 			worldStack = [];
-			MusicBeatState.switchState(new OverworldState());
-		});
+			switchToMap();
+		}));
 	}
 
 	/** Llegando por un warp: el warp de este mundo que apunta de vuelta (su pareja), o null. */
@@ -1512,11 +1652,12 @@ class OverworldState extends MusicBeatState
 		FlxG.sound.play(Paths.sound('confirmMenu'));
 		playAnim('enter');
 
-		new FlxTimer().start(0.6, function(_:FlxTimer)
+		new FlxTimer().start(0.3, function(_:FlxTimer) irisClose(function()
 		{
 			@:privateAccess
 			if (PlayState._lastLoadedModDirectory != Mods.currentModDirectory) Paths.freeGraphicsFromMemory();
 
+			FlxTransitionableState.skipNextTransIn = true; // ya se ha cerrado con el iris
 			LoadingState.prepareToSong();
 			LoadingState.loadAndSwitchState(new PlayState());
 			#if !SHOW_LOADING_SCREEN FlxG.sound.music.stop(); #end
@@ -1526,12 +1667,84 @@ class OverworldState extends MusicBeatState
 			#if (MODS_ALLOWED && DISCORD_ALLOWED)
 			DiscordClient.loadModRPC();
 			#end
-		});
+		}));
+	}
+
+	// ------------------------------------------------------------- iris (transicion de SMW)
+	static inline final IRIS_CLOSE_TIME:Float = 0.5;
+	static inline final IRIS_OPEN_TIME:Float = 0.6;
+	static inline final IRIS_MAX_RADIUS:Float = 1500; // mas que la diagonal de la pantalla
+
+	var iris:FlxSprite;
+	var irisShader:IrisShader;
+	var irisRadius:Float = 0;
+
+	function buildIris()
+	{
+		irisShader = new IrisShader();
+		iris = new FlxSprite().makeGraphic(FlxG.width, FlxG.height, FlxColor.BLACK);
+		iris.scrollFactor.set();
+		iris.cameras = [camHUD];
+		iris.shader = irisShader;
+		iris.visible = false;
+		add(iris);
+	}
+
+	/** Donde esta BF en la pantalla (el centro del circulo), dentro de los bordes. */
+	function irisCenter():Array<Float>
+	{
+		var x:Float = (playerX - camGame.viewLeft) * camGame.zoom;
+		var y:Float = (playerY - 8 - camGame.viewTop) * camGame.zoom;
+		return [Math.max(0, Math.min(FlxG.width, x)), Math.max(0, Math.min(FlxG.height, y))];
+	}
+
+	/** El circulo se cierra sobre BF y despues se ejecuta `onDone` (el cambio de pantalla). */
+	function irisClose(onDone:Void->Void)
+	{
+		busy = true;
+		if (revealFocus != null)
+		{
+			// el circulo se cierra sobre BF: la camara tiene que estar mirandole
+			revealFocus = null;
+			camFollow.setPosition(playerX, playerY);
+			camGame.snapToTarget();
+		}
+		iris.visible = true;
+		irisRadius = IRIS_MAX_RADIUS;
+		FlxTween.num(IRIS_MAX_RADIUS, 0, IRIS_CLOSE_TIME, {
+			ease: FlxEase.quadIn,
+			onComplete: function(_:FlxTween) new FlxTimer().start(0.12, function(_:FlxTimer) onDone())
+		}, function(value:Float) irisRadius = value);
+	}
+
+	function irisOpen()
+	{
+		busy = true;
+		iris.visible = true;
+		irisRadius = 0;
+		FlxTween.num(0, IRIS_MAX_RADIUS, IRIS_OPEN_TIME, {
+			ease: FlxEase.quadOut,
+			startDelay: 0.1,
+			onComplete: function(_:FlxTween)
+			{
+				iris.visible = false;
+				busy = false;
+			}
+		}, function(value:Float) irisRadius = value);
+	}
+
+	/** Cambia a otro mapa sin el fundido de Psych: este se ha cerrado con el iris y el otro se abre igual. */
+	static function switchToMap()
+	{
+		irisOpenNext = true;
+		FlxTransitionableState.skipNextTransIn = true;
+		FlxTransitionableState.skipNextTransOut = true;
+		MusicBeatState.switchState(new OverworldState());
 	}
 
 	var errorTimer:FlxTimer;
 
-	function showError(text:String)
+	function showError(text:String, ?color:FlxColor = FlxColor.RED)
 	{
 		if (errorTxt == null)
 		{
@@ -1541,6 +1754,7 @@ class OverworldState extends MusicBeatState
 			add(errorTxt);
 		}
 
+		errorTxt.color = color;
 		errorTxt.text = text;
 		errorTxt.visible = true;
 

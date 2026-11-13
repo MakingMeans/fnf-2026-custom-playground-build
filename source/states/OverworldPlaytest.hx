@@ -37,6 +37,9 @@ class OverworldPlaytest extends FlxBasic
 	static final WORLDS:Array<String> = ['zz_demo', 'zz_demo_c', 'zz_demo2', 'zz_demo_hub'];
 	static final CLOSED_WORLD:String = 'zz_demo_closed';
 
+	/** Mundo de reglas: salidas secretas, nodo de "N superados" y camino con condicion propia. */
+	static final RULES_WORLD:String = 'zz_demo_rules';
+
 	static function deleteWorld(world:String)
 	{
 		OverworldData.resetProgress(world);
@@ -68,6 +71,7 @@ class OverworldPlaytest extends FlxBasic
 		OverworldData.simStartWorld = 'zz_demo'; // la partida simulada (avisos) empieza en la demo
 		FlxG.autoPause = false; // sin foco, flixel pausaria el juego y la prueba se quedaria parada
 		for (world in WORLDS) OverworldData.resetProgress(world);
+		OverworldData.resetProgress(RULES_WORLD);
 		FlxG.plugins.addPlugin(new OverworldPlaytest());
 	}
 
@@ -247,6 +251,25 @@ class OverworldPlaytest extends FlxBasic
 			return false;
 		}, false, true);
 
+	/** Superar el nivel actual con un resultado concreto (para la salida secreta). */
+	function beatWith(misses:Int, accuracy:Float)
+		add('superar nivel con $misses fallos y ${Math.round(accuracy * 100)}%', function()
+		{
+			OverworldState.fromOverworld = true;
+			OverworldState.lastLevelNode = OverworldState.curNodeId;
+			OverworldState.completeCurrentNode(misses, accuracy);
+			OverworldState.backToOverworld();
+			return true;
+		}, true);
+
+	function expectSecret(world:String, node:String, done:Bool)
+		add('$world/$node secreta=$done', function()
+		{
+			var real:Bool = OverworldData.isSecretCompleted(world, node);
+			check(real == done, '$world/$node ' + (done ? 'con su salida secreta' : 'sin su salida secreta') + (real == done ? '' : ' (no es asi)'));
+			return true;
+		});
+
 	function enter(label:String)
 		add('entrar $label', function()
 		{
@@ -305,6 +328,50 @@ class OverworldPlaytest extends FlxBasic
 	function buildScript()
 	{
 		add('montar los mundos con el editor', buildWorlds);
+
+		// capturas del editor con el mundo de reglas: pestana Nodo, pestana Camino y un grupo
+		add('editor: nodo con reglas', function()
+		{
+			if (FlxG.state.subState != null) return false; // el fundido de entrada del editor aun tapa la pantalla
+			var ed:OverworldEditorState = Std.downcast(FlxG.state, OverworldEditorState);
+			ed.selectedNode = OverworldData.findNode(ed.worldFile, 'R2');
+			ed.selectedPath = null;
+			ed.UI_box.selectedName = 'Nodo';
+			ed.showUnlocks = true;
+			ed.camGame.zoom = 3;
+			ed.camGame.scroll.set(150 - ed.camGame.width * 0.5, 170 - ed.camGame.height * 0.5);
+			ed.reloadMap(true);
+			ed.updateUI();
+			return true;
+		});
+		shot('00a_editor_nodo');
+		add('editor: camino con condicion', function()
+		{
+			var ed:OverworldEditorState = Std.downcast(FlxG.state, OverworldEditorState);
+			ed.selectedNode = null;
+			ed.selectedPath = ed.findPath('R3', 'G');
+			ed.UI_box.selectedName = 'Camino';
+			ed.reloadMap(true);
+			ed.updateUI();
+			return true;
+		});
+		shot('00b_editor_camino');
+		add('editor: grupo con un rectangulo', function()
+		{
+			var ed:OverworldEditorState = Std.downcast(FlxG.state, OverworldEditorState);
+			ed.selectedPath = null;
+			ed.bandStart = [40, 70];
+			ed.finishBand(220, 180);
+			check(ed.hasGroup() && ed.groupNodes.length == 4, 'el rectangulo coge R1, R2, R3 y G (${ed.groupNodes.length} nodos)');
+			return true;
+		});
+		shot('00c_editor_grupo');
+		add('editor: soltar el grupo', function()
+		{
+			Std.downcast(FlxG.state, OverworldEditorState).clearGroup();
+			return true;
+		});
+
 		add('abrir el mundo de demostracion', function()
 		{
 			OverworldState.reset();
@@ -320,6 +387,10 @@ class OverworldPlaytest extends FlxBasic
 				var problems:Array<String> = OverworldData.checkWorld(OverworldData.load(world), world);
 				check(problems.length == 0, '$world sin avisos' + (problems.length > 0 ? ': ' + problems.join(' | ') : ''));
 			}
+			OverworldData.simStartWorld = RULES_WORLD;
+			var rules:Array<String> = OverworldData.checkWorld(OverworldData.load(RULES_WORLD), RULES_WORLD);
+			OverworldData.simStartWorld = 'zz_demo';
+			check(rules.length == 0, '$RULES_WORLD sin avisos' + (rules.length > 0 ? ': ' + rules.join(' | ') : ''));
 			return true;
 		});
 
@@ -452,6 +523,68 @@ class OverworldPlaytest extends FlxBasic
 			OverworldState.returnToEditor = true;
 			return true;
 		});
+
+		// --- probar desde un nodo que con la partida actual esta cerrado (CTRL+SHIFT+T del editor)
+		add('probar desde un nodo cerrado', function()
+		{
+			OverworldState.reset();
+			OverworldState.returnToEditor = true;
+			OverworldState.testStartWorld = RULES_WORLD;
+			OverworldState.testStartNode = 'R3';
+			MusicBeatState.switchState(new OverworldState(RULES_WORLD, 'R3'));
+			return true;
+		}, true);
+		expectAt(RULES_WORLD, 'R3');
+		expectUnlocked('R3', false);
+		add('volver al principio del mundo de reglas', function()
+		{
+			OverworldState.testStartWorld = null;
+			OverworldState.testStartNode = null;
+			MusicBeatState.switchState(new OverworldState(RULES_WORLD, 'R1'));
+			return true;
+		}, true);
+		expectAt(RULES_WORLD, 'R1');
+		expectUnlocked('S', false);
+		expectUnlocked('G', false);
+		shot('10_reglas');
+
+		// --- R1 sin fallos: salida secreta. Su camino baja fuera de la pantalla y la camara lo sigue
+		beatWith(0, 1);
+		expectCompleted(RULES_WORLD, 'R1', true);
+		expectSecret(RULES_WORLD, 'R1', true);
+		expectUnlocked('S', true);
+		expectPath('R1', 'S', true);
+		add('la camara siguio al camino revelado', function()
+		{
+			check(map().revealFollowed, 'la camara fue a mirar el camino que se revelaba fuera de pantalla');
+			check(map().iris != null && !map().iris.visible, 'el iris se ha abierto del todo');
+			return true;
+		});
+		shot('11_salida_secreta');
+
+		// --- R2 pide 90% de precision: con 85% se supera pero sin secreta; G se abre con 2 superados
+		walk(1, 0, 'a la derecha (R2)');
+		beatWith(3, 0.85);
+		expectCompleted(RULES_WORLD, 'R2', true);
+		expectSecret(RULES_WORLD, 'R2', false);
+		expectUnlocked('S2', false);
+		expectUnlocked('G', true);
+		expectPath('R2', 'G', true);
+
+		// --- repetirlo con 95% saca la secreta
+		beatWith(0, 0.95);
+		expectSecret(RULES_WORLD, 'R2', true);
+		expectUnlocked('S2', true);
+
+		// --- el atajo R3-G solo se abre al superar R3
+		walk(1, 0, 'a la derecha (R3)');
+		expectPath('R3', 'G', false);
+		expectPath('R3', 'S2', true);
+		beat();
+		expectPath('R3', 'G', true);
+		walk(0, 1, 'abajo por el atajo (G)');
+		expectAt(RULES_WORLD, 'G');
+		shot('12_reglas_final');
 		add('fin', () -> true);
 	}
 
@@ -605,6 +738,76 @@ class OverworldPlaytest extends FlxBasic
 		// la tuberia de vuelta del central tiene que estar unida al centro
 		var hubNow:OverworldFile = OverworldData.load('zz_demo_hub');
 		check(hubNow != null && hubNow.nodes.length == 3 && hubNow.paths.length == 2, 'el central tiene sus 2 tuberias unidas al centro');
+
+		// mundo de reglas:
+		//              R1 --- R2 --- R3 --- S2   (S2: lo abre la secreta de R2, con 90%)
+		//              |      |      |
+		//              |      G -----+           (G: se abre con 2 superados; el atajo R3-G, al superar R3)
+		//              |
+		//              S  (muy abajo, fuera de lo que se ve; lo abre la secreta de R1, sin fallos)
+		ed.worldName = RULES_WORLD;
+		ed.loadedName = null;
+		ed.worldFile = OverworldData.createEmpty();
+		ed.worldFile.displayName = 'Reglas de prueba';
+		ed.worldFile.nodes = [];
+		ed.selectedNode = null;
+		ed.resetHistory();
+		ed.reloadMap();
+
+		var r1:OverworldNodeFile = makeNode('R1', 64, 96, true);
+		var r2:OverworldNodeFile = makeNode('R2', 128, 96, true);
+		var r3:OverworldNodeFile = makeNode('R3', 192, 96, true);
+		var g:OverworldNodeFile = makeNode('G', 128, 160, true);
+		var top:OverworldNodeFile = makeNode('S', 64, 352, true); // abajo, fuera de lo que se ve desde R1
+		var s2:OverworldNodeFile = makeNode('S2', 256, 96, true);
+		ed.worldFile.startNode = 'R1';
+
+		connect(r1, r2);
+		connect(r2, r3);
+		connect(r2, g);
+		connect(r1, top);
+		connect(r3, s2);
+		ed.pathStart = null;
+		ed.handlePathClick(r3.x, r3.y);
+		ed.handlePathClick(g.x, g.y, true); // no alineados: en L, primero vertical
+		var shortcut:OverworldPathFile = ed.findPath('R3', 'G');
+		check(shortcut != null && shortcut.points.length == 1 && shortcut.points[0][0] == 192 && shortcut.points[0][1] == 160,
+			'camino en L al unir dos nodos no alineados');
+
+		link(r1, [r2]);
+		link(r2, [r3]);
+
+		// salidas secretas con el modo ENLAZAR (SHIFT+clic)
+		ed.linkStart = null;
+		ed.handleLinkClick(r1.x, r1.y);
+		ed.handleLinkClick(top.x, top.y, true);
+		ed.handleLinkClick(-9999, -9999);
+		ed.linkStart = null;
+		ed.handleLinkClick(r2.x, r2.y);
+		ed.handleLinkClick(s2.x, s2.y, true);
+		ed.handleLinkClick(-9999, -9999);
+		ed.selectedNode = r2;
+		ed.nodeSecretModeDropDown.onSelect(1, 'precision');
+		ed.nodeSecretAccStepper.value = 90;
+		ed.nodeSecretAccStepper.onValueChange();
+
+		// G: se abre con 2 superados (bloqueado de entrada)
+		ed.selectedNode = g;
+		ed.nodeNeedStepper.value = 2;
+		ed.nodeNeedStepper.onValueChange();
+		g.unlocked = false;
+
+		// el atajo: modo ENLAZAR desde R3 y clic en el camino
+		ed.linkStart = null;
+		ed.handleLinkClick(r3.x, r3.y);
+		var middle:Array<Float> = ed.pathMiddle(shortcut);
+		ed.handleLinkClick(middle[0], middle[1]);
+		ed.handleLinkClick(-9999, -9999);
+
+		check(r1.secretUnlocks.join(',') == 'S' && !top.unlocked && r2.secretUnlocks.join(',') == 'S2' && r2.secretMode == 'accuracy'
+			&& r2.secretAccuracy == 90 && g.needLevels == 2 && shortcut.unlockedBy == 'R3' && !shortcut.secret,
+			'reglas puestas con el editor (secretas, N superados, atajo)');
+		check(ed.saveWorld(), 'guardado $RULES_WORLD');
 		return true;
 	}
 
@@ -620,7 +823,7 @@ class OverworldPlaytest extends FlxBasic
 		log.push((fails == 0 ? 'TODO CORRECTO: ' : 'FALLOS: $fails de ') + '$checks comprobaciones');
 
 		// limpieza: progreso y archivos de los mundos de demostracion
-		for (world in WORLDS.concat([CLOSED_WORLD])) deleteWorld(world);
+		for (world in WORLDS.concat([CLOSED_WORLD, RULES_WORLD])) deleteWorld(world);
 		OverworldData.simStartWorld = null;
 
 		#if sys

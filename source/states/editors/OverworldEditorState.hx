@@ -123,6 +123,25 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 	var paletteShown:Bool = true;
 	var paintFront:Bool = false;
 
+	// seleccion en grupo (SHIFT+clic o un rectangulo arrastrando en el vacio, modo V): se mueven,
+	// duplican (CTRL+D) y borran (SUPR) a la vez. Con un solo elemento no hay grupo.
+	var groupNodes:Array<OverworldNodeFile> = [];
+	var groupSprites:Array<OverworldSpriteFile> = [];
+	var groupBoxes:FlxTypedGroup<FlxSprite>;
+	var bandSprite:FlxSprite;
+	var bandStart:Array<Float> = null;
+	var groupDragLast:Array<Float> = null; // posicion (ajustada) del elemento agarrado
+	var groupDragSprites:haxe.ds.ObjectMap<Dynamic, FlxSprite> = null;
+
+	// al unir dos nodos que no estan alineados, el camino se hace en L
+	var lPaths:Bool = true;
+
+	// progreso de los nodos que han desaparecido en esta sesion: deshacer se lo devuelve
+	var removedProgress:Map<String, Bool> = new Map<String, Bool>();
+
+	// submundos creados con "Crear submundo" en esta sesion: [nombre => contenido al crearlo]
+	var createdWorlds:Map<String, String> = new Map<String, String>();
+
 	public function new(?world:String = null)
 	{
 		if (world != null && world.length > 0) worldName = world;
@@ -178,6 +197,15 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		selectionBox.alpha = 0.35;
 		selectionBox.visible = false;
 		add(selectionBox);
+
+		groupBoxes = new FlxTypedGroup<FlxSprite>();
+		add(groupBoxes);
+
+		bandSprite = new FlxSprite().makeGraphic(1, 1, FlxColor.WHITE);
+		bandSprite.color = 0xFF66CCFF;
+		bandSprite.alpha = 0.25;
+		bandSprite.visible = false;
+		add(bandSprite);
 
 		paletteGroup = new FlxSpriteGroup();
 		paletteGroup.cameras = [camPalette];
@@ -289,18 +317,24 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		problemGroup.clear();
 		problemsDirty = true;
 		problemsTimer = 0;
+
+		// las cajas del grupo siguen a sus nodos (durante un arrastre ya se mueven solas)
+		if (hasGroup() && groupDragLast == null) refreshGroupBoxes();
 	}
 
 	/** La etiqueta de un nodo: su ID y, si lleva a otro mundo, a cual. */
 	function nodeLabel(node:OverworldNodeFile):String
 	{
 		var target:String = node.world != null ? node.world : '';
-		return switch (node.type)
+		var text:String = switch (node.type)
 		{
 			case 'world' | 'warp': node.id + '\n> ' + (target.length > 0 ? target : '(sin destino)');
 			case 'exit': node.id + '\n> ' + (target.length > 0 ? target : 'mapa de fuera');
 			default: node.id;
 		}
+		if (OverworldData.hasSecret(worldFile, node)) text += ' *'; // tiene salida secreta
+		if (node.needLevels > 0) text += '\n(${node.needLevels} sup.)';
+		return text;
 	}
 
 	function labelColor(node:OverworldNodeFile):FlxColor
@@ -383,6 +417,8 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 
 	static inline final VIEW_COLOR:FlxColor = 0xCCFFFFFF;
 	static inline final UNLOCK_COLOR:FlxColor = 0xFFFF66FF;
+	static inline final SECRET_COLOR:FlxColor = 0xFFFFD84A; // salida secreta
+	static inline final COND_COLOR:FlxColor = 0xFFFF9933;   // camino con condicion propia
 
 	/** Lo que la camara del juego puede llegar a enseñar: [x, y, ancho, alto]. */
 	function viewArea():Array<Float>
@@ -488,33 +524,115 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 	{
 		for (node in worldFile.nodes)
 		{
-			if (node.unlocks == null) continue;
-			for (id in node.unlocks)
+			// rosa: lo que abre al completarlo; amarillo: lo que abre su salida secreta
+			for (list in [node.unlocks, node.secretUnlocks])
 			{
-				var target:OverworldNodeFile = OverworldData.findNode(worldFile, id);
-				if (target == null || target == node) continue;
-
-				var dx:Float = target.x - node.x;
-				var dy:Float = target.y - node.y;
-				var length:Float = Math.sqrt(dx * dx + dy * dy);
-				if (length < 20) continue;
-
-				var ux:Float = dx / length;
-				var uy:Float = dy / length;
-				var sideX:Float = -uy * 3;
-				var sideY:Float = ux * 3;
-
-				var x1:Float = node.x + ux * 9 + sideX - ox;
-				var y1:Float = node.y + uy * 9 + sideY - oy;
-				var x2:Float = target.x - ux * 9 + sideX - ox;
-				var y2:Float = target.y - uy * 9 + sideY - oy;
-				dashedLine(linesSprite, x1, y1, x2, y2, UNLOCK_COLOR);
-
-				// punta de flecha
-				plotLine(linesSprite.pixels, x2, y2, x2 - ux * 5 - uy * 3, y2 - uy * 5 + ux * 3, UNLOCK_COLOR);
-				plotLine(linesSprite.pixels, x2, y2, x2 - ux * 5 + uy * 3, y2 - uy * 5 - ux * 3, UNLOCK_COLOR);
+				if (list == null) continue;
+				var color:FlxColor = (list == node.secretUnlocks) ? SECRET_COLOR : UNLOCK_COLOR;
+				for (id in list)
+				{
+					var target:OverworldNodeFile = OverworldData.findNode(worldFile, id);
+					if (target == null || target == node) continue;
+					drawArrow(node.x, node.y, target.x, target.y, color, ox, oy, 9);
+				}
 			}
 		}
+
+		// caminos con condicion propia: flecha del nodo que los abre a la mitad del camino
+		for (pth in worldFile.paths)
+		{
+			if (pth.unlockedBy == null || pth.unlockedBy.length < 1) continue;
+			var by:OverworldNodeFile = OverworldData.findNode(worldFile, pth.unlockedBy);
+			var middle:Array<Float> = pathMiddle(pth);
+			if (by == null || middle == null) continue;
+			drawArrow(by.x, by.y, middle[0], middle[1], pth.secret ? SECRET_COLOR : COND_COLOR, ox, oy, 4);
+		}
+	}
+
+	/** Flecha discontinua de un punto a otro, separada `gap` px de los dos extremos. */
+	function drawArrow(fromX:Float, fromY:Float, toX:Float, toY:Float, color:FlxColor, ox:Float, oy:Float, gap:Float)
+	{
+		var dx:Float = toX - fromX;
+		var dy:Float = toY - fromY;
+		var length:Float = Math.sqrt(dx * dx + dy * dy);
+		if (length < gap * 2 + 2) return;
+
+		var ux:Float = dx / length;
+		var uy:Float = dy / length;
+		var sideX:Float = -uy * 3;
+		var sideY:Float = ux * 3;
+
+		var x1:Float = fromX + ux * 9 + sideX - ox;
+		var y1:Float = fromY + uy * 9 + sideY - oy;
+		var x2:Float = toX - ux * gap + sideX - ox;
+		var y2:Float = toY - uy * gap + sideY - oy;
+		dashedLine(linesSprite, x1, y1, x2, y2, color);
+
+		// punta de flecha
+		plotLine(linesSprite.pixels, x2, y2, x2 - ux * 5 - uy * 3, y2 - uy * 5 + ux * 3, color);
+		plotLine(linesSprite.pixels, x2, y2, x2 - ux * 5 + uy * 3, y2 - uy * 5 - ux * 3, color);
+	}
+
+	/** El punto que queda a mitad de recorrido de un camino. */
+	function pathMiddle(pth:OverworldPathFile):Array<Float>
+	{
+		var nodeA:OverworldNodeFile = OverworldData.findNode(worldFile, pth.a);
+		var nodeB:OverworldNodeFile = OverworldData.findNode(worldFile, pth.b);
+		if (nodeA == null || nodeB == null) return null;
+
+		var line:Array<Array<Float>> = OverworldState.buildLine(pth, nodeA, nodeB);
+		var total:Float = 0;
+		for (i in 0...line.length - 1) total += segmentLength(line[i], line[i + 1]);
+
+		var half:Float = total * 0.5;
+		for (i in 0...line.length - 1)
+		{
+			var length:Float = segmentLength(line[i], line[i + 1]);
+			if (half <= length && length > 0)
+			{
+				var ratio:Float = half / length;
+				return [line[i][0] + (line[i + 1][0] - line[i][0]) * ratio, line[i][1] + (line[i + 1][1] - line[i][1]) * ratio];
+			}
+			half -= length;
+		}
+		return [nodeA.x, nodeA.y];
+	}
+
+	static inline function segmentLength(a:Array<Float>, b:Array<Float>):Float
+		return Math.sqrt((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]));
+
+	/** El camino que pasa a menos de 4 px del raton, o null. */
+	function pathUnderMouse(mouseX:Float, mouseY:Float):OverworldPathFile
+	{
+		var best:OverworldPathFile = null;
+		var bestDist:Float = 4;
+		for (pth in worldFile.paths)
+		{
+			var nodeA:OverworldNodeFile = OverworldData.findNode(worldFile, pth.a);
+			var nodeB:OverworldNodeFile = OverworldData.findNode(worldFile, pth.b);
+			if (nodeA == null || nodeB == null) continue;
+
+			var line:Array<Array<Float>> = OverworldState.buildLine(pth, nodeA, nodeB);
+			for (i in 0...line.length - 1)
+			{
+				var ax:Float = line[i][0];
+				var ay:Float = line[i][1];
+				var bx:Float = line[i + 1][0];
+				var by:Float = line[i + 1][1];
+				var lengthSq:Float = (bx - ax) * (bx - ax) + (by - ay) * (by - ay);
+				var t:Float = lengthSq > 0 ? ((mouseX - ax) * (bx - ax) + (mouseY - ay) * (by - ay)) / lengthSq : 0;
+				t = Math.max(0, Math.min(1, t));
+				var px:Float = ax + (bx - ax) * t - mouseX;
+				var py:Float = ay + (by - ay) * t - mouseY;
+				var dist:Float = Math.sqrt(px * px + py * py);
+				if (dist < bestDist)
+				{
+					bestDist = dist;
+					best = pth;
+				}
+			}
+		}
+		return best;
 	}
 
 	function buildPathLines()
@@ -556,11 +674,16 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			var nodeB:OverworldNodeFile = OverworldData.findNode(worldFile, pth.b);
 			if (nodeA == null || nodeB == null) continue;
 
-			var color:FlxColor = (pth == selectedPath) ? 0xFFFFFF00 : 0xFF00FF88;
+			// un camino con condicion propia (lo abre un nodo, o su salida secreta) va discontinuo
+			var conditional:Bool = pth.unlockedBy != null && pth.unlockedBy.length > 0;
+			var color:FlxColor = (pth == selectedPath) ? 0xFFFFFF00 : (conditional ? (pth.secret ? SECRET_COLOR : COND_COLOR) : 0xFF00FF88);
 			var line:Array<Array<Float>> = OverworldState.buildLine(pth, nodeA, nodeB);
 
 			for (i in 0...line.length - 1)
-				plotLine(linesSprite.pixels, line[i][0] - ox, line[i][1] - oy, line[i + 1][0] - ox, line[i + 1][1] - oy, color);
+			{
+				if (conditional) dashedLine(linesSprite, line[i][0] - ox, line[i][1] - oy, line[i + 1][0] - ox, line[i + 1][1] - oy, color, 3, 2);
+				else plotLine(linesSprite.pixels, line[i][0] - ox, line[i][1] - oy, line[i + 1][0] - ox, line[i + 1][1] - oy, color);
+			}
 
 			// puntos de curva: un cuadradito de 4x4
 			if (pth.points != null)
@@ -730,35 +853,33 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		add(helpBg);
 
 		var text:String = 'EDITOR DE MUNDOS - ATAJOS\n\n'
-			+ 'V  modo seleccionar (mover nodos y decorados)\n'
+			+ 'V  seleccionar: arrastra nodos y decorados. SHIFT+clic suma o quita del grupo; arrastrar\n'
+			+ '   en el vacio dibuja un rectangulo que selecciona lo de dentro (+SHIFT: lo anade)\n'
 			+ 'N  modo nodo: clic para crear un nivel\n'
 			+ 'B  modo decorado: clic para colocar el sprite elegido\n'
-			+ 'C  modo camino: clic en nodo A y luego en nodo B para unirlos\n'
-			+ '   (con un camino elegido, clic en el vacio anade un punto de curva)\n'
+			+ 'C  modo camino: clic en nodo A y luego en B. Si no estan alineados, sale en L\n'
+			+ '   (SHIFT al hacer el segundo clic: primero vertical). Con un camino elegido,\n'
+			+ '   clic en el vacio anade un punto de curva\n'
 			+ 'T  modo pintar tiles: elige un tile en la paleta y pinta arrastrando\n'
-			+ 'L  modo enlazar: clic en el nodo que desbloquea y luego en los que abre\n'
-			+ '   (otro clic en un destino quita el enlace; clic en el vacio termina;\n'
-			+ '    L otra vez, V o ESC salen del modo)\n'
-			+ 'P  mostrar / ocultar la paleta de tiles\n'
-			+ 'CTRL+clic en la paleta  ese tile como aspecto del nodo elegido (+SHIFT: al completarlo)\n'
-			+ 'Punto de curva         arrastrar = moverlo, clic derecho = borrarlo (modos V y C)\n'
-			+ 'E                     ir al siguiente aviso (nodos con contorno rojo)\n\n'
-			+ 'Clic derecho          borrar lo que hay bajo el raton\n'
-			+ 'SUPR                  borrar la seleccion\n'
+			+ 'L  modo enlazar: clic en el nodo que desbloquea y luego en los que abre. SHIFT+clic: los\n'
+			+ '   abre su salida secreta. Clic en un camino: ese camino solo se abre al completarlo\n'
+			+ '   (+SHIFT: con su salida secreta). Otro clic quita el enlace; L, V o ESC salen\n'
+			+ 'P  paleta de tiles     CTRL+clic en la paleta: tile como aspecto del nodo (+SHIFT: completado)\n'
+			+ 'E  siguiente aviso     U  flechas de desbloqueo (rosa normal, amarillo secreta, naranja camino)\n'
+			+ 'G  rejilla             Rueda: zoom      Raton central / flechas: mover la camara\n\n'
+			+ 'Clic derecho          borrar lo que hay bajo el raton (sobre un punto de curva, ese punto)\n'
+			+ 'SUPR                  borrar la seleccion (o el grupo)\n'
+			+ 'CTRL+D                duplicar la seleccion (o el grupo, con sus caminos de dentro)\n'
 			+ 'ALT (mantener)        colocar sin ajustar a la rejilla\n'
-			+ 'Rueda del raton       zoom\n'
-			+ 'Raton central / flechas  mover la camara\n'
-			+ 'G                     mostrar/ocultar rejilla\n'
-			+ 'U                     mostrar/ocultar flechas de desbloqueo (rosa)\n'
-			+ 'Rectangulo blanco     lo que se ve en el juego (fuera = fuera de pantalla)\n'
 			+ 'CTRL+Z / CTRL+Y       deshacer / rehacer\n'
 			+ 'CTRL+S                guardar\n'
-			+ 'CTRL+T                probar el mundo\n'
+			+ 'CTRL+T                probar el mundo   (CTRL+SHIFT+T: probar desde el nodo elegido)\n'
+			+ 'Rectangulo blanco     lo que se ve en el juego (fuera = fuera de pantalla)\n'
 			+ 'F1                    esta ayuda\n'
-			+ 'ESC                   salir del modo actual; en SELECCIONAR, volver al menu de editores';
+			+ 'ESC                   soltar el grupo, salir del modo actual; en SELECCIONAR, volver al menu';
 
-		helpTxt = new FlxText(40, 60, FlxG.width - 80, text, 16);
-		helpTxt.setFormat(Paths.font('vcr.ttf'), 16, FlxColor.WHITE, LEFT);
+		helpTxt = new FlxText(40, 50, FlxG.width - 80, text, 15);
+		helpTxt.setFormat(Paths.font('vcr.ttf'), 15, FlxColor.WHITE, LEFT);
 		helpTxt.cameras = [camHUD];
 		helpTxt.scrollFactor.set();
 		helpTxt.visible = false;
@@ -897,6 +1018,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			updateUI();
 			showOutput('Todos los nodos quedan accesibles desde el principio');
 		}, 155));
+		tab.add(new PsychUIButton(x + 165, y, 'Probar desde el nodo', function() testWorld(true), 155));
 
 		showAllCheck = new PsychUICheckBox(x + 165, y - 32, 'Ver todos los sprites', 160, function()
 		{
@@ -971,6 +1093,11 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			for (node in worldFile.nodes)
 				if (node.unlocks != null)
 					node.unlocks = [for (target in node.unlocks) target == oldId ? newId : target];
+			for (node in worldFile.nodes)
+				if (node.secretUnlocks != null)
+					node.secretUnlocks = [for (target in node.secretUnlocks) target == oldId ? newId : target];
+			for (pth in worldFile.paths)
+				if (pth.unlockedBy == oldId) pth.unlockedBy = newId;
 
 			if (worldFile.startNode == oldId) worldFile.startNode = newId;
 			OverworldData.renameProgress(worldName, oldId, newId); // el progreso va con el nodo
@@ -1167,15 +1294,73 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		tab.add(nodeGotoButton);
 
 		y += 40;
+		label(tab, x, y - 17, 'N superados:');
+		nodeNeedStepper = new PsychUINumericStepper(x, y, 1, 0, 0, 99, 0, 50);
+		nodeNeedStepper.onValueChange = function()
+		{
+			if (selectedNode == null) return;
+			var before:Int = selectedNode.needLevels;
+			selectedNode.needLevels = Std.int(nodeNeedStepper.value);
+
+			// como enlazar: con la regla puesta empieza cerrado (si no, no haria nada), y al quitarla
+			// vuelve a abrirse si nada mas lo abre
+			if (before <= 0 && selectedNode.needLevels > 0 && selectedNode.unlocked && selectedNode.id != worldFile.startNode)
+			{
+				selectedNode.unlocked = false;
+				showOutput('"${selectedNode.id}" empieza cerrado: se abre con ${selectedNode.needLevels} superados');
+			}
+			else if (selectedNode.needLevels <= 0 && !selectedNode.unlocked && !OverworldData.hasOpener(worldFile, selectedNode, worldName))
+				selectedNode.unlocked = true;
+			reloadMap(true);
+			updateUI();
+		};
+		tab.add(nodeNeedStepper);
+
+		label(tab, x + 90, y - 17, 'Salida secreta:');
+		nodeSecretModeDropDown = new PsychUIDropDownMenu(x + 90, y, ['sin fallos', 'precision'], function(sel:Int, value:String)
+		{
+			if (selectedNode != null) selectedNode.secretMode = (value == 'precision') ? 'accuracy' : 'fc';
+		}, 110);
+		tab.add(nodeSecretModeDropDown);
+
+		label(tab, x + 210, y - 17, '% minimo:');
+		nodeSecretAccStepper = new PsychUINumericStepper(x + 210, y, 1, 95, 0, 100, 0, 50);
+		nodeSecretAccStepper.onValueChange = function() if (selectedNode != null) selectedNode.secretAccuracy = nodeSecretAccStepper.value;
+		tab.add(nodeSecretAccStepper);
+
+		y += 36;
+		label(tab, x, y - 17, 'Su salida secreta desbloquea (ids; en modo L, SHIFT+clic):');
+		nodeSecretInput = new PsychUIInputText(x, y + 2, 280, '', 10);
+		nodeSecretInput.onChange = function(old:String, cur:String)
+		{
+			if (selectedNode == null) return;
+
+			var list:Array<String> = [];
+			var unknown:Array<String> = [];
+			for (part in cur.split(','))
+			{
+				var trimmed:String = part.trim();
+				if (trimmed.length < 1 || list.contains(trimmed)) continue;
+				list.push(trimmed);
+				if (OverworldData.findNode(worldFile, trimmed) == null) unknown.push(trimmed);
+			}
+			selectedNode.secretUnlocks = list;
+			unsavedProgress = true;
+			reloadMap(true);
+
+			if (unknown.length > 0) showOutput('No existe ningun nodo: ' + unknown.join(', '), true);
+			else if (list.length > 0) showOutput('La salida secreta de "${selectedNode.id}" desbloquea: ' + list.join(', '));
+		};
+		tab.add(nodeSecretInput);
+
+		y += 34;
+		tab.add(new PsychUIButton(x, y, 'Probar desde aqui', function() testWorld(true), 130));
+
+		y += 30;
 		tab.add(new FlxText(x, y, 340,
-			'La semana filtra la lista de canciones:
-'
-			+ '- sin semana salen todas las de la build
-'
-			+ '- con semana, solo las que ella declara'
-			+ '\nWarp: con ENTER, aparece en el warp del destino que apunta aqui.'
-			+ '\nSalida (exit) sin Mundo destino: vuelve al mapa de fuera.'
-			+ '\nCon destino: pasa a ese mundo y entra por su salida de vuelta.', 11));
+			'La semana filtra las canciones (sin semana: todas las de la build).\n'
+			+ 'N superados: ademas se abre al tener N superados en este mundo.\n'
+			+ 'Salida secreta: superar el nivel sin fallos o con ese % de precision.', 11));
 	}
 
 	function addDecorTab()
@@ -1291,25 +1476,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 
 		y += 42;
 		tab.add(new PsychUIButton(x, y, 'Borrar decorado', function() deleteSelectedSprite(), 120));
-		tab.add(new PsychUIButton(x + 130, y, 'Duplicar', function()
-		{
-			if (selectedSprite == null) return;
-
-			pushUndo();
-			var copy:OverworldSpriteFile = OverworldData.createSprite(selectedSprite.image, selectedSprite.x + 16, selectedSprite.y + 16);
-			copy.anim = selectedSprite.anim;
-			copy.fps = selectedSprite.fps;
-			copy.flipX = selectedSprite.flipX;
-			copy.flipY = selectedSprite.flipY;
-			copy.scale = selectedSprite.scale;
-			copy.alpha = selectedSprite.alpha;
-			copy.front = selectedSprite.front;
-
-			worldFile.sprites.push(copy);
-			selectedSprite = copy;
-			addDecorSprite(copy); // al final de su grupo, igual que en worldFile.sprites
-			updateUI();
-		}, 90));
+		tab.add(new PsychUIButton(x + 130, y, 'Duplicar', function() duplicateSelection(), 90));
 	}
 
 	function addPathTab()
@@ -1384,9 +1551,35 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			updateUI();
 		}, 140));
 
-		y += 46;
+		y += 44;
+		label(tab, x, y - 17, 'Solo se abre al completar (vacio: con sus nodos):');
+		pathByDropDown = new PsychUIDropDownMenu(x, y, [''].concat([for (node in worldFile.nodes) node.id]), function(sel:Int, value:String)
+		{
+			if (selectedPath == null) return;
+			selectedPath.unlockedBy = value;
+			if (value == '') selectedPath.secret = false;
+			reloadMap(true);
+			updateUI();
+		}, 150);
+		tab.add(pathByDropDown);
+
+		pathSecretCheck = new PsychUICheckBox(x + 160, y, 'con su salida secreta', 170, function()
+		{
+			if (selectedPath == null) return;
+			selectedPath.secret = pathSecretCheck.checked && selectedPath.unlockedBy.length > 0;
+			reloadMap(true);
+			updateUI();
+		});
+		tab.add(pathSecretCheck);
+
+		y += 34;
+		lPathsCheck = new PsychUICheckBox(x, y, 'Unir en L los nodos no alineados (SHIFT: vertical primero)', 330, function() lPaths = lPathsCheck.checked);
+		lPathsCheck.checked = lPaths;
+		tab.add(lPathsCheck);
+
+		y += 34;
 		var tip:FlxText = new FlxText(x, y, 340,
-			'Modo CAMINO (C):\n- clic en un nodo y luego en otro para unirlos\n- si ya estan unidos, se selecciona el camino\n- con un camino elegido, clic en el vacio anade\n  un punto de curva', 8);
+			'Modo CAMINO (C):\n- clic en un nodo y luego en otro para unirlos\n- si ya estan unidos, se selecciona el camino\n- con un camino elegido, clic en el vacio anade\n  un punto de curva\n- en modo L, clic en un camino: lo abre el nodo de origen', 8);
 		tab.add(tip);
 	}
 
@@ -1522,6 +1715,9 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 	 */
 	function resetHistory()
 	{
+		// el progreso apartado es de los nodos de este mundo: en otro mundo se devolveria a quien no es
+		removedProgress.clear();
+		clearGroup();
 		undoStack = [];
 		redoStack = [];
 		lastUITarget = null;
@@ -1704,8 +1900,11 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		var sprite:OverworldSpriteFile = selectedSprite;
 		var pathEnds:Array<String> = selectedPath != null ? [selectedPath.a, selectedPath.b] : null;
 
+		var oldFile:OverworldFile = worldFile;
 		worldFile = cast haxe.Json.parse(json);
 		OverworldData.applyDefaults(worldFile);
+		syncUndoProgress(oldFile, worldFile);
+		restoreCreatedWorlds();
 
 		selectedNode = OverworldData.findNode(worldFile, nodeId);
 		if (selectedNode == null && nodeIndex > -1 && worldFile.nodes.length == oldNodes) selectedNode = worldFile.nodes[nodeIndex];
@@ -1732,9 +1931,101 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		// lo siguiente que se edite empieza un paso nuevo
 		lastUITarget = null;
 		lastFocus = null;
+		clearGroup();
 
-		reloadMap();
+		// los decorados solo se rehacen si han cambiado, y solo los cambiados: con miles de tiles,
+		// rehacerlos todos en cada CTRL+Z tardaba mas de medio segundo
+		var sameBg:Bool = oldFile.bg == worldFile.bg && oldFile.bgAnim == worldFile.bgAnim
+			&& oldFile.bgFps == worldFile.bgFps && oldFile.bgTile == worldFile.bgTile;
+		if (sameBg && patchDecor(oldFile.sprites, worldFile.sprites)) reloadMap(true);
+		else reloadMap();
+		if (oldFile.gridSize != worldFile.gridSize) buildGrid(); // la recarga de grafo no la rehace
 		updateUI();
+	}
+
+	static function sameDecor(a:OverworldSpriteFile, b:OverworldSpriteFile):Bool
+	{
+		return a.image == b.image && a.anim == b.anim && a.fps == b.fps && a.x == b.x && a.y == b.y && a.flipX == b.flipX
+			&& a.flipY == b.flipY && a.scale == b.scale && a.alpha == b.alpha && a.front == b.front;
+	}
+
+	/**
+	 * Pasa los sprites de los decorados de `oldList` a `newList` tocando solo lo que cambia: lo
+	 * comun del principio y del final se queda, y lo de en medio se quita y se pone. false si no
+	 * merece la pena (o los grupos no cuadran): entonces se rehace todo.
+	 */
+	function patchDecor(oldList:Array<OverworldSpriteFile>, newList:Array<OverworldSpriteFile>):Bool
+	{
+		var n:Int = oldList.length;
+		var m:Int = newList.length;
+
+		var oldFront:Int = 0;
+		for (data in oldList) if (data.front) oldFront++;
+		if (oldFront != spritesFront.length || n - oldFront != spritesBack.length) return false;
+
+		var prefix:Int = 0;
+		while (prefix < n && prefix < m && sameDecor(oldList[prefix], newList[prefix])) prefix++;
+		var suffix:Int = 0;
+		while (suffix < n - prefix && suffix < m - prefix && sameDecor(oldList[n - 1 - suffix], newList[m - 1 - suffix])) suffix++;
+
+		var removed:Int = n - prefix - suffix;
+		var added:Int = m - prefix - suffix;
+		if (removed + added == 0) return true;
+		if (removed + added > 400) return false;
+
+		// fuera los sprites del tramo viejo
+		var gone:Array<FlxSprite> = [];
+		var goneFront:Array<Bool> = [];
+		var front:Int = 0;
+		var back:Int = 0;
+		for (i in 0...n)
+		{
+			var local:Int = oldList[i].front ? front++ : back++;
+			if (i < prefix || i >= n - suffix) continue;
+			gone.push((oldList[i].front ? spritesFront : spritesBack).members[local]);
+			goneFront.push(oldList[i].front);
+		}
+		for (i in 0...gone.length)
+		{
+			(goneFront[i] ? spritesFront : spritesBack).remove(gone[i], true);
+			gone[i].destroy();
+		}
+
+		// y dentro los del tramo nuevo, cada uno en su sitio dentro de su grupo
+		front = 0;
+		back = 0;
+		for (i in 0...m - suffix)
+		{
+			var data:OverworldSpriteFile = newList[i];
+			var local:Int = data.front ? front++ : back++;
+			if (i < prefix) continue;
+			(data.front ? spritesFront : spritesBack).insert(local, buildDecorSprite(data));
+		}
+		return true;
+	}
+
+	/**
+	 * Al deshacer o rehacer, el progreso sigue a los nodos: uno que vuelve recupera el que tenia al
+	 * borrarlo, uno que desaparece lo aparta, y un renombrado se lo lleva al ID nuevo.
+	 */
+	function syncUndoProgress(oldFile:OverworldFile, newFile:OverworldFile)
+	{
+		if (oldFile.nodes.length == newFile.nodes.length)
+		{
+			for (i in 0...oldFile.nodes.length)
+				if (oldFile.nodes[i].id != newFile.nodes[i].id)
+					OverworldData.renameProgress(worldName, oldFile.nodes[i].id, newFile.nodes[i].id);
+			return;
+		}
+
+		var oldIds:Map<String, Bool> = new Map<String, Bool>();
+		for (node in oldFile.nodes) oldIds.set(node.id, true);
+		var newIds:Map<String, Bool> = new Map<String, Bool>();
+		for (node in newFile.nodes) newIds.set(node.id, true);
+
+		for (node in oldFile.nodes) if (!newIds.exists(node.id)) stashProgress(node.id);
+		for (node in newFile.nodes) if (!oldIds.exists(node.id)) restoreProgress(node.id);
+		flushProgress();
 	}
 
 	// ------------------------------------------------- desplegable al frente
@@ -2104,9 +2395,18 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 	function refreshNodeIdLists()
 	{
-		startDropDown.list = nodeIdList();
+		var ids:Array<String> = nodeIdList();
+		var key:String = ids.join(',');
+		if (key != lastNodeIds)
+		{
+			lastNodeIds = key;
+			startDropDown.list = ids;
+			if (pathByDropDown != null) pathByDropDown.list = [''].concat([for (node in worldFile.nodes) node.id]);
+		}
 		startDropDown.selectedLabel = worldFile.startNode;
 	}
+
+	var lastNodeIds:String = null;
 
 	function updateUI()
 	{
@@ -2146,6 +2446,10 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			nodeFpsStepper.value = selectedNode.fps;
 			nodeUnlockedCheck.checked = selectedNode.unlocked;
 			nodeUnlocksInput.text = selectedNode.unlocks.join(', ');
+			nodeNeedStepper.value = selectedNode.needLevels;
+			nodeSecretModeDropDown.selectedLabel = selectedNode.secretMode == 'accuracy' ? 'precision' : 'sin fallos';
+			nodeSecretAccStepper.value = selectedNode.secretAccuracy;
+			nodeSecretInput.text = selectedNode.secretUnlocks.join(', ');
 			nodeXStepper.value = selectedNode.x;
 			nodeYStepper.value = selectedNode.y;
 		}
@@ -2176,6 +2480,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			pathDotAnimDropDown.list = [''].concat(OverworldData.listAnimations(selectedPath.dots));
 			pathDotAnimDropDown.selectedLabel = selectedPath.dotAnim;
 			pathSpacingStepper.value = selectedPath.dotSpacing;
+			pathByDropDown.selectedLabel = selectedPath.unlockedBy;
+			pathSecretCheck.checked = selectedPath.secret;
 		}
 		else pathInfoTxt.text = 'Ningun camino seleccionado';
 	}
@@ -2226,11 +2532,17 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			return;
 		}
 
+		// soltar el raton donde updateMouse no lo ve (paleta, ayuda abierta, un campo activo) tambien
+		// termina el rectangulo y los arrastres: si no, el siguiente clic en el mapa los continuaba
+		if (FlxG.mouse.justReleased && (helpBg.visible || hadFocus || PsychUIInputText.focusOn != null || mouseOnPalette()))
+			endMouseGestures();
+
 		raiseOpenDropDown();
 		updateProblems(elapsed);
 
 		modeTxt.text = 'Mundo: $worldName  |  Modo: ${MODE_NAMES[curMode]}  |  F1 = ayuda'
 			+ (problems.length > 0 ? '  |  ${problems.length} avisos (E)' : '')
+			+ (hasGroup() ? '  |  grupo: ${groupNodes.length} nodos, ${groupSprites.length} deco' : '')
 			+ (unsavedProgress ? '  |  * sin guardar' : '');
 
 		if (helpBg.visible)
@@ -2266,7 +2578,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		if (FlxG.keys.pressed.CONTROL)
 		{
 			if (FlxG.keys.justPressed.S) saveWorld();
-			if (FlxG.keys.justPressed.T) testWorld();
+			if (FlxG.keys.justPressed.T) testWorld(FlxG.keys.pressed.SHIFT);
+			if (FlxG.keys.justPressed.D) duplicateSelection();
 			if (FlxG.keys.justPressed.Z) FlxG.keys.pressed.SHIFT ? redo() : undo();
 			if (FlxG.keys.justPressed.Y) redo();
 			return;
@@ -2274,7 +2587,15 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 		if (FlxG.keys.justPressed.ESCAPE)
 		{
-			// ESC primero saca del modo en el que estes; solo desde SELECCIONAR sale del editor
+			// ESC primero suelta el grupo
+			if (hasGroup())
+			{
+				clearGroup();
+				showOutput('Grupo soltado');
+				return;
+			}
+
+			// despues saca del modo en el que estes; solo desde SELECCIONAR sale del editor
 			if (curMode != MODE_SELECT)
 			{
 				curMode = MODE_SELECT;
@@ -2300,9 +2621,10 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 		if (curMode != prevMode)
 		{
-			// un enlace o un camino a medias no sobrevive a un cambio de modo
+			// un enlace, un camino o un rectangulo a medias no sobrevive a un cambio de modo
 			linkStart = null;
 			pathStart = null;
+			cancelBand();
 
 			if (curMode == MODE_LINK)
 			{
@@ -2339,7 +2661,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 		if (FlxG.keys.justPressed.DELETE)
 		{
-			if (selectedNode != null) deleteSelectedNode();
+			if (hasGroup()) deleteGroup();
+			else if (selectedNode != null) deleteSelectedNode();
 			else if (selectedSprite != null) deleteSelectedSprite();
 		}
 
@@ -2375,6 +2698,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		if (mouseOnUI())
 		{
 			dragging = false;
+			groupDragLast = null;
+			cancelBand();
 			return;
 		}
 
@@ -2416,12 +2741,46 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			dragging = false;
 			dragSnapshot = null;
 			dragPointPath = null;
+			groupDragLast = null;
+			groupDragSprites = null;
+			if (bandStart != null) finishBand(mouseX, mouseY);
+		}
+
+		// rectangulo de seleccion
+		if (bandStart != null && FlxG.mouse.pressed)
+		{
+			var left:Float = Math.min(bandStart[0], mouseX);
+			var top:Float = Math.min(bandStart[1], mouseY);
+			bandSprite.visible = true;
+			bandSprite.setGraphicSize(Std.int(Math.max(1, Math.abs(mouseX - bandStart[0]))), Std.int(Math.max(1, Math.abs(mouseY - bandStart[1]))));
+			bandSprite.updateHitbox();
+			bandSprite.setPosition(left, top);
+			return;
 		}
 
 		if (dragging && FlxG.mouse.pressed)
 		{
 			var newX:Float = snap(mouseX + dragOffsetX);
 			var newY:Float = snap(mouseY + dragOffsetY);
+
+			// arrastrando algo del grupo: todo el grupo se mueve lo mismo
+			if (groupDragLast != null)
+			{
+				var dx:Float = newX - groupDragLast[0];
+				var dy:Float = newY - groupDragLast[1];
+				if (dx != 0 || dy != 0)
+				{
+					if (dragSnapshot != null)
+					{
+						pushUndo(dragSnapshot);
+						dragSnapshot = null;
+					}
+					moveGroupBy(dx, dy);
+					groupDragLast = [newX, newY];
+					unsavedProgress = true;
+				}
+				return;
+			}
 
 			if (dragPointPath != null)
 			{
@@ -2599,7 +2958,21 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 	function selectUnderMouse(mouseX:Float, mouseY:Float, allowDrag:Bool)
 	{
+		var shift:Bool = allowDrag && FlxG.keys.pressed.SHIFT;
 		var node:OverworldNodeFile = nodeUnderMouse(mouseX, mouseY);
+		var data:OverworldSpriteFile = node == null ? spriteUnderMouse(mouseX, mouseY) : null;
+
+		// SHIFT+clic: suma o quita del grupo
+		if (shift && (node != null || data != null))
+		{
+			toggleInGroup(node, data);
+			return;
+		}
+
+		// agarrar algo del grupo mueve el grupo entero; agarrar otra cosa lo suelta
+		var inGroup:Bool = hasGroup() && ((node != null && groupNodes.contains(node)) || (data != null && groupSprites.contains(data)));
+		if (!inGroup && !shift) clearGroup();
+
 		if (node != null)
 		{
 			selectedNode = node;
@@ -2613,11 +2986,11 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 				dragSnapshot = snapshot();
 				dragOffsetX = node.x - mouseX;
 				dragOffsetY = node.y - mouseY;
+				if (inGroup) startGroupDrag(node.x, node.y);
 			}
 			return;
 		}
 
-		var data:OverworldSpriteFile = spriteUnderMouse(mouseX, mouseY);
 		if (data != null)
 		{
 			selectedSprite = data;
@@ -2631,13 +3004,370 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 				dragSnapshot = snapshot();
 				dragOffsetX = data.x - mouseX;
 				dragOffsetY = data.y - mouseY;
+				if (inGroup) startGroupDrag(data.x, data.y);
 			}
 			return;
 		}
 
+		// clic en el vacio: suelta la seleccion y empieza un rectangulo (con SHIFT, anade al grupo)
+		if (!shift)
+		{
+			selectedNode = null;
+			selectedSprite = null;
+		}
+		updateSelectionBox();
+		if (allowDrag) bandStart = [mouseX, mouseY];
+	}
+
+	// ------------------------------------------------------- seleccion en grupo
+	inline function hasGroup():Bool
+		return groupNodes.length + groupSprites.length > 1;
+
+	/** Tras quitar algo del grupo: con menos de 2 deja de ser grupo, y las cajas se rehacen. */
+	function normalizeGroup()
+	{
+		if (groupNodes.length + groupSprites.length < 2)
+		{
+			groupNodes = [];
+			groupSprites = [];
+		}
+		refreshGroupBoxes();
+	}
+
+	function clearGroup()
+	{
+		groupNodes = [];
+		groupSprites = [];
+		groupDragLast = null;
+		groupDragSprites = null;
+		refreshGroupBoxes();
+	}
+
+	function cancelBand()
+	{
+		bandStart = null;
+		if (bandSprite != null) bandSprite.visible = false;
+	}
+
+	function endMouseGestures()
+	{
+		dragging = false;
+		dragSnapshot = null;
+		dragPointPath = null;
+		groupDragLast = null;
+		groupDragSprites = null;
+		cancelBand();
+	}
+
+	/** SHIFT+clic: mete o saca un nodo o decorado del grupo (lo elegido hasta ahora entra primero). */
+	function toggleInGroup(node:OverworldNodeFile, data:OverworldSpriteFile)
+	{
+		if (groupNodes.length + groupSprites.length == 0)
+		{
+			if (selectedNode != null) groupNodes.push(selectedNode);
+			else if (selectedSprite != null) groupSprites.push(selectedSprite);
+		}
+
+		if (node != null)
+		{
+			if (groupNodes.contains(node)) groupNodes.remove(node);
+			else groupNodes.push(node);
+		}
+		if (data != null)
+		{
+			if (groupSprites.contains(data)) groupSprites.remove(data);
+			else groupSprites.push(data);
+		}
+
+		// lo que se ve en las pestanas es lo ultimo anadido, o lo que quede
+		if (node != null && groupNodes.contains(node))
+		{
+			selectedNode = node;
+			selectedSprite = null;
+			UI_box.selectedName = 'Nodo';
+		}
+		else if (data != null && groupSprites.contains(data))
+		{
+			selectedSprite = data;
+			selectedNode = null;
+			UI_box.selectedName = 'Deco';
+		}
+		else
+		{
+			selectedNode = groupNodes.length > 0 ? groupNodes[groupNodes.length - 1] : null;
+			selectedSprite = (selectedNode == null && groupSprites.length > 0) ? groupSprites[groupSprites.length - 1] : null;
+		}
+
+		// con uno solo no hay grupo: es la seleccion normal
+		if (groupNodes.length + groupSprites.length < 2)
+		{
+			groupNodes = [];
+			groupSprites = [];
+		}
+
+		updateUI();
+		refreshGroupBoxes();
+		updateSelectionBox();
+		if (hasGroup()) showOutput('${groupNodes.length} nodos y ${groupSprites.length} decorados: arrastra para moverlos, CTRL+D duplica, SUPR borra, ESC suelta');
+	}
+
+	/** Al soltar el rectangulo: selecciona los nodos (por su centro) y decorados (por su centro) de dentro. */
+	function finishBand(mouseX:Float, mouseY:Float)
+	{
+		var left:Float = Math.min(bandStart[0], mouseX);
+		var top:Float = Math.min(bandStart[1], mouseY);
+		var right:Float = Math.max(bandStart[0], mouseX);
+		var bottom:Float = Math.max(bandStart[1], mouseY);
+		var adding:Bool = FlxG.keys.pressed.SHIFT;
+		cancelBand();
+		if (right - left < 3 && bottom - top < 3) return; // ha sido un clic, no un rectangulo
+
+		inline function inside(x:Float, y:Float):Bool
+			return x >= left && x <= right && y >= top && y <= bottom;
+
+		if (!adding) groupNodes = [];
+		if (!adding) groupSprites = [];
+		if (adding && groupNodes.length + groupSprites.length == 0)
+		{
+			if (selectedNode != null) groupNodes.push(selectedNode);
+			else if (selectedSprite != null) groupSprites.push(selectedSprite);
+		}
+
+		for (node in worldFile.nodes)
+			if (inside(node.x, node.y) && !groupNodes.contains(node)) groupNodes.push(node);
+
+		var already:haxe.ds.ObjectMap<Dynamic, Bool> = new haxe.ds.ObjectMap<Dynamic, Bool>();
+		for (data in groupSprites) already.set(data, true);
+		var front:Int = 0;
+		var back:Int = 0;
+		for (data in worldFile.sprites)
+		{
+			var local:Int = data.front ? front++ : back++;
+			var group = data.front ? spritesFront : spritesBack;
+			if (local >= group.length || already.exists(data)) continue;
+			var spr:FlxSprite = group.members[local];
+			if (inside(spr.x + spr.width * 0.5, spr.y + spr.height * 0.5)) groupSprites.push(data);
+		}
+
+		var total:Int = groupNodes.length + groupSprites.length;
+		selectedNode = groupNodes.length > 0 ? groupNodes[0] : null;
+		selectedSprite = (selectedNode == null && groupSprites.length > 0) ? groupSprites[0] : null;
+		if (selectedNode != null) UI_box.selectedName = 'Nodo';
+		else if (selectedSprite != null) UI_box.selectedName = 'Deco';
+		if (total < 2)
+		{
+			groupNodes = [];
+			groupSprites = [];
+		}
+
+		updateUI();
+		refreshGroupBoxes();
+		updateSelectionBox();
+		if (hasGroup()) showOutput('${groupNodes.length} nodos y ${groupSprites.length} decorados: arrastra para moverlos, CTRL+D duplica, SUPR borra, ESC suelta');
+	}
+
+	/** Cajas azules sobre todo lo del grupo (la amarilla es el elegido, el que muestran las pestanas). */
+	function refreshGroupBoxes()
+	{
+		if (groupBoxes == null) return;
+		groupBoxes.forEach(function(box:FlxSprite) box.destroy());
+		groupBoxes.clear();
+		if (!hasGroup()) return;
+
+		for (node in groupNodes)
+		{
+			var index:Int = worldFile.nodes.indexOf(node);
+			if (index > -1 && index < nodesGroup.length) addGroupBox(nodesGroup.members[index]);
+		}
+		if (groupSprites.length > 0)
+		{
+			var sprites:haxe.ds.ObjectMap<Dynamic, FlxSprite> = decorSpriteMap(groupSprites);
+			for (data in groupSprites)
+			{
+				var spr:FlxSprite = sprites.get(data);
+				if (spr != null) addGroupBox(spr);
+			}
+		}
+	}
+
+	function addGroupBox(target:FlxSprite)
+	{
+		if (target == null) return;
+		var box:FlxSprite = new FlxSprite().makeGraphic(1, 1, FlxColor.WHITE);
+		box.color = 0xFF66CCFF;
+		box.alpha = 0.35;
+		box.setGraphicSize(Std.int(target.width + 2), Std.int(target.height + 2));
+		box.updateHitbox();
+		box.setPosition(target.x - 1, target.y - 1);
+		groupBoxes.add(box);
+	}
+
+	/** El sprite de cada decorado pedido, en una sola pasada por la lista (con miles de tiles). */
+	function decorSpriteMap(datas:Array<OverworldSpriteFile>):haxe.ds.ObjectMap<Dynamic, FlxSprite>
+	{
+		var wanted:haxe.ds.ObjectMap<Dynamic, Bool> = new haxe.ds.ObjectMap<Dynamic, Bool>();
+		for (data in datas) wanted.set(data, true);
+
+		var result:haxe.ds.ObjectMap<Dynamic, FlxSprite> = new haxe.ds.ObjectMap<Dynamic, FlxSprite>();
+		var front:Int = 0;
+		var back:Int = 0;
+		for (data in worldFile.sprites)
+		{
+			var local:Int = data.front ? front++ : back++;
+			if (!wanted.exists(data)) continue;
+			var group = data.front ? spritesFront : spritesBack;
+			if (local < group.length) result.set(data, group.members[local]);
+		}
+		return result;
+	}
+
+	function startGroupDrag(x:Float, y:Float)
+	{
+		groupDragLast = [x, y];
+		groupDragSprites = decorSpriteMap(groupSprites);
+	}
+
+	/** Mueve todo el grupo. Los caminos entre dos nodos del grupo se mueven enteros, con sus curvas. */
+	function moveGroupBy(dx:Float, dy:Float)
+	{
+		var ids:Map<String, Bool> = new Map<String, Bool>();
+		for (node in groupNodes) ids.set(node.id, true);
+
+		for (pth in worldFile.paths)
+			if (ids.exists(pth.a) && ids.exists(pth.b) && pth.points != null)
+				for (point in pth.points)
+				{
+					point[0] += dx;
+					point[1] += dy;
+				}
+		for (node in groupNodes) moveNodeTo(node, node.x + dx, node.y + dy, ids);
+
+		var grows:Bool = false;
+		for (data in groupSprites)
+		{
+			data.x += dx;
+			data.y += dy;
+			var spr:FlxSprite = groupDragSprites != null ? groupDragSprites.get(data) : null;
+			if (spr != null) spr.setPosition(data.x, data.y);
+			if (data.x + 64 > mapWidth || data.y + 64 > mapHeight) grows = true;
+		}
+		groupBoxes.forEach(function(box:FlxSprite) box.setPosition(box.x + dx, box.y + dy));
+
+		if (groupNodes.length > 0 || grows) reloadMap(true);
+		if (selectedNode != null)
+		{
+			nodeXStepper.value = selectedNode.x;
+			nodeYStepper.value = selectedNode.y;
+		}
+		if (selectedSprite != null)
+		{
+			decorXStepper.value = selectedSprite.x;
+			decorYStepper.value = selectedSprite.y;
+		}
+		updateSelectionBox();
+	}
+
+	/** SUPR con un grupo: lo borra todo en un solo paso de deshacer. */
+	function deleteGroup()
+	{
+		pushUndo();
+		var nodes:Array<OverworldNodeFile> = groupNodes.copy();
+		var sprites:Array<OverworldSpriteFile> = groupSprites.copy();
+		clearGroup();
+
+		for (node in nodes) removeNode(node);
+		flushProgress();
+		if (sprites.length > 0)
+		{
+			var gone:haxe.ds.ObjectMap<Dynamic, Bool> = new haxe.ds.ObjectMap<Dynamic, Bool>();
+			for (data in sprites) gone.set(data, true);
+			worldFile.sprites = worldFile.sprites.filter(data -> !gone.exists(data));
+		}
+
 		selectedNode = null;
 		selectedSprite = null;
+		selectedPath = null;
+		unsavedProgress = true;
+		if (sprites.length > 0) reloadMap();
+		else reloadMap(true);
+		updateUI();
+		showOutput('Borrados ${nodes.length} nodos y ${sprites.length} decorados (CTRL+Z para recuperarlos)');
+	}
+
+	/**
+	 * CTRL+D: duplica lo elegido (o el grupo) un poco mas abajo a la derecha. Los nodos copiados
+	 * llevan IDs nuevos, y los caminos y desbloqueos entre ellos apuntan a las copias.
+	 */
+	function duplicateSelection()
+	{
+		var nodes:Array<OverworldNodeFile> = hasGroup() ? groupNodes.copy() : (selectedNode != null ? [selectedNode] : []);
+		var sprites:Array<OverworldSpriteFile> = hasGroup() ? groupSprites.copy() : (selectedSprite != null ? [selectedSprite] : []);
+		if (nodes.length + sprites.length < 1)
+		{
+			showOutput('Elige antes algo para duplicar (o haz un grupo con SHIFT+clic o un rectangulo)', true);
+			return;
+		}
+
+		pushUndo();
+		var offset:Float = Math.max(8, worldFile.gridSize);
+		var idMap:Map<String, String> = new Map<String, String>();
+		var newNodes:Array<OverworldNodeFile> = [];
+		for (node in nodes)
+		{
+			var copy:OverworldNodeFile = Reflect.copy(node);
+			copy.unlocks = node.unlocks.copy();
+			copy.secretUnlocks = node.secretUnlocks.copy();
+			var base:String = ~/[0-9]+$/.replace(node.id, '');
+			copy.id = OverworldData.uniqueNodeId(worldFile, base.length > 0 ? base : 'node');
+			copy.x += offset;
+			copy.y += offset;
+			idMap.set(node.id, copy.id);
+			worldFile.nodes.push(copy);
+			OverworldData.clearStaleProgress(worldName, copy.id);
+			newNodes.push(copy);
+		}
+
+		// los enlaces entre nodos copiados apuntan a las copias
+		inline function remap(id:String):String
+			return idMap.exists(id) ? idMap.get(id) : id;
+		for (copy in newNodes)
+		{
+			copy.unlocks = [for (id in copy.unlocks) remap(id)];
+			copy.secretUnlocks = [for (id in copy.secretUnlocks) remap(id)];
+		}
+		for (pth in worldFile.paths.copy())
+		{
+			if (!idMap.exists(pth.a) || !idMap.exists(pth.b)) continue;
+			var copy:OverworldPathFile = Reflect.copy(pth);
+			copy.a = idMap.get(pth.a);
+			copy.b = idMap.get(pth.b);
+			copy.points = [for (point in pth.points) [point[0] + offset, point[1] + offset]];
+			if (copy.unlockedBy != null && copy.unlockedBy.length > 0) copy.unlockedBy = remap(copy.unlockedBy);
+			worldFile.paths.push(copy);
+		}
+
+		var newSprites:Array<OverworldSpriteFile> = [];
+		for (data in sprites)
+		{
+			var copy:OverworldSpriteFile = Reflect.copy(data);
+			copy.x += offset;
+			copy.y += offset;
+			worldFile.sprites.push(copy);
+			addDecorSprite(copy); // al final de su grupo, igual que en worldFile.sprites
+			newSprites.push(copy);
+		}
+
+		// lo copiado pasa a ser la seleccion
+		groupNodes = newNodes.length + newSprites.length > 1 ? newNodes : [];
+		groupSprites = newNodes.length + newSprites.length > 1 ? newSprites : [];
+		selectedNode = newNodes.length > 0 ? newNodes[0] : null;
+		selectedSprite = (selectedNode == null && newSprites.length > 0) ? newSprites[0] : null;
+		unsavedProgress = true;
+		reloadMap(true);
+		updateUI();
+		refreshGroupBoxes();
 		updateSelectionBox();
+		showOutput('Duplicados ${newNodes.length} nodos y ${newSprites.length} decorados');
 	}
 
 	function createNode(x:Float, y:Float)
@@ -2694,7 +3424,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		updateUI();
 	}
 
-	function handlePathClick(mouseX:Float, mouseY:Float)
+	function handlePathClick(mouseX:Float, mouseY:Float, ?verticalFirst:Bool = false)
 	{
 		var node:OverworldNodeFile = nodeUnderMouse(mouseX, mouseY);
 
@@ -2731,6 +3461,9 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 			pushUndo();
 			var pth:OverworldPathFile = OverworldData.createPath(pathStart.id, node.id);
+			// nodos no alineados: el camino hace una esquina, como en SMW (SHIFT: primero vertical)
+			var bent:Bool = lPaths && pathStart.x != node.x && pathStart.y != node.y;
+			if (bent) pth.points.push((verticalFirst || FlxG.keys.pressed.SHIFT) ? [pathStart.x, node.y] : [node.x, pathStart.y]);
 			worldFile.paths.push(pth);
 			selectedPath = pth;
 			pathStart = null;
@@ -2739,7 +3472,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			UI_box.selectedName = 'Camino';
 			reloadMap(true);
 			updateUI();
-			showOutput('Camino creado: ${pth.a} <-> ${pth.b}');
+			showOutput('Camino creado: ${pth.a} <-> ${pth.b}' + (bent ? ' (en L; con SHIFT al unir, primero vertical)' : ''));
 			return;
 		}
 
@@ -2762,7 +3495,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 	 * Mueve un nodo arrastrando el punto de curva pegado a el en cada camino: si ese punto estaba
 	 * alineado con el nodo en vertical u horizontal, sigue alineado, asi una L no se tuerce.
 	 */
-	function moveNodeTo(node:OverworldNodeFile, newX:Float, newY:Float)
+	function moveNodeTo(node:OverworldNodeFile, newX:Float, newY:Float, ?skipInside:Map<String, Bool>)
 	{
 		var oldX:Float = node.x;
 		var oldY:Float = node.y;
@@ -2770,6 +3503,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		for (pth in worldFile.paths)
 		{
 			if (pth.points == null || pth.points.length < 1 || pth.a == pth.b) continue;
+			// un camino con los dos extremos en el grupo ya se ha movido entero
+			if (skipInside != null && skipInside.exists(pth.a) && skipInside.exists(pth.b)) continue;
 
 			var point:Array<Float> = null;
 			if (pth.a == node.id) point = pth.points[0];
@@ -2859,9 +3594,21 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 	 * Enlazar bloquea al destino (si empezaba abierto, el desbloqueo no haria nada) y quitar su
 	 * ultimo enlace lo vuelve a dejar abierto, para que el grafo nunca quede con nodos sin salida.
 	 */
-	function handleLinkClick(mouseX:Float, mouseY:Float)
+	function handleLinkClick(mouseX:Float, mouseY:Float, ?forceSecret:Bool = false)
 	{
 		var node:OverworldNodeFile = nodeUnderMouse(mouseX, mouseY);
+		var secret:Bool = forceSecret || FlxG.keys.pressed.SHIFT;
+
+		// con un nodo de origen, clic en un camino: ese camino solo se abre al completarlo
+		if (node == null && linkStart != null)
+		{
+			var pth:OverworldPathFile = pathUnderMouse(mouseX, mouseY);
+			if (pth != null)
+			{
+				linkPath(pth, secret);
+				return;
+			}
+		}
 
 		if (node == null || node == linkStart)
 		{
@@ -2884,24 +3631,33 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			selectedPath = null;
 			UI_box.selectedName = 'Nodo';
 			updateUI();
-			showOutput('"${node.id}": clic en los nodos que desbloquea (clic en el mismo o en el vacio para terminar)');
+			showOutput('"${node.id}": clic en los nodos (o caminos) que desbloquea; SHIFT+clic = con su salida secreta.\nClic en el mismo o en el vacio para terminar');
 			return;
 		}
 
-		if (node.id == worldFile.startNode && !linkStart.unlocks.contains(node.id))
+		if (secret && linkStart.type != 'level')
+		{
+			showOutput('Solo un nivel tiene salida secreta: "${linkStart.id}" es "${linkStart.type}"', true);
+			return;
+		}
+
+		var list:Array<String> = secret ? linkStart.secretUnlocks : linkStart.unlocks;
+		if (node.id == worldFile.startNode && !list.contains(node.id))
 		{
 			showOutput('"${node.id}" es el nodo inicial: tiene que empezar abierto', true);
 			return;
 		}
 
 		pushUndo();
+		var what:String = secret ? 'su salida secreta' : '';
 		var message:String;
-		if (linkStart.unlocks.contains(node.id))
+		if (list.contains(node.id))
 		{
-			linkStart.unlocks.remove(node.id);
-			message = '"${linkStart.id}" ya no desbloquea "${node.id}"';
-			// un warp que se abre por su pareja no se reabre: empezaba cerrado a proposito
-			if (!node.unlocked && !OverworldData.anyoneUnlocks(worldFile, node.id) && !OverworldData.opensByPartner(worldName, node))
+			list.remove(node.id);
+			message = '"${linkStart.id}" ya no desbloquea "${node.id}"' + (secret ? ' con su salida secreta' : '');
+			// nadie mas lo abre: vuelve a empezar abierto (salvo un warp que se abre por su pareja,
+			// o un nodo de "N superados": esos empezaban cerrados a proposito)
+			if (!node.unlocked && !OverworldData.hasOpener(worldFile, node, worldName))
 			{
 				node.unlocked = true;
 				message += ' (nadie mas lo desbloquea: vuelve a empezar abierto)';
@@ -2909,8 +3665,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		}
 		else
 		{
-			linkStart.unlocks.push(node.id);
-			message = '"${linkStart.id}" desbloquea "${node.id}"';
+			list.push(node.id);
+			message = '"${linkStart.id}" desbloquea "${node.id}"' + (secret ? ' con su salida secreta' : '');
 			if (node.unlocked)
 			{
 				node.unlocked = false;
@@ -2922,6 +3678,35 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		reloadMap(true);
 		updateUI();
 		showOutput(message);
+	}
+
+	/** Modo ENLAZAR sobre un camino: lo abre `linkStart` al completarse (o con su salida secreta). */
+	function linkPath(pth:OverworldPathFile, secret:Bool)
+	{
+		if (secret && linkStart.type != 'level')
+		{
+			showOutput('Solo un nivel tiene salida secreta: "${linkStart.id}" es "${linkStart.type}"', true);
+			return;
+		}
+
+		pushUndo();
+		var name:String = '${pth.a} <-> ${pth.b}';
+		if (pth.unlockedBy == linkStart.id && pth.secret == secret)
+		{
+			pth.unlockedBy = '';
+			pth.secret = false;
+			showOutput('El camino $name ya no depende de "${linkStart.id}": se abre con sus nodos');
+		}
+		else
+		{
+			pth.unlockedBy = linkStart.id;
+			pth.secret = secret;
+			showOutput('El camino $name solo se abre al ' + (secret ? 'sacar la salida secreta de' : 'completar') + ' "${linkStart.id}"');
+		}
+		selectedPath = pth;
+		unsavedProgress = true;
+		reloadMap(true);
+		updateUI();
 	}
 
 	// ------------------------------------------------------- avisos sobre el mapa
@@ -3014,6 +3799,13 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 	// ------------------------------------------------------- unir mundos (bloque B)
 	var nodeLinkButton:PsychUIButton;
 	var nodeGotoButton:PsychUIButton;
+	var nodeNeedStepper:PsychUINumericStepper;
+	var nodeSecretModeDropDown:PsychUIDropDownMenu;
+	var nodeSecretAccStepper:PsychUINumericStepper;
+	var nodeSecretInput:PsychUIInputText;
+	var pathByDropDown:PsychUIDropDownMenu;
+	var pathSecretCheck:PsychUICheckBox;
+	var lPathsCheck:PsychUICheckBox;
 
 	/**
 	 * El mundo al que lleva un nodo: su destino, o para una salida sin destino, el mapa del que
@@ -3173,7 +3965,9 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		var node:OverworldNodeFile = selectedNode;
 		if (node == null || node.type != 'world' || !canWriteLinkedWorlds()) return;
 
-		var subName:String = uniqueWorldName(OverworldData.toWorldFileName(worldName + '_' + node.id));
+		// si ya se creo antes en esta sesion y se deshizo, se reutiliza (en vez de dejarlo huerfano)
+		var baseName:String = OverworldData.toWorldFileName(worldName + '_' + node.id);
+		var subName:String = isOrphanCreated(baseName) ? baseName : uniqueWorldName(baseName);
 		var sub:OverworldFile = buildStarterWorld(node.name != null && node.name.length > 0 ? node.name : subName);
 		var first:OverworldNodeFile = sub.nodes[0];
 
@@ -3196,6 +3990,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			return;
 		}
 		OverworldData.resetProgress(subName); // sin restos de un mundo borrado con el mismo nombre
+		createdWorlds.set(subName, OverworldData.stringify(sub));
 
 		pushUndo();
 		node.world = subName;
@@ -3331,6 +4126,11 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			if (!ok) fails++;
 		}
 		function nodeIn(file:OverworldFile, id:String) return file == null ? null : OverworldData.findNode(file, id);
+		function castleWorld(id:String):String
+		{
+			var node:OverworldNodeFile = OverworldData.findNode(worldFile, id);
+			return node == null ? null : node.world;
+		}
 
 		// la partida simulada empieza en el mundo de prueba (y no en el de por defecto)
 		OverworldData.simStartWorld = 'zz_self';
@@ -3495,8 +4295,136 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			check(redoCount > 0 && undoStack.length == undoCount && redoStack.length == redoCount, 'pintar encima del mismo tile no gasta deshacer ni borra el rehacer');
 		}
 
+		// 11. grupo: duplicar con su camino de dentro, borrar en un paso y deshacer
+		worldName = 'zz_group';
+		loadedName = null;
+		worldFile = OverworldData.createEmpty();
+		worldFile.nodes = [];
+		resetHistory();
+		var ga:OverworldNodeFile = OverworldData.createNode('a', 64, 64);
+		var gb:OverworldNodeFile = OverworldData.createNode('b', 128, 64);
+		var gc:OverworldNodeFile = OverworldData.createNode('c', 64, 128);
+		for (n in [ga, gb, gc]) worldFile.nodes.push(n);
+		worldFile.paths.push(OverworldData.createPath('a', 'b'));
+		worldFile.paths.push(OverworldData.createPath('a', 'c'));
+		ga.unlocks = ['b'];
+		worldFile.startNode = 'a';
+		reloadMap();
+
+		selectedNode = ga;
+		toggleInGroup(gb, null);
+		check(hasGroup() && groupNodes.length == 2, 'SHIFT+clic arma un grupo de 2 nodos');
+		duplicateSelection();
+		var copies:Array<OverworldNodeFile> = groupNodes.copy();
+		var copyPath:Bool = copies.length == 2 && findPath(copies[0].id, copies[1].id) != null;
+		check(worldFile.nodes.length == 5 && copyPath && copies[0].unlocks.join(',') == copies[1].id,
+			'duplicar el grupo copia sus nodos, el camino de dentro y el desbloqueo entre ellos');
+		deleteGroup();
+		check(worldFile.nodes.length == 3 && worldFile.paths.length == 2, 'SUPR borra el grupo entero');
+		undo();
+		check(worldFile.nodes.length == 5 && worldFile.paths.length == 3, 'CTRL+Z recupera el grupo borrado');
+
+		// mover el grupo arrastra tambien las curvas del camino de dentro
+		var inner:OverworldPathFile = findPath(copies[0].id, copies[1].id);
+		if (inner != null)
+		{
+			var na:OverworldNodeFile = OverworldData.findNode(worldFile, inner.a);
+			var nb:OverworldNodeFile = OverworldData.findNode(worldFile, inner.b);
+			inner.points = [[na.x, na.y + 32]];
+			groupNodes = [na, nb];
+			groupSprites = [];
+			startGroupDrag(na.x, na.y);
+			moveGroupBy(16, 0);
+			groupDragLast = null;
+			check(inner.points[0][0] == na.x && inner.points[0][1] == na.y + 32, 'mover el grupo mueve las curvas de sus caminos');
+			clearGroup();
+		}
+
+		// 12. borrar un nodo aparta su progreso y deshacer se lo devuelve
+		OverworldData.setCompleted('zz_group', 'c');
+		OverworldData.setCompleted('zz_group', 'c' + OverworldData.SECRET);
+		selectedNode = OverworldData.findNode(worldFile, 'c');
+		deleteSelectedNode();
+		check(!OverworldData.isCompleted('zz_group', 'c') && !OverworldData.isSecretCompleted('zz_group', 'c'), 'borrar un nodo aparta su progreso');
+		undo();
+		check(OverworldData.isCompleted('zz_group', 'c') && OverworldData.isSecretCompleted('zz_group', 'c'), 'deshacer el borrado le devuelve el progreso (y el de su salida secreta)');
+
+		// 13. deshacer un trazo de tiles quita solo esos tiles (sin rehacer los demas)
+		if (paletteFrames.length > 0)
+		{
+			paletteSelected = 0;
+			var cell:Float = paletteTileSize;
+			strokeUndoPending = true;
+			for (i in 0...3) paintTile(cell * (i + 0.5), cell * 6.5);
+			strokeUndoPending = true;
+			for (i in 0...2) paintTile(cell * (i + 0.5), cell * 7.5);
+			var backSprites:FlxSprite = spritesBack.members[0];
+			undo();
+			var backCount:Int = Lambda.count(worldFile.sprites, d -> !d.front);
+			check(worldFile.sprites.length == 3 && spritesBack.length == backCount && spritesBack.members[0] == backSprites,
+				'deshacer un trazo quita solo sus tiles y deja los demas sprites como estaban');
+			redo();
+			check(worldFile.sprites.length == 5 && spritesBack.length == Lambda.count(worldFile.sprites, d -> !d.front), 'rehacer el trazo vuelve a ponerlos');
+		}
+
+		// 14. rectangulo de seleccion
+		bandStart = [0, 0];
+		finishBand(160, 160);
+		check(hasGroup() && groupNodes.length >= 3, 'el rectangulo selecciona los nodos de dentro (${groupNodes.length} nodos, ${groupSprites.length} decorados)');
+		clearGroup();
+
+		// 15. "Crear submundo" deshecho: al guardar se borra el submundo que ya no usa nadie
+		var castle:OverworldNodeFile = OverworldData.createNode('w', 128, 128);
+		castle.type = 'world';
+		worldFile.nodes.push(castle);
+		worldFile.paths.push(OverworldData.createPath('a', 'w'));
+		reloadMap(true);
+		selectedNode = castle;
+		createSubWorld();
+		var orphan:String = castle.world;
+		check(orphan != null && orphan.length > 0 && OverworldData.exists(orphan), 'submundo creado para deshacerlo: $orphan');
+		undo();
+		check(saveWorld() && OverworldData.exists(orphan), 'mientras CTRL+Y pueda volver a el, el submundo deshecho se queda');
+		redo();
+		check(OverworldData.exists(orphan) && castleWorld(castle.id) == orphan, 'rehacer vuelve a enlazar el submundo');
+		undo();
+		pushUndo(); // otra accion: el rehacer se vacia y ya nada puede volver a el
+		undoStack = undoStack.filter(state -> state.indexOf('"world":"$orphan"') < 0);
+		check(saveWorld() && !OverworldData.exists(orphan), 'guardar cuando ya nada lo usa borra el submundo sin usar');
+
+		// 15b. "N superados" en un nodo abierto lo cierra
+		var needNode:OverworldNodeFile = OverworldData.findNode(worldFile, 'b');
+		selectedNode = needNode;
+		updateUI();
+		nodeNeedStepper.value = 2;
+		nodeNeedStepper.onValueChange();
+		check(needNode.needLevels == 2 && !needNode.unlocked, 'poner "N superados" a un nodo abierto lo deja cerrado');
+		nodeNeedStepper.value = 0;
+		nodeNeedStepper.onValueChange();
+
+		// 16. avisos de las reglas nuevas
+		var rules:OverworldFile = OverworldData.createEmpty();
+		rules.nodes[0].id = 'r0';
+		rules.startNode = 'r0';
+		var need:OverworldNodeFile = OverworldData.createNode('need', 96, 124);
+		need.unlocked = false;
+		need.needLevels = 5;
+		var notLevel:OverworldNodeFile = OverworldData.createNode('paso', 160, 124);
+		notLevel.type = 'empty';
+		notLevel.secretUnlocks = ['need'];
+		rules.nodes.push(need);
+		rules.nodes.push(notLevel);
+		rules.paths.push(OverworldData.createPath('r0', 'need'));
+		var ghostPath:OverworldPathFile = OverworldData.createPath('r0', 'paso');
+		ghostPath.unlockedBy = 'nadie';
+		rules.paths.push(ghostPath);
+		var ruleTexts:String = OverworldData.checkWorld(rules, 'zz_rules').join(' | ');
+		check(ruleTexts.indexOf('se abre con 5 superados') > -1, 'aviso: pide mas superados de los que hay');
+		check(ruleTexts.indexOf('solo un nivel con cancion tiene salida secreta') > -1, 'aviso: salida secreta en algo que no es un nivel');
+		check(ruleTexts.indexOf('lo abre "nadie", que no existe') > -1, 'aviso: camino abierto por un nodo que no existe');
+
 		// limpieza: build y repo
-		for (name in ['zz_self', 'zz_self_w', 'zz_other', 'zz_dead'])
+		for (name in ['zz_self', 'zz_self_w', 'zz_other', 'zz_dead', 'zz_group', 'zz_group_w'])
 		{
 			for (folder in [Paths.getSharedPath('overworlds/'), '../../../../assets/shared/overworlds/'])
 				if (FileSystem.exists('$folder$name.json')) FileSystem.deleteFile('$folder$name.json');
@@ -3539,14 +4467,30 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 		pushUndo();
 		var id:String = selectedNode.id;
+		removeNode(selectedNode);
+		flushProgress();
+		selectedNode = null;
+		selectedPath = null;
+		unsavedProgress = true;
+
+		reloadMap(true);
+		updateUI();
+		showOutput('Nodo "$id" borrado');
+	}
+
+	/** Quita un nodo con sus caminos y todo lo que lo nombra (sin paso de deshacer ni recarga). */
+	function removeNode(node:OverworldNodeFile)
+	{
+		var id:String = node.id;
 
 		// un camino o un enlace a medias desde este nodo se quedaria apuntando a un nodo borrado
-		if (pathStart == selectedNode) pathStart = null;
-		if (linkStart == selectedNode) linkStart = null;
-		worldFile.nodes.remove(selectedNode);
+		if (pathStart == node) pathStart = null;
+		if (linkStart == node) linkStart = null;
+		if (groupNodes.remove(node)) normalizeGroup();
+		worldFile.nodes.remove(node);
 
-		// su progreso se olvida: otro nodo que reciba este ID no debe heredarlo
-		OverworldData.setCompleted(worldName, id, false);
+		// su progreso se aparta: otro nodo con este ID no lo hereda, y deshacer se lo devuelve
+		stashProgress(id);
 
 		var index:Int = worldFile.paths.length - 1;
 		while (index >= 0)
@@ -3556,23 +4500,59 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			index--;
 		}
 
-		for (node in worldFile.nodes)
-			if (node.unlocks != null) node.unlocks = node.unlocks.filter(target -> target != id);
+		for (other in worldFile.nodes)
+		{
+			if (other.unlocks != null) other.unlocks = other.unlocks.filter(target -> target != id);
+			if (other.secretUnlocks != null) other.secretUnlocks = other.secretUnlocks.filter(target -> target != id);
+		}
+		for (pth in worldFile.paths)
+		{
+			if (pth.unlockedBy != id) continue;
+			pth.unlockedBy = '';
+			pth.secret = false;
+		}
 
 		// sin esto el mundo se quedaria apuntando a un nodo inicial que ya no existe
 		if (worldFile.startNode == id && worldFile.nodes.length > 0)
 		{
-			worldFile.startNode = worldFile.nodes[0].id;
+			var first:OverworldNodeFile = Lambda.find(worldFile.nodes, n -> n.type != 'exit');
+			worldFile.startNode = (first != null ? first : worldFile.nodes[0]).id;
 			refreshNodeIdLists();
 		}
+	}
 
-		selectedNode = null;
-		selectedPath = null;
-		unsavedProgress = true;
+	/** Aparta (y borra de la partida) el progreso de un nodo que desaparece. */
+	function stashProgress(id:String)
+	{
+		for (key in [id, id + OverworldData.SECRET])
+		{
+			if (!OverworldData.isCompleted(worldName, key)) continue;
+			removedProgress.set(key, true);
+			OverworldData.setCompleted(worldName, key, false, false);
+			progressDirty = true;
+		}
+	}
 
-		reloadMap(true);
-		updateUI();
-		showOutput('Nodo "$id" borrado');
+	/** Devuelve el progreso apartado a un nodo que vuelve a aparecer (deshacer su borrado). */
+	function restoreProgress(id:String)
+	{
+		for (key in [id, id + OverworldData.SECRET])
+		{
+			if (!removedProgress.exists(key)) continue;
+			removedProgress.remove(key);
+			OverworldData.setCompleted(worldName, key, true, false);
+			progressDirty = true;
+		}
+	}
+
+	/** La partida se escribe una sola vez al final de un borrado o un deshacer, no por cada nodo. */
+	var progressDirty:Bool = false;
+
+	function flushProgress()
+	{
+		if (!progressDirty) return;
+		progressDirty = false;
+		FlxG.save.flush();
 	}
 
 	function deleteSelectedSprite()
@@ -3595,6 +4575,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		var spr:FlxSprite = decorSpriteOf(data);
 		worldFile.sprites.remove(data);
 		if (selectedSprite == data) selectedSprite = null;
+		if (groupSprites.remove(data)) normalizeGroup();
 		if (spr == null)
 		{
 			reloadMap();
@@ -3641,6 +4622,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		loadedName = worldName;
 		unsavedProgress = false;
 		savedThisFrame = true;
+		var orphans:Array<String> = cleanupOrphanWorlds();
 		refreshWorldLists();
 
 		var problems:Array<String> = checkWorld();
@@ -3653,7 +4635,58 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 '), true);
 		}
 		else showOutput('Guardado en: ' + saved.join('  +  '));
+		if (orphans.length > 0) showOutput(outputTxt.text + '\nBorrado el submundo sin usar: ' + orphans.join(', '), outputTxt.color == FlxColor.RED);
 		return true;
+	}
+
+	/**
+	 * Submundos creados en esta sesion con "Crear submundo" que ya no usa nadie (se deshizo) y que
+	 * nadie ha tocado desde entonces: se borran al guardar, para no dejar archivos huerfanos.
+	 */
+	function cleanupOrphanWorlds():Array<String>
+	{
+		var removed:Array<String> = [];
+		for (name in [for (key in createdWorlds.keys()) key])
+		{
+			if (!isOrphanCreated(name)) continue;
+			OverworldData.deleteWorldFiles(name);
+			createdWorlds.remove(name);
+			removed.push(name);
+		}
+		return removed;
+	}
+
+	function isOrphanCreated(name:String):Bool
+	{
+		if (!createdWorlds.exists(name) || name == worldName) return false;
+		if (Lambda.exists(worldFile.nodes, n -> n.world == name)) return false;
+
+		// editado despues de crearlo: ya es trabajo de alguien, se queda
+		var raw:String = Paths.getTextFromFile('${OverworldData.FOLDER}/$name.json');
+		if (raw == null || raw != createdWorlds.get(name)) return false;
+
+		// ningun otro mundo lleva a el (este se mira en memoria, arriba)
+		for (type in ['world', 'exit', 'warp'])
+			for (entry in OverworldData.nodesInto(name, type))
+				if (entry[0] != worldName) return false;
+
+		// CTRL+Z / CTRL+Y aun pueden volver a un estado que lo usa: se queda hasta que no
+		var mark:String = '"world":"$name"';
+		for (state in undoStack) if (state.indexOf(mark) > -1) return false;
+		for (state in redoStack) if (state.indexOf(mark) > -1) return false;
+		return true;
+	}
+
+	/** Deshacer o rehacer vuelve a un castillo cuyo submundo (creado aqui) ya se borro: se recrea. */
+	function restoreCreatedWorlds()
+	{
+		for (node in worldFile.nodes)
+		{
+			if (node.world == null || !createdWorlds.exists(node.world) || OverworldData.exists(node.world)) continue;
+			var file:OverworldFile = cast haxe.Json.parse(createdWorlds.get(node.world));
+			OverworldData.applyDefaults(file);
+			OverworldData.saveWorldFiles(node.world, file);
+		}
 	}
 
 	function saveWorldAs()
@@ -3667,8 +4700,15 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		}, null, function() showOutput('Error al guardar', true));
 	}
 
-	function testWorld()
+	function testWorld(?fromSelected:Bool = false)
 	{
+		var start:OverworldNodeFile = fromSelected ? selectedNode : null;
+		if (fromSelected && (start == null || start.type == 'exit'))
+		{
+			showOutput('Para probar desde un nodo, elige antes uno (que no sea una salida)', true);
+			return;
+		}
+
 		// sin guardar se probaria la version vieja del archivo (o la de otro mundo)
 		if (!saveWorld()) return;
 
@@ -3676,7 +4716,13 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		OverworldState.curWorld = worldName;
 		OverworldState.returnToEditor = true;
 		OverworldState.editorWorld = worldName;
-		MusicBeatState.switchState(new OverworldState(worldName));
+		if (start != null)
+		{
+			// BF aparece ahi aunque con la partida actual ese nodo aun este cerrado
+			OverworldState.testStartWorld = worldName;
+			OverworldState.testStartNode = start.id;
+		}
+		MusicBeatState.switchState(new OverworldState(worldName, start != null ? start.id : null));
 	}
 
 	var outputTimer:FlxTimer;

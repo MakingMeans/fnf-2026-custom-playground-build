@@ -18,10 +18,14 @@ typedef OverworldNodeFile =
 	var name:String;        // nombre visible
 	var song:String;        // type 'level': cancion a cargar
 	var week:String;        // type 'level': semana de la que hereda dificultades
-	var difficulty:String;  // type 'level': dificultad fija (vacio = Normal)
+	var difficulty:String;  // sin uso: esta build tiene una sola dificultad (Hard)
 	var world:String;       // type 'world': mundo al que lleva
 	var unlocked:Bool;      // desbloqueado desde el principio
 	var unlocks:Array<String>; // ids que se desbloquean al completarlo
+	var needLevels:Int;     // ademas, se abre al tener N nodos superados en este mundo (0 = no)
+	var secretUnlocks:Array<String>; // 'level': ids que abre su salida secreta
+	var secretMode:String;  // salida secreta: 'fc' (sin fallos) | 'accuracy' (precision minima)
+	var secretAccuracy:Float; // con 'accuracy': % minimo (0-100)
 }
 
 /**
@@ -52,6 +56,8 @@ typedef OverworldPathFile =
 	var dots:String;                // imagen de los puntitos ('' = sin puntitos)
 	var dotAnim:String;
 	var dotSpacing:Float;
+	var unlockedBy:String;          // id del nodo que lo abre al completarse ('' = abierto con sus extremos)
+	var secret:Bool;                // lo abre la salida secreta de `unlockedBy`, no superarlo sin mas
 }
 
 /** Un aviso de checkWorldProblems(): el texto y el nodo al que se refiere (null = todo el mundo). */
@@ -162,6 +168,28 @@ class OverworldData
 		return saved;
 	}
 
+	/** Borra un mundo de la build y del repo, y su progreso. */
+	public static function deleteWorldFiles(name:String)
+	{
+		#if sys
+		var folders:Array<String> = [Paths.getSharedPath('$FOLDER/')];
+		if (FileSystem.exists('../../../../Project.xml')) folders.push('../../../../assets/shared/$FOLDER/');
+		for (folder in folders)
+		{
+			try
+			{
+				if (FileSystem.exists('$folder$name.json')) FileSystem.deleteFile('$folder$name.json');
+			}
+			catch (e:Dynamic)
+			{
+				trace('OverworldData: no se pudo borrar $folder$name.json -> $e');
+			}
+		}
+		#end
+		resetProgress(name);
+		clearWorldCache();
+	}
+
 	/** Nombre de archivo valido para un mundo: minusculas, cifras y guiones bajos. */
 	public static function toWorldFileName(text:String):String
 	{
@@ -213,7 +241,11 @@ class OverworldData
 			difficulty: '',
 			world: '',
 			unlocked: true, // los nodos nuevos nacen accesibles; bloquear es algo que se elige
-			unlocks: []
+			unlocks: [],
+			needLevels: 0,
+			secretUnlocks: [],
+			secretMode: 'fc',
+			secretAccuracy: 95
 		};
 	}
 
@@ -241,7 +273,9 @@ class OverworldData
 			points: [],
 			dots: 'overworld/dot',
 			dotAnim: 'idle',
-			dotSpacing: 16
+			dotSpacing: 16,
+			unlockedBy: '',
+			secret: false
 		};
 	}
 
@@ -268,13 +302,20 @@ class OverworldData
 		if (file.sprites.contains(null)) file.sprites = [for (spr in file.sprites) if (spr != null) spr];
 		if (file.paths.contains(null)) file.paths = [for (pth in file.paths) if (pth != null) pth];
 
+		// los campos que faltan salen de una plantilla, pero las listas se crean nuevas para cada uno:
+		// compartidas, editar los `unlocks` o `points` de uno cambiaba los de todos
 		var nodeBase:OverworldNodeFile = createNode('', 0, 0);
+		var nodeFields:Array<String> = Reflect.fields(nodeBase);
 		for (node in file.nodes)
 		{
-			for (field in Reflect.fields(nodeBase))
-				if (Reflect.field(node, field) == null)
-					Reflect.setField(node, field, Reflect.field(nodeBase, field));
+			for (field in nodeFields)
+			{
+				if (Reflect.field(node, field) != null) continue;
+				var value:Dynamic = Reflect.field(nodeBase, field);
+				Reflect.setField(node, field, isArray(value) ? [] : value);
+			}
 			if (!isArray(node.unlocks)) node.unlocks = [];
+			if (!isArray(node.secretUnlocks)) node.secretUnlocks = [];
 			if (!Std.isOfType(node.id, String)) node.id = Std.string(node.id);
 		}
 
@@ -288,11 +329,15 @@ class OverworldData
 		}
 
 		var pathBase:OverworldPathFile = createPath('', '');
+		var pathFields:Array<String> = Reflect.fields(pathBase);
 		for (pth in file.paths)
 		{
-			for (field in Reflect.fields(pathBase))
-				if (Reflect.field(pth, field) == null)
-					Reflect.setField(pth, field, Reflect.field(pathBase, field));
+			for (field in pathFields)
+			{
+				if (Reflect.field(pth, field) != null) continue;
+				var value:Dynamic = Reflect.field(pathBase, field);
+				Reflect.setField(pth, field, isArray(value) ? [] : value);
+			}
 			if (!isArray(pth.points)) pth.points = [];
 		}
 
@@ -334,6 +379,29 @@ class OverworldData
 	public static function clearStaleProgress(world:String, id:String)
 	{
 		if (isCompleted(world, id)) setCompleted(world, id, false);
+		if (isSecretCompleted(world, id)) setCompleted(world, id + SECRET, false);
+	}
+
+	/** Sufijo de la clave de progreso de la salida secreta de un nivel ("mundo::nodo#secret"). */
+	public static inline final SECRET:String = '#secret';
+
+	public static inline function isSecretCompleted(world:String, id:String):Bool
+		return id != null && isCompleted(world, id + SECRET);
+
+	/** Un nivel con salida secreta: abre algo con ella (un nodo o un camino). */
+	public static function hasSecret(file:OverworldFile, node:OverworldNodeFile):Bool
+	{
+		if (node == null || node.type != 'level') return false;
+		if (node.secretUnlocks != null && node.secretUnlocks.length > 0) return true;
+		return Lambda.exists(file.paths, p -> p.secret && p.unlockedBy == node.id);
+	}
+
+	/** Si el resultado de una cancion saca la salida secreta del nivel: sin fallos, o con la precision minima. */
+	public static function secretAchieved(node:OverworldNodeFile, misses:Int, accuracy:Float):Bool
+	{
+		if (node == null) return false;
+		if (node.secretMode == 'accuracy') return accuracy * 100 + 0.0001 >= node.secretAccuracy;
+		return misses == 0;
 	}
 
 	public static function isCompleted(world:String, id:String):Bool
@@ -342,7 +410,7 @@ class OverworldData
 		return getProgress().exists('$world::$id');
 	}
 
-	public static function setCompleted(world:String, id:String, ?value:Bool = true)
+	public static function setCompleted(world:String, id:String, ?value:Bool = true, ?flush:Bool = true)
 	{
 		if (world == null || id == null) return;
 
@@ -351,7 +419,7 @@ class OverworldData
 		else progress.remove('$world::$id');
 
 		FlxG.save.data.overworldProgress = progress;
-		FlxG.save.flush();
+		if (flush) FlxG.save.flush();
 	}
 
 	public static function resetProgress(?world:String = null)
@@ -376,20 +444,75 @@ class OverworldData
 	public static function isUnlocked(world:String, file:OverworldFile, node:OverworldNodeFile, ?ignoreCompleted:Array<String>):Bool
 	{
 		if (node == null) return false;
-		if (node.unlocked) return true;
-
-		for (other in file.nodes)
-		{
-			if (ignoreCompleted != null && ignoreCompleted.contains(other.id)) continue;
-			if (other.unlocks != null && other.unlocks.contains(node.id) && isNodeCompleted(world, other))
-				return true;
-		}
+		if (openedInWorld(world, file, node, ignoreCompleted)) return true;
 
 		// un warp tambien se abre si su pareja del otro mundo esta abierta (p. ej. el del mundo
 		// central hacia un mundo, en cuanto el castillo de ese mundo abre su warp de vuelta)
 		if (node.type == 'warp' && partnerOpen(world, node)) return true;
 
 		return false;
+	}
+
+	/**
+	 * Abierto por lo de su propio mundo: desde el principio, por un nodo completado que lo
+	 * desbloquea (o por su salida secreta), o por tener ya N nodos superados en este mundo.
+	 * `ignore` admite "id" (como si ese nodo no estuviera completado) o "id#secret" (solo su
+	 * salida secreta).
+	 */
+	static function openedInWorld(world:String, file:OverworldFile, node:OverworldNodeFile, ?ignore:Array<String>):Bool
+	{
+		if (node.unlocked) return true;
+
+		for (other in file.nodes)
+		{
+			if (ignore != null && ignore.contains(other.id)) continue;
+			if (other.unlocks != null && other.unlocks.contains(node.id) && isNodeCompleted(world, other))
+				return true;
+			if (other.secretUnlocks != null && other.secretUnlocks.contains(node.id)
+				&& (ignore == null || !ignore.contains(other.id + SECRET)) && isSecretCompleted(world, other.id))
+				return true;
+		}
+
+		return node.needLevels > 0 && completedCount(world, file, ignore) >= node.needLevels;
+	}
+
+	/**
+	 * Un nodo 'world' que lleva a un mapa que a su vez tiene un castillo hacia este: es una vuelta a
+	 * un mapa de fuera, no algo que superar (no cuenta para "N superados").
+	 */
+	public static function isBackLink(world:String, node:OverworldNodeFile):Bool
+	{
+		if (node.type != 'world' || node.world == null || node.world.length < 1) return false;
+		if (node.world == world) return true;
+		var target:OverworldFile = loadCached(node.world);
+		return target != null && Lambda.exists(target.nodes, n -> n.type == 'world' && n.world == world);
+	}
+
+	/** Cuantos nodos completables de este mundo estan superados (para los nodos de "N superados"). */
+	public static function completedCount(world:String, file:OverworldFile, ?ignore:Array<String>):Int
+	{
+		var count:Int = 0;
+		for (node in file.nodes)
+		{
+			if (!canBeCompleted(node) || isBackLink(world, node)) continue;
+			if (ignore != null && ignore.contains(node.id)) continue;
+			if (isNodeCompleted(world, node)) count++;
+		}
+		return count;
+	}
+
+	/**
+	 * La condicion propia de un camino: sin `unlockedBy` se abre con sus dos extremos; con el, ademas
+	 * hace falta que ese nodo este completado (o que se haya sacado su salida secreta, con `secret`).
+	 * Sirve para atajos entre nodos ya abiertos y para los caminos de las salidas secretas.
+	 */
+	public static function isPathUnlocked(world:String, file:OverworldFile, pth:OverworldPathFile, ?ignore:Array<String>):Bool
+	{
+		if (pth.unlockedBy == null || pth.unlockedBy.length < 1) return true;
+		var by:OverworldNodeFile = findNode(file, pth.unlockedBy);
+		if (by == null || (ignore != null && ignore.contains(by.id))) return false;
+		if (pth.secret) return (ignore == null || !ignore.contains(by.id + SECRET)) && isSecretCompleted(world, by.id);
+		return isNodeCompleted(world, by);
 	}
 
 	/**
@@ -456,13 +579,7 @@ class OverworldData
 	{
 		var partner:OverworldNodeFile = warpPartner(world, node);
 		if (partner == null) return false;
-		if (partner.unlocked) return true;
-
-		var destFile:OverworldFile = loadCached(node.world);
-		for (other in destFile.nodes)
-			if (other.unlocks != null && other.unlocks.contains(partner.id) && isNodeCompleted(node.world, other))
-				return true;
-		return false;
+		return openedInWorld(node.world, loadCached(node.world), partner);
 	}
 
 	/**
@@ -563,6 +680,11 @@ class OverworldData
 		var progress:Map<String, Bool> = getProgress();
 		progress.remove('$world::$oldId');
 		progress.set('$world::$newId', true);
+		if (progress.exists('$world::$oldId$SECRET'))
+		{
+			progress.remove('$world::$oldId$SECRET');
+			progress.set('$world::$newId$SECRET', true);
+		}
 		FlxG.save.data.overworldProgress = progress;
 		FlxG.save.flush();
 	}
@@ -610,12 +732,33 @@ class OverworldData
 
 	// ------------------------------------------------------------- revision del grafo
 
-	/** Algun nodo lista este id en sus `unlocks`. */
+	/** Algun nodo lista este id en sus `unlocks` (o en los de su salida secreta). */
 	public static function anyoneUnlocks(file:OverworldFile, id:String):Bool
 	{
 		for (other in file.nodes)
+		{
 			if (other.unlocks != null && other.unlocks.contains(id)) return true;
+			if (other.type == 'level' && other.secretUnlocks != null && other.secretUnlocks.contains(id)) return true;
+		}
 		return false;
+	}
+
+	/** Algo puede abrir este nodo: un desbloqueo, la regla de "N superados" o su pareja de warp. */
+	public static function hasOpener(file:OverworldFile, node:OverworldNodeFile, ?name:String):Bool
+		return node.unlocked || anyoneUnlocks(file, node.id) || node.needLevels > 0 || opensByPartner(name, node);
+
+	/** Cuantos niveles con salida secreta tiene el mundo y cuantas se han sacado: [sacadas, total]. */
+	public static function secretCount(world:String, file:OverworldFile):Array<Int>
+	{
+		var done:Int = 0;
+		var total:Int = 0;
+		for (node in file.nodes)
+		{
+			if (!hasSecret(file, node)) continue;
+			total++;
+			if (isSecretCompleted(world, node.id)) done++;
+		}
+		return [done, total];
 	}
 
 	/**
@@ -632,9 +775,12 @@ class OverworldData
 		}
 	}
 
-	/** Un ID valido para un nodo: no vacio, sin comas (separan la lista de unlocks) y sin '::' (clave del progreso). */
+	/**
+	 * Un ID valido para un nodo: no vacio, sin comas (separan la lista de unlocks), sin '::' (clave
+	 * del progreso) y sin '#' (marca la salida secreta en el progreso).
+	 */
 	public static function isValidNodeId(id:String):Bool
-		return id != null && id.length > 0 && id.indexOf(',') < 0 && id.indexOf('::') < 0;
+		return id != null && id.length > 0 && id.indexOf(',') < 0 && id.indexOf('::') < 0 && id.indexOf('#') < 0;
 
 	/**
 	 * Abierto "en principio": desbloqueado al empezar, o un warp que puede abrirse por su pareja
@@ -703,9 +849,11 @@ class OverworldData
 
 	/**
 	 * Simula una partida desde cero dentro de este mundo: BF sale de sus entradas (entryNodes),
-	 * recorre todo lo que tiene accesible, completa lo que se puede completar y aplica sus
-	 * desbloqueos, hasta que ya no se abre nada nuevo. Devuelve los ids de los nodos a los que se
-	 * acaba pudiendo llegar. `visiting` son los mapas de fuera (para los castillos de dentro).
+	 * recorre todo lo que tiene accesible, completa lo que se puede completar (tambien su salida
+	 * secreta: se supone que el jugador la saca) y aplica sus desbloqueos, los de "N superados" y
+	 * los de los caminos con condicion propia, hasta que ya no se abre nada nuevo. Devuelve los ids
+	 * de los nodos a los que se acaba pudiendo llegar. `visiting` son los mapas de fuera (para los
+	 * castillos de dentro).
 	 */
 	public static function simulateReachable(file:OverworldFile, ?name:String, ?visiting:Array<String>):Map<String, Bool>
 	{
@@ -720,13 +868,25 @@ class OverworldData
 		for (node in file.nodes)
 			if (openAtStart(name, node)) open.set(node.id, true);
 
-		var completable:Map<String, Bool> = new Map<String, Bool>();
+		var completed:Map<String, Bool> = new Map<String, Bool>();
+		var completedCount:Int = 0;
+		var checked:Map<String, Bool> = new Map<String, Bool>();
+
+		inline function pathOpen(pth:OverworldPathFile):Bool
+		{
+			if (pth.unlockedBy == null || pth.unlockedBy.length < 1) return true;
+			if (!completed.exists(pth.unlockedBy)) return false;
+			if (!pth.secret) return true;
+			var by:OverworldNodeFile = findNode(file, pth.unlockedBy);
+			return by != null && by.type == 'level';
+		}
+
 		var changed:Bool = true;
 		while (changed)
 		{
 			changed = false;
 
-			// recorrido por caminos pisando solo nodos accesibles; en cada vuelta se sigue
+			// recorrido por caminos abiertos pisando solo nodos accesibles; en cada vuelta se sigue
 			// desde todo lo ya alcanzado, que es donde pueden haber aparecido caminos nuevos
 			for (seed in seeds) reached.set(seed.id, true);
 			var pending:Array<String> = [for (id in reached.keys()) id];
@@ -741,7 +901,7 @@ class OverworldData
 				for (pth in file.paths)
 				{
 					var other:String = (pth.a == id) ? pth.b : ((pth.b == id) ? pth.a : null);
-					if (other == null || reached.exists(other) || !open.exists(other)) continue;
+					if (other == null || reached.exists(other) || !open.exists(other) || !pathOpen(pth)) continue;
 					if (findNode(file, other) == null) continue;
 
 					reached.set(other, true);
@@ -749,17 +909,36 @@ class OverworldData
 				}
 			}
 
-			// completar todo lo alcanzado abre sus desbloqueos
+			// se completa todo lo alcanzado que se pueda completar
 			for (node in file.nodes)
 			{
-				if (!reached.exists(node.id) || node.unlocks == null || node.unlocks.length < 1) continue;
-				if (!completable.exists(node.id)) completable.set(node.id, simCompletable(node, chain));
-				if (!completable.get(node.id)) continue;
+				if (!reached.exists(node.id) || checked.exists(node.id)) continue;
+				checked.set(node.id, true);
+				if (!simCompletable(node, chain)) continue;
 
-				for (target in node.unlocks)
+				completed.set(node.id, true);
+				completedCount++;
+				changed = true;
+			}
+
+			// y abre lo suyo: desbloqueos, salida secreta (solo niveles) y nodos de "N superados"
+			for (node in file.nodes)
+			{
+				if (!completed.exists(node.id)) continue;
+				var targets:Array<String> = node.unlocks == null ? [] : node.unlocks;
+				if (node.type == 'level' && node.secretUnlocks != null) targets = targets.concat(node.secretUnlocks);
+				for (target in targets)
 				{
 					if (open.exists(target)) continue;
 					open.set(target, true);
+					changed = true;
+				}
+			}
+			for (node in file.nodes)
+			{
+				if (node.needLevels > 0 && completedCount >= node.needLevels && !open.exists(node.id))
+				{
+					open.set(node.id, true);
 					changed = true;
 				}
 			}
@@ -807,6 +986,12 @@ class OverworldData
 		return result;
 	}
 
+	/** Mundo donde empieza la partida para simulateGame(). Las pruebas automaticas lo cambian por el suyo. */
+	public static var simStartWorld:String = null;
+
+	public static inline function gameStartWorld():String
+		return simStartWorld != null ? simStartWorld : DEFAULT_WORLD;
+
 	/**
 	 * Simula la partida entera desde el mundo por defecto, pasando de un mundo a otro igual que el
 	 * juego (castillos, salidas de lado, salidas de vuelta y warps con su pareja), hasta que ya no se
@@ -814,19 +999,18 @@ class OverworldData
 	 * Encuentra los bloqueos entre mundos que la revision de un solo mundo da por resueltos, como
 	 * un warp que solo abre un nivel al que solo se llega por ese mismo warp. `editedName` y
 	 * `editedFile` sustituyen a la version de disco de ese mundo (lo que hay abierto en el editor).
+	 * `closedDoors` recibe las salidas que se pueden pisar antes de que se abra su puerta de vuelta.
 	 */
-	/** Mundo donde empieza la partida para simulateGame(). Las pruebas automaticas lo cambian por el suyo. */
-	public static var simStartWorld:String = null;
-
-	public static inline function gameStartWorld():String
-		return simStartWorld != null ? simStartWorld : DEFAULT_WORLD;
-
 	public static function simulateGame(?editedName:String, ?editedFile:OverworldFile, ?closedDoors:Array<String>):Map<String, Bool>
 	{
 		var reached:Map<String, Bool> = new Map<String, Bool>();
 		var seenExits:Map<String, Bool> = new Map<String, Bool>();
 		var done:Map<String, Bool> = new Map<String, Bool>();
 		var reachedList:Array<Array<String>> = [];
+
+		// a que castillo vuelve la salida sin destino de cada mundo, segun por donde se haya entrado
+		// (la pila del juego): [mapa de fuera, nodo]
+		var returnTo:Map<String, Array<Array<String>>> = new Map<String, Array<Array<String>>>();
 
 		function fileOf(world:String):OverworldFile
 		{
@@ -860,13 +1044,29 @@ class OverworldData
 			return node.type == 'world' && node.world != null && node.world.length > 0 && node.world != world && clearedSim(node.world, [world]);
 		}
 
+		// la salida secreta se da por sacada en cuanto se supera el nivel (el jugador puede)
+		inline function isSecretDone(world:String, node:OverworldNodeFile):Bool
+			return node.type == 'level' && done.exists('$world::${node.id}');
+
+		function countDone(world:String, file:OverworldFile):Int
+		{
+			var count:Int = 0;
+			for (node in file.nodes)
+				if (canBeCompleted(node) && !isBackLink(world, node) && isDone(world, node)) count++;
+			return count;
+		}
+
 		// misma regla que isUnlocked(), pero con lo completado en la simulacion
 		function opened(world:String, file:OverworldFile, node:OverworldNodeFile, ?viaPartner:Bool = true):Bool
 		{
 			if (node == null) return false;
 			if (node.unlocked) return true;
 			for (other in file.nodes)
+			{
 				if (other.unlocks != null && other.unlocks.contains(node.id) && isDone(world, other)) return true;
+				if (other.secretUnlocks != null && other.secretUnlocks.contains(node.id) && isSecretDone(world, other)) return true;
+			}
+			if (node.needLevels > 0 && countDone(world, file) >= node.needLevels) return true;
 
 			if (viaPartner && node.type == 'warp')
 			{
@@ -877,12 +1077,30 @@ class OverworldData
 			return false;
 		}
 
+		function pathOpened(world:String, file:OverworldFile, pth:OverworldPathFile):Bool
+		{
+			if (pth.unlockedBy == null || pth.unlockedBy.length < 1) return true;
+			var by:OverworldNodeFile = findNode(file, pth.unlockedBy);
+			if (by == null) return false;
+			return pth.secret ? isSecretDone(world, by) : isDone(world, by);
+		}
+
 		function reach(world:String, id:String):Bool
 		{
 			var key:String = '$world::$id';
 			if (reached.exists(key)) return false;
 			reached.set(key, true);
 			reachedList.push([world, id]);
+			return true;
+		}
+
+		function addReturn(world:String, entry:Array<String>):Bool
+		{
+			if (entry == null) return false;
+			var list:Array<Array<String>> = returnTo.exists(world) ? returnTo.get(world) : [];
+			if (Lambda.exists(list, e -> e[0] == entry[0] && e[1] == entry[1])) return false;
+			list.push(entry);
+			returnTo.set(world, list);
 			return true;
 		}
 
@@ -917,6 +1135,32 @@ class OverworldData
 			return result;
 		}
 
+		// los mapas de fuera de `world` segun por donde se ha entrado (la pila del juego, de todas las formas)
+		function ancestorsOf(world:String):Array<String>
+		{
+			var result:Array<String> = [];
+			var pending:Array<String> = [world];
+			while (pending.length > 0)
+			{
+				var current:String = pending.pop();
+				if (!returnTo.exists(current)) continue;
+				for (entry in returnTo.get(current))
+				{
+					if (result.contains(entry[0])) continue;
+					result.push(entry[0]);
+					pending.push(entry[0]);
+				}
+			}
+			return result;
+		}
+
+		// sin pila (tras un warp), la salida vuelve al primer mapa con castillo hacia el (findParentWorld)
+		function firstParent(world:String):Array<String>
+		{
+			var parents:Array<Array<String>> = parentsSim(world);
+			return parents.length > 0 ? parents[0] : null;
+		}
+
 		var first:String = gameStartWorld();
 		if (fileOf(first) == null) return reached;
 		enterFresh(first);
@@ -946,7 +1190,7 @@ class OverworldData
 					var otherId:String = (pth.a == id) ? pth.b : ((pth.b == id) ? pth.a : null);
 					if (otherId == null || reached.exists('$world::$otherId')) continue;
 					var other:OverworldNodeFile = findNode(file, otherId);
-					if (other != null && opened(world, file, other) && reach(world, otherId)) changed = true;
+					if (other != null && opened(world, file, other) && pathOpened(world, file, pth) && reach(world, otherId)) changed = true;
 				}
 			}
 
@@ -974,10 +1218,11 @@ class OverworldData
 				if (node.type == 'world' && hasTarget)
 				{
 					if (enterFresh(target)) changed = true;
+					if (!ancestorsOf(world).contains(target) && addReturn(target, [world, node.id])) changed = true;
 				}
 				else if (node.type == 'warp' && hasTarget)
 				{
-					// como una tuberia: se sale encima de su pareja si esta abierta
+					// como una tuberia: se sale encima de su pareja si esta abierta, y sin pila
 					var dest:OverworldFile = fileOf(target);
 					var partner:OverworldNodeFile = Lambda.find(dest.nodes, n -> n.type == 'warp' && n.world == world);
 					if (partner != null && opened(target, dest, partner))
@@ -985,6 +1230,7 @@ class OverworldData
 						if (reach(target, partner.id)) changed = true;
 					}
 					else if (enterFresh(target)) changed = true;
+					if (addReturn(target, firstParent(target))) changed = true;
 				}
 				else if (node.type == 'exit' && hasTarget)
 				{
@@ -1007,17 +1253,48 @@ class OverworldData
 						reached.set('$target::${door.id}::door', true);
 					}
 					else if (enterFresh(target)) changed = true;
+
+					// la pila al pasar de lado (como leaveWorld): si el destino es submundo de un mapa
+					// de la pila, se vuelve a ese mapa; si es submundo de otro, a su primer padre; si no
+					// es submundo de nadie, la pila sigue igual
+					var parents:Array<Array<String>> = parentsSim(target);
+					var mine:Array<Array<String>> = returnTo.exists(world) ? returnTo.get(world) : [];
+					if (parents.length < 1)
+					{
+						for (back in mine.copy()) if (addReturn(target, back)) changed = true;
+					}
+					else
+					{
+						var viaStack:Bool = false;
+						for (back in mine.copy())
+						{
+							for (parent in parents)
+							{
+								if (parent[0] != back[0]) continue;
+								viaStack = true;
+								if (addReturn(target, parent)) changed = true;
+							}
+						}
+						if (!viaStack && addReturn(target, parents[0])) changed = true;
+					}
 				}
 				else if (node.type == 'exit')
 				{
-					// sin destino: de vuelta al mapa de fuera, encima de su castillo (si no esta
-					// abierto, BF aparece en el nodo inicial de alli, como en getCurrentNode)
-					for (parent in parentsSim(world))
+					// sin destino: de vuelta al castillo por el que se entro (si no esta abierto, BF
+					// aparece en el nodo inicial de alli, como en getCurrentNode). Sin pila, al primero.
+					var backs:Array<Array<String>> = returnTo.exists(world) ? returnTo.get(world).copy() : [];
+					if (backs.length < 1)
 					{
-						var parentFile:OverworldFile = fileOf(parent[0]);
-						var castle:OverworldNodeFile = findNode(parentFile, parent[1]);
-						if (opened(parent[0], parentFile, castle)) { if (reach(parent[0], parent[1])) changed = true; }
-						else if (enterFresh(parent[0])) changed = true;
+						var parent:Array<String> = firstParent(world);
+						if (parent != null) backs.push(parent);
+					}
+					for (back in backs)
+					{
+						var parentFile:OverworldFile = fileOf(back[0]);
+						var castle:OverworldNodeFile = findNode(parentFile, back[1]);
+						if (parentFile == null) continue;
+						if (castle != null && opened(back[0], parentFile, castle)) { if (reach(back[0], back[1])) changed = true; }
+						else if (enterFresh(back[0])) changed = true;
 					}
 				}
 			}
@@ -1091,6 +1368,15 @@ class OverworldData
 
 			var key:String = pth.a < pth.b ? '${pth.a}|${pth.b}' : '${pth.b}|${pth.a}';
 			if (pairs.exists(key)) note(pth.a, 'Camino ${pth.a} <-> ${pth.b} repetido.');
+
+			// camino con condicion propia: quien lo abre tiene que existir y poder completarse
+			if (pth.unlockedBy != null && pth.unlockedBy.length > 0)
+			{
+				var by:OverworldNodeFile = findNode(file, pth.unlockedBy);
+				if (by == null) note(pth.a, 'Camino ${pth.a} <-> ${pth.b}: lo abre "${pth.unlockedBy}", que no existe, asi que no se abre nunca.');
+				else if (!canBeCompleted(by)) note(by.id, 'Camino ${pth.a} <-> ${pth.b}: lo abre "${by.id}", que es "${by.type}" y nunca se completa.');
+				else if (pth.secret && by.type != 'level') note(by.id, 'Camino ${pth.a} <-> ${pth.b}: lo abre la salida secreta de "${by.id}", pero solo un nivel tiene salida secreta.');
+			}
 			pairs.set(key, true);
 			linked.set(pth.a, true);
 			linked.set(pth.b, true);
@@ -1101,8 +1387,32 @@ class OverworldData
 			if (!linked.exists(node.id) && file.nodes.length > 1)
 				warn(node.id, '"${node.id}": sin caminos, BF no puede llegar ni salir.');
 
-			if (!node.unlocked && !anyoneUnlocks(file, node.id) && !opensByPartner(name, node))
+			if (!hasOpener(file, node, name))
 				warn(node.id, '"${node.id}": bloqueado y nadie lo desbloquea.');
+
+			// "se abre con N superados": tiene que haber al menos N cosas que superar (sin contarse el)
+			if (node.needLevels > 0 && node.unlocked && node.id != file.startNode)
+				note(node.id, '"${node.id}": se abre con ${node.needLevels} superados, pero ya empieza abierto, asi que la regla no hace nada.');
+			if (node.needLevels > 0)
+			{
+				var available:Int = 0;
+				for (other in file.nodes)
+					if (other != node && canBeCompleted(other) && !(name != null && isBackLink(name, other))) available++;
+				if (available < node.needLevels)
+					warn(node.id, '"${node.id}": se abre con ${node.needLevels} superados, pero en este mundo solo hay $available que superar.');
+			}
+
+			// salida secreta: solo la tiene un nivel, y lo que abre tiene que existir
+			if (node.secretUnlocks != null && node.secretUnlocks.length > 0)
+			{
+				if (node.type != 'level' || !canBeCompleted(node))
+					warn(node.id, '"${node.id}": solo un nivel con cancion tiene salida secreta, asi que sus desbloqueos secretos no abren nada.');
+				for (target in node.secretUnlocks)
+				{
+					if (target == node.id) warn(node.id, '"${node.id}": su salida secreta lo desbloquea a el mismo.');
+					else if (!counts.exists(target)) warn(node.id, '"${node.id}": su salida secreta desbloquea "$target", que no existe.');
+				}
+			}
 
 			// warp: tuberia de ida y vuelta con un warp del mundo destino que apunte aqui
 			if (node.type == 'warp')
@@ -1113,7 +1423,8 @@ class OverworldData
 				else if (name != null && partner == null)
 					warn(node.id, '"${node.id}": "${node.world}" no tiene ningun warp que vuelva aqui, asi que BF aparecera alli en su nodo inicial.');
 				// los dos extremos esperando al otro: ninguno se abre nunca
-				else if (partner != null && !node.unlocked && !anyoneUnlocks(file, node.id) && !partner.unlocked && !anyoneUnlocks(dest, partner.id))
+				else if (partner != null && !node.unlocked && !anyoneUnlocks(file, node.id) && node.needLevels <= 0
+					&& !partner.unlocked && !anyoneUnlocks(dest, partner.id) && partner.needLevels <= 0)
 					warn(node.id, '"${node.id}": ni este warp ni su pareja de "${node.world}" se abren nunca: que algo desbloquee uno de los dos (p. ej. el castillo).');
 			}
 
