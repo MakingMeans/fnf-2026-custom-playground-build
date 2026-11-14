@@ -403,12 +403,25 @@ igual); la animación del camino sale la próxima vez que pises el mapa de fuera
 que apunte al mapa de fuera te lleva de vuelta a él (no te mete "otra vez dentro"), pero
 *Comprobar mundo* lo avisa: el mapa de fuera parecería hijo de su propio submundo.
 
-### Warps (tuberías): nodos `warp`
+### Warps (tuberías y estrellas): nodos `warp`
 
 Un `warp` lleva a otro mundo **con ENTER**, como las tuberías de Mario: por donde se entra se
 sale. Ponle **Mundo destino** y, en ese mundo, otro `warp` con destino de vuelta a este: son
-**pareja**. BF se mete con su animación de *warp* y aparece **encima de la pareja**, no andando
-desde el borde. Desde ahí, ENTER le devuelve por el mismo sitio. No es un submundo: ESC sigue
+**pareja**. BF aparece **encima de la pareja**, no andando desde el borde. Desde ahí, ENTER le
+devuelve por el mismo sitio.
+
+Cómo viaja BF depende del **sprite** del warp (visuales sacados del mapa de Mario's Madness):
+
+| Sprite | Al entrar | Al llegar |
+|---|---|---|
+| Una estrella (`overworld/star`, o cualquier imagen con "star" en el nombre) | Gira con el sonido de la pluma de SMW (`sounds/overworld/smw_feather_get`), sale volando hacia arriba y la pantalla se funde a negro a saltos | La pantalla se aclara a saltos y BF baja girando hasta posarse en la estrella |
+| Cualquier otro (tubería...) | Da un saltito y se mete en la tubería; después se cierra el iris | Con el iris ya abierto, sale de la tubería de un salto |
+
+El mapa de Mario's Madness no tiene sonido de tubería: la tubería suena con el de confirmar del
+menú. Si pones un sonido en `assets/shared/sounds/overworld/pipe.ogg`, se usa ese al entrar y al
+salir de una tubería.
+
+No es un submundo: ESC sigue
 abriendo el menú, y un warp es un salto "global" que olvida de qué castillos venías (si vuelves a
 entrar a un submundo por un warp, su salida sabe sola a qué mapa de fuera llevar). Si el destino
 no tiene pareja, BF aparece en su nodo inicial (*Comprobar mundo* lo avisa).
@@ -468,10 +481,11 @@ Desde la meta sale un camino hacia abajo que se va de la pantalla: es una salida
 `test_world2`. Ese mundo tiene dos niveles (Mundo 2 - 1 y 2 - 2) y su salida de vuelta está
 fuera de la pantalla por arriba.
 
-**Mundo central `test_hub`**: dos tuberías (`warp`), una hacia `test_graph` y otra hacia
-`test_world2`. Sus parejas son la tubería bajo Tutorial 1 (la abre el castillo) y la de bajo
-Mundo 2 - 1 (la abre Mundo 2 - 2, el último nivel de ese mundo). Para probar llegadas sin
-recorrer el mapa: `FNF2026Playground.exe -overworld test_hub -warp-from test_graph`.
+**Mundo central `test_hub`**: dos warps, una tubería hacia `test_graph` y una estrella hacia
+`test_world2`. Sus parejas son la tubería bajo Tutorial 1 (la abre el castillo) y la estrella de
+bajo Mundo 2 - 1 (la abre Mundo 2 - 2, el último nivel de ese mundo). Para probar llegadas sin
+recorrer el mapa: `FNF2026Playground.exe -overworld test_hub -warp-from test_graph` (tubería) o
+`-overworld test_world2 -warp-from test_hub` (estrella).
 
 `test_subworld` son dos niveles en línea con dos salidas, una de cada tipo:
 
@@ -639,7 +653,9 @@ se edita en el editor, no volver a ejecutar ese script.
 | `camino-norte`, `camino-este` | Final de los caminos que seguirán a otros mundos |
 
 Las canciones se van añadiendo a medida que se portan (ver `docs/SONG_PORTS.md`); hasta entonces
-el editor avisa de los niveles sin canción. El mundo 1 todavía no es el mundo por defecto.
+el editor avisa de los niveles sin canción. Ya tienen la suya `yararara`, `bad-day` y `last-course`
+(a `last-course` aún no se llega jugando: hace falta superar `chaos`). El mundo 1 todavía no es el
+mundo por defecto.
 
 ## Pruebas automáticas (solo build debug)
 
@@ -651,7 +667,7 @@ Se lanzan desde `export/debug/windows/bin` (el juego busca `assets\` en su carpe
 | `-check-worlds` | Revisa todos los mundos de la build (también la partida entera), escribe el resultado en `check_worlds.txt` junto al exe y se cierra. |
 | `-song <canción> -test` | Juega una canción entera en botplay con capturas; ver `docs/SONG_PORTS.md` y `tools/run_songtest.ps1`. |
 | `-overworld-editor test_graph -selftest` | Prueba los botones de unir mundos, el aspecto desde la paleta, deshacer (con progreso, tiles y submundos), pintar, grupos, el rectángulo, los avisos nuevos y los de la partida entera. Escribe `SELFTEST OK/FAIL` por consola (49 comprobaciones) y borra sus mundos `zz_*`. |
-| `-playtest` | Monta 5 mundos de demostración con las funciones del editor y los juega por código: una canción de verdad, castillo, tuberías, salida lateral, menú, R, un mapa sin nodos abiertos, probar desde un nodo cerrado, salidas secretas (sin fallos y por precisión), un nodo de N superados, un atajo con condición, la cámara del revelado, el iris y el otro sprite de jugador (106 comprobaciones). Deja `playtest_result.txt` y capturas en `playtest_shots\` (también del editor), borra sus mundos `zz_demo*` y se cierra. En cada captura comprueba que ningún sprite use una imagen ya liberada. |
+| `-playtest` | Monta 5 mundos de demostración con las funciones del editor y los juega por código: una canción de verdad, castillo, tuberías y una estrella (con capturas a mitad del viaje), salida lateral, menú, R, un mapa sin nodos abiertos, probar desde un nodo cerrado, salidas secretas (sin fallos y por precisión), un nodo de N superados, un atajo con condición, la cámara del revelado, el iris y el otro sprite de jugador (109 comprobaciones). Deja `playtest_result.txt` y capturas en `playtest_shots\` (también del editor), borra sus mundos `zz_demo*` y se cierra. En cada captura comprueba que ningún sprite use una imagen ya liberada. |
 
 Ninguna toca la partida del usuario ni simula teclas. `tools/run_playtest.ps1` lanza la prueba
 jugable y muestra su resultado.

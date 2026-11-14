@@ -144,7 +144,7 @@ class OverworldPlaytest extends FlxBasic
 		var map:OverworldState = Std.downcast(FlxG.state, OverworldState);
 		if (map == null) return Std.downcast(FlxG.state, OverworldEditorState) != null;
 		if (FlxG.state.subState != null || map.worldFile == null) return false;
-		return !map.walking && !map.revealing && !map.busy;
+		return !map.walking && !map.revealing && !map.busy && !map.entering;
 	}
 
 	// ------------------------------------------------------------------ pasos
@@ -305,24 +305,59 @@ class OverworldPlaytest extends FlxBasic
 			}
 			scan(FlxG.state);
 			check(destroyed == 0, '$name: ningun sprite usa una imagen liberada' + (destroyed > 0 ? ' ($destroyed lo hacen)' : ''));
-
-			#if sys
-			try
-			{
-				var bmp:openfl.display.BitmapData = new openfl.display.BitmapData(FlxG.stage.stageWidth, FlxG.stage.stageHeight, false, 0xFF000000);
-				bmp.draw(FlxG.stage);
-				var png = bmp.encode(bmp.rect, new openfl.display.PNGEncoderOptions());
-				if (!FileSystem.exists('playtest_shots')) FileSystem.createDirectory('playtest_shots');
-				sys.io.File.saveBytes('playtest_shots/$name.png', png);
-				bmp.dispose();
-			}
-			catch (e:Dynamic)
-			{
-				check(false, 'no se pudo guardar la captura $name: $e');
-			}
-			#end
+			saveShot(name);
 			return true;
 		});
+
+	function saveShot(name:String)
+	{
+		#if sys
+		try
+		{
+			var bmp:openfl.display.BitmapData = new openfl.display.BitmapData(FlxG.stage.stageWidth, FlxG.stage.stageHeight, false, 0xFF000000);
+			bmp.draw(FlxG.stage);
+			var png = bmp.encode(bmp.rect, new openfl.display.PNGEncoderOptions());
+			if (!FileSystem.exists('playtest_shots')) FileSystem.createDirectory('playtest_shots');
+			sys.io.File.saveBytes('playtest_shots/$name.png', png);
+			bmp.dispose();
+		}
+		catch (e:Dynamic)
+		{
+			check(false, 'no se pudo guardar la captura $name: $e');
+		}
+		#end
+	}
+
+	/** Captura a mitad de una animacion de salida: `seconds` despues de empezar el paso, aunque el mapa este ocupado. */
+	function shotAfter(name:String, seconds:Float)
+		add('captura $name', function()
+		{
+			if (stepTime < seconds) return false;
+			saveShot(name);
+			return true;
+		}, false, true);
+
+	/**
+	 * Captura de BF llegando por un warp (`style`: 'star' o 'pipe'), `seconds` despues de empezar a
+	 * salir de el en el mapa nuevo. Comprueba tambien que llega con la animacion de ese tipo de warp.
+	 */
+	function shotArriving(name:String, style:String, seconds:Float)
+	{
+		var seenAt:Float = -1;
+		add('captura $name', function()
+		{
+			var m:OverworldState = map();
+			if (m == null || !m.entering) return false;
+			if (seenAt < 0)
+			{
+				seenAt = stepTime;
+				check(m.warpEntrance == style, 'BF llega ' + (style == 'star' ? 'bajando de la estrella' : 'saliendo de la tuberia') + (m.warpEntrance == style ? '' : ' (llega como "${m.warpEntrance}")'));
+			}
+			if (stepTime - seenAt < seconds) return false;
+			saveShot(name);
+			return true;
+		}, false, true);
+	}
 
 	// ------------------------------------------------------------------ guion
 	function buildScript()
@@ -440,6 +475,8 @@ class OverworldPlaytest extends FlxBasic
 		walk(-1, 0, 'a la izquierda (tuberia)');
 		expectAt('zz_demo', 'P');
 		enter('por la tuberia');
+		shotAfter('05a_tuberia_entrando', 0.45);
+		shotArriving('05b_tuberia_saliendo', 'pipe', 0.25);
 		expectAt('zz_demo_hub', 'vuelta0');
 		expectStack(0);
 		expectUnlocked('vuelta1', false);
@@ -455,9 +492,11 @@ class OverworldPlaytest extends FlxBasic
 		shot('07_vecino');
 		beat();
 		expectUnlocked('W2', true);
-		walk(0, 1, 'abajo (tuberia del vecino)');
+		walk(0, 1, 'abajo (estrella del vecino)');
 		expectAt('zz_demo2', 'W2');
-		enter('por la tuberia del vecino');
+		enter('por la estrella del vecino');
+		shotAfter('07a_estrella_volando', 0.8);
+		shotArriving('07b_estrella_bajando', 'star', 0.6); // despues del fundido: esta captura no respeta su transparencia
 		expectAt('zz_demo_hub', 'vuelta1');
 		expectUnlocked('vuelta0', true);
 		expectPath('centro', 'vuelta1', true);
@@ -755,6 +794,10 @@ class OverworldPlaytest extends FlxBasic
 		ed.selectedNode = w2;
 		ed.nodeTypeDropDown.onSelect(4, 'warp');
 		ed.nodeWorldDropDown.onSelect(0, 'zz_demo_hub');
+		// este warp es una estrella (su pareja del central copia el sprite): se viaja volando
+		w2.image = 'overworld/star';
+		w2.anim = 'idle';
+		check(OverworldData.isStarWarp(w2) && !OverworldData.isStarWarp(p), 'W2 es una estrella y P una tuberia');
 		connect(n0, w2);
 		link(n0, [w2]);
 		ed.selectedNode = w2;

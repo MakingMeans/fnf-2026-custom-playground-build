@@ -33,7 +33,7 @@
 			"x": 176,
 			"y": 112,
 			"type": "warp",
-			"image": "overworld/pipe",
+			"image": "overworld/star",
 			"anim": "idle",
 			"animDone": "",
 			"fps": 0,

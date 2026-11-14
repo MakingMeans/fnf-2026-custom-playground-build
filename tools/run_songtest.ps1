@@ -7,13 +7,21 @@
 # guarda sus propias capturas en song_shots/ (no dibuja camaras con filtro de shader ni videos;
 # -NoShaders quita el filtro para ver el escenario). Al acabar muestra song_test.txt y los errores
 # de los scripts que salieron por consola.
+#
+# Game over: -Die 40 deja la vida a 0 en el segundo 40, -DeathShots "0.5,3,8" captura la ventana en
+# esos segundos desde que se abre el game over y -DeathConfirm 10 pulsa "reintentar" a los 10 s.
+# -Hit "Bad Poison": el bot tambien pulsa las notas de esos tipos (normalmente las deja pasar).
 param(
 	[Parameter(Mandatory = $true)][string]$Song,
 	[string]$Shots = "",
 	[string]$WinShots = "",
 	[string]$Out = "$env:TEMP\fnf-songtest",
 	[int]$TimeoutSec = 900,
-	[switch]$NoShaders
+	[switch]$NoShaders,
+	[string]$Die = "",
+	[string]$DeathShots = "",
+	[string]$DeathConfirm = "",
+	[string]$Hit = ""
 )
 Add-Type -AssemblyName System.Drawing
 Add-Type @"
@@ -32,6 +40,10 @@ $gameArgs = @("-song", $Song, "-test")
 if ($Shots -ne "") { $gameArgs += @("-shots", $Shots) }
 if ($WinShots -ne "") { $gameArgs += @("-winshots", $WinShots) }
 if ($NoShaders) { $gameArgs += "-noshaders" }
+if ($Die -ne "") { $gameArgs += @("-die", $Die) }
+if ($DeathShots -ne "") { $gameArgs += @("-deathshots", $DeathShots) }
+if ($DeathConfirm -ne "") { $gameArgs += @("-deathconfirm", $DeathConfirm) }
+if ($Hit -ne "") { $gameArgs += @("-hit", "`"$Hit`"") }
 $log = Join-Path $Out "songtest_$Song.log"
 $p = Start-Process -FilePath "$bin\FNF2026Playground.exe" -ArgumentList $gameArgs -WorkingDirectory $bin -RedirectStandardOutput $log -PassThru
 $start = Get-Date

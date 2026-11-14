@@ -13,9 +13,14 @@ import substates.GameOverSubstate;
  * cancion (o si BF muere), escribe song_test.txt y cierra el juego. Los errores de los scripts
  * salen por consola (en debug, FunkinLua.luaTrace los imprime aunque el script no tenga
  * luaDebugMode).
+ *
+ * Para probar un game over: -die <segundo> deja la vida a 0 en ese segundo de cancion;
+ * -deathshots 0.5,3 pide capturas de ventana en esos segundos desde que se abre el game over, y
+ * -deathconfirm <segundo> pulsa "reintentar" (si el game over ya lo permite).
  */
 @:access(states.PlayState)
 @:access(backend.MusicBeatState)
+@:access(substates.GameOverSubstate)
 class SongTester extends FlxBasic
 {
 	public static var running:Bool = false;
@@ -23,6 +28,12 @@ class SongTester extends FlxBasic
 	var song:String;
 	var shots:Array<Float> = []; // ms de cancion
 	var winShots:Array<Float> = []; // ms de cancion: avisos para capturar la ventana desde fuera
+	var dieAt:Float = -1; // ms de cancion
+	var deathShots:Array<Float> = []; // ms desde que se abre el game over (ventana real)
+	var confirmAt:Float = -1; // s desde que se abre el game over
+	var confirmed:Bool = false;
+	var deathTime:Float = -1; // s desde que se abre el game over
+	var hitTypes:Array<String> = []; // -hit: tipos de nota que el bot tambien pulsa
 	var taken:Array<String> = [];
 	var log:Array<String> = [];
 	var started:Bool = false;
@@ -52,6 +63,16 @@ class SongTester extends FlxBasic
 		// -winshots: en esos segundos escribe song_winshot.txt para que un script capture la ventana
 		// real (PrintWindow), que si incluye videos y shaders
 		readTimes(args, '-winshots', tester.winShots);
+		readTimes(args, '-deathshots', tester.deathShots);
+		var times:Array<Float> = [];
+		readTimes(args, '-die', times);
+		if (times.length > 0) tester.dieAt = times[0];
+		times = [];
+		readTimes(args, '-deathconfirm', times);
+		if (times.length > 0) tester.confirmAt = times[0] / 1000;
+		var hitIndex:Int = args.indexOf('-hit');
+		if (hitIndex > -1 && hitIndex + 1 < args.length)
+			tester.hitTypes = [for (type in args[hitIndex + 1].split(',')) type.trim()];
 		FlxG.plugins.addPlugin(tester);
 	}
 
@@ -89,6 +110,12 @@ class SongTester extends FlxBasic
 			return;
 		}
 
+		if (deathTime >= 0)
+		{
+			updateDeath(elapsed);
+			return;
+		}
+
 		var play:PlayState = Std.downcast(FlxG.state, PlayState);
 		if (play == null)
 		{
@@ -110,11 +137,30 @@ class SongTester extends FlxBasic
 		if (Std.isOfType(FlxG.state.subState, GameOverSubstate))
 		{
 			log.push('GAME OVER en el segundo ${Math.round(lastPos / 100) / 10}');
-			finish();
+			if (deathShots.length > 0 || confirmAt >= 0) deathTime = 0;
+			else finish();
 			return;
 		}
 
 		lastPos = Conductor.songPosition;
+		if (hitTypes.length > 0)
+		{
+			// -hit <tipos>: el bot tambien pulsa esas notas (normalmente las ignora), p. ej. "Bad Poison"
+			play.notes.forEachAlive(function(note:objects.Note)
+			{
+				if (note.mustPress && !note.wasGoodHit && hitTypes.contains(note.noteType) && note.strumTime <= Conductor.songPosition)
+				{
+					note.ignoreNote = false;
+					play.goodNoteHit(note);
+				}
+			});
+		}
+		if (dieAt >= 0 && lastPos >= dieAt)
+		{
+			dieAt = -1;
+			log.push('Vida a 0 (forzado) en el segundo ${Math.round(lastPos / 100) / 10}');
+			play.health = 0;
+		}
 		if (play.startedCountdown && !play.paused)
 		{
 			frames++;
@@ -129,6 +175,40 @@ class SongTester extends FlxBasic
 		{
 			var seconds:String = Std.string(Math.round(winShots.shift() / 100) / 10);
 			File.saveContent('song_winshot.txt', '$song-$seconds');
+		}
+	}
+
+	/** Game over abierto: capturas de ventana por tiempo real y, si se pidió, reintentar. */
+	function updateDeath(elapsed:Float)
+	{
+		deathTime += elapsed;
+		if (deathShots.length > 0 && deathTime * 1000 >= deathShots[0] && !FileSystem.exists('song_winshot.txt'))
+		{
+			var seconds:String = Std.string(Math.round(deathShots.shift() / 100) / 10);
+			File.saveContent('song_winshot.txt', '$song-death-$seconds');
+		}
+
+		var sub:GameOverSubstate = GameOverSubstate.instance;
+		if (!confirmed && confirmAt >= 0 && deathTime >= confirmAt && sub != null)
+		{
+			if (GameOverSubstate.custom == null || GameOverSubstate.custom.canConfirm())
+			{
+				confirmed = true;
+				log.push('Reintentar pulsado a los ${Math.round(deathTime * 10) / 10} s del game over');
+				sub.endBullshit();
+			}
+			else if (deathTime >= confirmAt + 15)
+			{
+				confirmed = true;
+				log.push('El game over no dejaba reintentar 15 s despues de pedirlo');
+			}
+		}
+
+		var endAt:Float = confirmAt >= 0 ? (confirmed ? confirmAt + 4.5 : 1e9) : 0;
+		if (deathShots.length == 0 && !FileSystem.exists('song_winshot.txt') && deathTime >= endAt)
+		{
+			if (confirmed) log.push('Despues de reintentar: ahora en ${Type.getClassName(Type.getClass(FlxG.state))}');
+			finish();
 		}
 	}
 

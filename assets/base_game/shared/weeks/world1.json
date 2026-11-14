@@ -8,6 +8,24 @@
 				0,
 				0
 			]
+		],
+		[
+			"Last Course",
+			"last-course-turmoil",
+			[
+				220,
+				58,
+				133
+			]
+		],
+		[
+			"Bad Day",
+			"bad-day-mario",
+			[
+				248,
+				64,
+				112
+			]
 		]
 	],
 	"weekCharacters": [

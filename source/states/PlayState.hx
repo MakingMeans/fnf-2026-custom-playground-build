@@ -379,6 +379,8 @@ class PlayState extends MusicBeatState
 		switch (curStage)
 		{
 			case 'stage': new StageWeek1(); //Tutorial / stage por defecto
+			case 'turmoilsweep': new TurmoilSweep(); //Last Course (Mario's Madness)
+			case 'superbad': new SuperBad(); //Bad Day (Mario's Madness)
 		}
 		if(isPixelStage) introSoundsSuffix = '-pixel';
 

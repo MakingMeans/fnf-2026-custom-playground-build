@@ -764,6 +764,13 @@ class OverworldData
 	}
 
 	/**
+	 * Un warp es una estrella si su sprite lo es (una imagen con "star" en el nombre, como
+	 * overworld/star): BF gira y sale volando. Cualquier otro warp es una tuberia: BF se mete dentro.
+	 */
+	public static function isStarWarp(node:OverworldNodeFile):Bool
+		return node != null && node.image != null && node.image.toLowerCase().indexOf('star') > -1;
+
+	/**
 	 * Un 'level' se completa al acabar su cancion; un 'world', cuando su mundo queda superado
 	 * (ver isWorldCleared). Un 'empty' es solo un punto de paso y nunca se completa.
 	 */

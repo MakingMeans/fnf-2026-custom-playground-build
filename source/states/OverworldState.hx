@@ -186,6 +186,8 @@ class OverworldState extends MusicBeatState
 
 	/** El siguiente mapa se abre con el iris desde BF en vez del fundido de Psych. */
 	public static var irisOpenNext:Bool = false;
+	/** El siguiente mapa se abre con el fundido a saltos de SMW (despues de viajar en una estrella). */
+	public static var fadeOpenNext:Bool = false;
 
 	// ------------------------------------------------------------- construccion
 	var worldFile:OverworldFile;
@@ -243,6 +245,7 @@ class OverworldState extends MusicBeatState
 		if (worldFile == null)
 		{
 			irisOpenNext = false;
+			fadeOpenNext = false;
 			FlxTransitionableState.skipNextTransOut = false;
 			var msg:String = 'NO SE PUDO CARGAR EL MUNDO "$curWorld"\n\nassets/shared/overworlds/$curWorld.json\n\nACCEPT: abrir el editor de mundos\nBACK: menu principal';
 			FlxTransitionableState.skipNextTransIn = true;
@@ -284,12 +287,26 @@ class OverworldState extends MusicBeatState
 		camGame.follow(camFollow, LOCKON, 0.12);
 		camGame.snapToTarget();
 
-		if (irisOpenNext)
+		// Llegando por un warp: de una estrella BF baja volando mientras se abre la pantalla; de una
+		// tuberia sale con la pantalla ya abierta
+		var entrance:Void->Void = null;
+		if (warpEntrance == 'star') starArrival();
+		else if (warpEntrance == 'pipe') entrance = pipeArrival;
+
+		if (fadeOpenNext)
+		{
+			fadeOpenNext = false;
+			irisOpenNext = false;
+			fadeOpen(entrance);
+			if (revealing) revealTimer += FADE_STEPS * FADE_STEP_TIME;
+		}
+		else if (irisOpenNext)
 		{
 			irisOpenNext = false;
-			irisOpen();
+			irisOpen(entrance);
 			if (revealing) revealTimer += IRIS_OPEN_TIME; // los caminos nuevos salen con el iris ya abierto
 		}
+		else if (entrance != null) entrance();
 
 		if (secretMessage)
 		{
@@ -499,9 +516,13 @@ class OverworldState extends MusicBeatState
 		add(player);
 		add(spritesFront);
 
-		// llegando por un warp: BF aparece directamente encima de su pareja
+		// llegando por un warp: BF aparece encima de su pareja (ver starArrival / pipeArrival)
 		var warpDoor:OverworldNodeFile = warpArrival();
-		if (warpDoor != null) curNodeId = warpDoor.id;
+		if (warpDoor != null)
+		{
+			curNodeId = warpDoor.id;
+			warpEntrance = OverworldData.isStarWarp(warpDoor) ? 'star' : 'pipe';
+		}
 
 		// llegando por una transicion: BF aparece en la salida de vuelta (fuera de la pantalla)
 		var arrival:Array<Dynamic> = arrivalPlan();
@@ -529,6 +550,9 @@ class OverworldState extends MusicBeatState
 
 		updatePlayerPosition();
 		idleAnim();
+		// sale con su animacion al abrirse la pantalla (si no, se le veria de pie antes de tiempo)
+		if (warpEntrance != null && start != null && start.id == warpDoor.id) player.visible = false;
+		else warpEntrance = null;
 
 		// ...y entra andando hasta el primer nodo en cuanto termina la transicion de pantalla
 		if (arrival != null && start != null && start.id == curNodeId)
@@ -1121,7 +1145,7 @@ class OverworldState extends MusicBeatState
 
 		if (revealing) updateReveal(elapsed);
 		else if (walking) updateWalk(elapsed);
-		else if (!busy) updateInput();
+		else if (!busy && !entering) updateInput();
 
 		// mientras se revela un camino fuera de pantalla, la camara va a mirarlo
 		if (camFollow != null)
@@ -1602,9 +1626,10 @@ class OverworldState extends MusicBeatState
 	}
 
 	/**
-	 * Warp (con ENTER): como una tuberia. BF desaparece con su animacion "warp" y aparece encima
-	 * del warp del otro mundo que apunta de vuelta a este (o en su nodo inicial si no hay). Es un
-	 * paso de lado, no un submundo: la pila no cambia.
+	 * Warp (con ENTER): BF viaja al warp del otro mundo que apunta de vuelta a este (o a su nodo
+	 * inicial si no hay). Es un paso de lado, no un submundo: la pila no cambia. Como en el mapa de
+	 * Mario's Madness: en una estrella BF gira y sale volando (y la pantalla se funde a saltos); en
+	 * una tuberia salta y se mete dentro (y se cierra el iris).
 	 */
 	function warpTo(node:OverworldNodeFile)
 	{
@@ -1616,12 +1641,10 @@ class OverworldState extends MusicBeatState
 		}
 
 		busy = true;
-		FlxG.sound.play(Paths.sound('confirmMenu'));
-		playAnim('warp');
-
 		var from:String = curWorld;
 		var target:String = node.world;
-		new FlxTimer().start(0.3, function(_:FlxTimer) irisClose(function()
+		var star:Bool = OverworldData.isStarWarp(node);
+		var go:Void->Void = function()
 		{
 			arrivingByWarp = from;
 			curWorld = target;
@@ -1629,8 +1652,146 @@ class OverworldState extends MusicBeatState
 			// un warp es un salto global (p. ej. al mundo central): la pila de submundos de donde
 			// se venia ya no vale. Las salidas sin pila encuentran su mapa de fuera solas.
 			worldStack = [];
-			switchToMap();
-		}));
+			switchToMap(star);
+		};
+		if (star) starExit(go);
+		else pipeExit(go);
+	}
+
+	// ------------------------------------------------------------- viajes: estrella y tuberia
+	/** Como ha llegado BF por un warp ('star' o 'pipe'; null = no ha llegado por uno). */
+	var warpEntrance:String = null;
+	/** Mientras BF sale de su warp no se le puede mover. */
+	var entering:Bool = false;
+	var playerClip:flixel.math.FlxRect;
+
+	static inline final STAR_SOUND:String = 'overworld/smw_feather_get';
+	/** Opcional: si existe un sonido con este nombre, suena al entrar y salir de una tuberia. */
+	static inline final PIPE_SOUND:String = 'overworld/pipe';
+
+	function playWarpSound(star:Bool, ?orConfirm:Bool = false)
+	{
+		var key:String = star ? STAR_SOUND : PIPE_SOUND;
+		if (Paths.fileExists('sounds/$key.${Paths.SOUND_EXT}', openfl.utils.AssetType.SOUND)) FlxG.sound.play(Paths.sound(key));
+		else if (orConfirm) FlxG.sound.play(Paths.sound('confirmMenu'));
+	}
+
+	/** Estrella (como en Mario's Madness): BF gira con el sonido de la pluma, sale volando hacia arriba y la pantalla se funde. */
+	function starExit(onGone:Void->Void)
+	{
+		playAnim('warp');
+		playWarpSound(true, true);
+		FlxTween.tween(player, {y: camGame.viewTop - player.height - 8}, 0.5, {startDelay: 0.5, ease: FlxEase.quadIn});
+		new FlxTimer().start(2, function(_:FlxTimer) fadeClose(onGone));
+	}
+
+	/** Llegando por una estrella: BF baja girando desde lo alto y se posa en ella. */
+	function starArrival()
+	{
+		entering = true;
+		var standY:Float = player.y;
+		player.y = camGame.viewTop - player.height - 8;
+		player.visible = true;
+		playAnim('warp');
+		FlxTween.tween(player, {y: standY}, 0.6, {startDelay: 0.2, ease: FlxEase.quadOut, onComplete: function(_:FlxTween)
+		{
+			new FlxTimer().start(0.25, function(_:FlxTimer)
+			{
+				idleAnim();
+				entering = false;
+			});
+		}});
+	}
+
+	/** Tuberia (como la de vuelta de Mario's Madness): BF da un saltito y se mete dentro; despues se cierra el iris. */
+	function pipeExit(onGone:Void->Void)
+	{
+		playAnim('enter');
+		playWarpSound(false, true);
+		var standY:Float = player.y;
+		var mouthY:Float = standY + player.height; // la boca de la tuberia: a la altura de sus pies
+		FlxTween.tween(player, {y: standY - 6}, 0.15, {ease: FlxEase.quadOut, onComplete: function(_:FlxTween)
+		{
+			FlxTween.tween(player, {y: mouthY}, 0.45, {
+				ease: FlxEase.quadIn,
+				onUpdate: function(_:FlxTween) clipPlayerAbove(mouthY),
+				onComplete: function(_:FlxTween)
+				{
+					player.visible = false;
+					new FlxTimer().start(0.15, function(_:FlxTimer) irisClose(onGone));
+				}
+			});
+		}});
+	}
+
+	/** Llegando por una tuberia: BF sale de ella de un salto. */
+	function pipeArrival()
+	{
+		entering = true;
+		var standY:Float = player.y;
+		var mouthY:Float = standY + player.height;
+		player.y = mouthY;
+		clipPlayerAbove(mouthY);
+		player.visible = true;
+		playAnim('enter');
+		playWarpSound(false);
+		FlxTween.tween(player, {y: standY - 6}, 0.4, {
+			ease: FlxEase.quadOut,
+			onUpdate: function(_:FlxTween) clipPlayerAbove(mouthY),
+			onComplete: function(_:FlxTween)
+			{
+				player.clipRect = null;
+				FlxTween.tween(player, {y: standY}, 0.12, {ease: FlxEase.quadIn, onComplete: function(_:FlxTween)
+				{
+					idleAnim();
+					entering = false;
+				}});
+			}
+		});
+	}
+
+	/** Recorta a BF por debajo de `lineY` (la boca de la tuberia): asi parece que entra o sale de ella. */
+	function clipPlayerAbove(lineY:Float)
+	{
+		if (playerClip == null) playerClip = flixel.math.FlxRect.get();
+		var visible:Float = Math.max(0, Math.min(player.frameHeight, (lineY - player.y) / player.scale.y));
+		player.clipRect = playerClip.set(0, 0, player.frameWidth, visible);
+	}
+
+	// ------------------------------------------------------------- fundido a saltos (estrellas)
+	static inline final FADE_STEPS:Int = 5;
+	static inline final FADE_STEP_TIME:Float = 0.1;
+
+	var fade:FlxSprite;
+
+	/** Fundido a negro en 5 saltos, como en SMW y en el mapa de Mario's Madness; despues `onDone`. */
+	function fadeClose(onDone:Void->Void)
+	{
+		busy = true;
+		fade.visible = true;
+		fade.alpha = 0;
+		new FlxTimer().start(FADE_STEP_TIME, function(tmr:FlxTimer)
+		{
+			fade.alpha = tmr.elapsedLoops / FADE_STEPS;
+			if (tmr.loopsLeft == 0) new FlxTimer().start(0.12, function(_:FlxTimer) onDone());
+		}, FADE_STEPS);
+	}
+
+	function fadeOpen(?onDone:Void->Void)
+	{
+		busy = true;
+		fade.visible = true;
+		fade.alpha = 1;
+		new FlxTimer().start(FADE_STEP_TIME, function(tmr:FlxTimer)
+		{
+			fade.alpha = 1 - tmr.elapsedLoops / FADE_STEPS;
+			if (tmr.loopsLeft == 0)
+			{
+				fade.visible = false;
+				busy = false;
+				if (onDone != null) onDone();
+			}
+		}, FADE_STEPS);
 	}
 
 	/** Llegando por un warp: el warp de este mundo que apunta de vuelta (su pareja), o null. */
@@ -1725,6 +1886,12 @@ class OverworldState extends MusicBeatState
 		iris.shader = irisShader;
 		iris.visible = false;
 		add(iris);
+
+		fade = new FlxSprite().makeGraphic(FlxG.width, FlxG.height, FlxColor.BLACK);
+		fade.scrollFactor.set();
+		fade.cameras = [camHUD];
+		fade.visible = false;
+		add(fade);
 	}
 
 	/** Donde esta BF en la pantalla (el centro del circulo), dentro de los bordes. */
@@ -1754,7 +1921,7 @@ class OverworldState extends MusicBeatState
 		}, function(value:Float) irisRadius = value);
 	}
 
-	function irisOpen()
+	function irisOpen(?onDone:Void->Void)
 	{
 		busy = true;
 		iris.visible = true;
@@ -1766,14 +1933,19 @@ class OverworldState extends MusicBeatState
 			{
 				iris.visible = false;
 				busy = false;
+				if (onDone != null) onDone();
 			}
 		}, function(value:Float) irisRadius = value);
 	}
 
-	/** Cambia a otro mapa sin el fundido de Psych: este se ha cerrado con el iris y el otro se abre igual. */
-	static function switchToMap()
+	/**
+	 * Cambia a otro mapa sin el fundido de Psych: este se ha cerrado con el iris y el otro se abre
+	 * igual (o con el fundido a saltos, si `fade`: viajando en estrella).
+	 */
+	static function switchToMap(?fade:Bool = false)
 	{
-		irisOpenNext = true;
+		if (fade) fadeOpenNext = true;
+		else irisOpenNext = true;
 		FlxTransitionableState.skipNextTransIn = true;
 		FlxTransitionableState.skipNextTransOut = true;
 		MusicBeatState.switchState(new OverworldState());

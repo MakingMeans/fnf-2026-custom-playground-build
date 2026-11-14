@@ -53,10 +53,10 @@ def build():
         node('inicio', 80, 272, 'Inicio', kind='empty', unlocked=True),
         node('tuberia', 80, 208, 'Tuberia (sin destino)', kind='empty', look=PIPE_LOOK, unlocked=True),
         node('yararara', 176, 272, 'YARARARA', song='yararara', unlocked=True, unlocks=['bad-day']),
-        node('bad-day', 352, 272, 'Bad Day', unlocks=['chaos']),
+        node('bad-day', 352, 272, 'Bad Day', song='bad-day', unlocks=['chaos']),
         # salida normal: los escalones a la meseta; salida secreta (7 esmeraldas): el puente al norte
         node('chaos', 352, 200, 'Chaos', unlocks=['last-course'], secret=['endless']),
-        node('last-course', 352, 88, 'Last Course', unlocks=['castillo']),
+        node('last-course', 352, 88, 'Last Course', song='last-course', unlocks=['castillo']),
         node('castillo', 448, 88, 'World of Chaos', look=CASTLE_LOOK, unlocks=['camino-este']),
         node('endless', 208, 88, 'Endless', unlocks=['camino-norte']),
         node('camino-norte', 208, 24, 'Hacia el norte', kind='empty'),

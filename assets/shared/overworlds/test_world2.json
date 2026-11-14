@@ -71,7 +71,7 @@
 			"x": 128,
 			"y": 160,
 			"type": "warp",
-			"image": "overworld/pipe",
+			"image": "overworld/star",
 			"anim": "idle",
 			"animDone": "",
 			"fps": 0,
