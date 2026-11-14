@@ -1,0 +1,89 @@
+{
+	"animations": [
+		{
+			"offsets": [
+				-11,
+				-1
+			],
+			"loop": false,
+			"fps": 24,
+			"anim": "idle",
+			"indices": [],
+			"name": "idle"
+		},
+		{
+			"loop": false,
+			"offsets": [
+				110,
+				-329
+			],
+			"anim": "singDOWN",
+			"fps": 30,
+			"name": "sing down",
+			"indices": []
+		},
+		{
+			"loop": false,
+			"offsets": [
+				-31,
+				-24
+			],
+			"anim": "singLEFT",
+			"fps": 30,
+			"name": "sing left",
+			"indices": []
+		},
+		{
+			"loop": false,
+			"offsets": [
+				7,
+				53
+			],
+			"anim": "singUP",
+			"fps": 30,
+			"name": "sing up",
+			"indices": []
+		},
+		{
+			"loop": false,
+			"offsets": [
+				-86,
+				-177
+			],
+			"anim": "singRIGHT",
+			"fps": 30,
+			"name": "sing right",
+			"indices": []
+		},
+		{
+			"offsets": [
+				26,
+				-26
+			],
+			"indices": [],
+			"fps": 28,
+			"anim": "change",
+			"loop": false,
+			"name": "change"
+		}
+	],
+	"no_antialiasing": false,
+	"image": "characters/yararara/bf",
+	"position": [
+		-120,
+		40
+	],
+	"healthicon": "icon-yararara-bf",
+	"flip_x": true,
+	"healthbar_colors": [
+		25,
+		228,
+		231
+	],
+	"camera_position": [
+		-100,
+		0
+	],
+	"sing_duration": 5,
+	"scale": 0.9
+}

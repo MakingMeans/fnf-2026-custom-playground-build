@@ -1733,6 +1733,11 @@ class FunkinLua {
 			}
 			PlayState.instance.addTextToDebug(text, color);
 		}
+		#if debug
+		// en debug tambien salen por consola los avisos de scripts sin luaDebugMode (errores incluidos):
+		// asi se ven al probar canciones con SongTester
+		else if (!deprecated) Sys.println('[lua] $text');
+		#end
 	}
 
 	public static function getBool(variable:String) {

@@ -613,13 +613,33 @@ y renombrar un nodo se lleva su progreso al ID nuevo.
 Un mundo de muestra **sin niveles**, compuesto por código con los tiles de SMW: isla con costa
 curva y acantilado con espuma, una meseta alta, colinas, árboles, un claro de arena, un prado,
 estanques, un islote y rocas en el mar, sobre un fondo de mar animado hecho con el tile de agua
-(`overworld/backgrounds/smw_sea`). Se abre con `tests	est-pilot-island.bat`.
+(`overworld/backgrounds/smw_sea`). Se abre con `tests\test-pilot-island.bat`.
 
 Lo genera `tools/build_pilot_island.py` (necesita Pillow): el mapa se describe con celdas de la hoja
 original `art/overworld_source/smw_overworld_tiles.png` y funciones como `island()`, `cap()` y
 `stamp()`, y el script busca cada celda en el atlas y escribe el JSON. Con un nombre de archivo
 como argumento guarda además una vista previa. Tras regenerarlo hay que volver a compilar (o
 copiar el JSON a `export/.../assets/shared/overworlds/`) para verlo en el juego.
+
+## Mundo 1 (`world1`)
+
+El primer mundo real, según el boceto del usuario. Se abre con `tests\test-world1.bat`. De momento
+es el grafo sobre el mar (el arte con tiles vendrá después) y lo genera `tools/build_world1.py`: si
+se edita en el editor, no volver a ejecutar ese script.
+
+| Nodo | Qué es |
+|---|---|
+| `inicio` | Punto de aparición (no es nivel), con la tubería encima (aún sin destino) |
+| `yararara` | Primer nivel (abierto) |
+| `bad-day` | Lo abre yararara |
+| `chaos` | El cruce de 3 caminos. Al superarlo abre los escalones a la meseta; su **salida secreta** (las 7 esmeraldas) abre el puente al norte |
+| `last-course` | En la meseta |
+| `castillo` | World of Chaos |
+| `endless` | Al norte, pasando el puente |
+| `camino-norte`, `camino-este` | Final de los caminos que seguirán a otros mundos |
+
+Las canciones se van añadiendo a medida que se portan (ver `docs/SONG_PORTS.md`); hasta entonces
+el editor avisa de los niveles sin canción. El mundo 1 todavía no es el mundo por defecto.
 
 ## Pruebas automáticas (solo build debug)
 
@@ -629,10 +649,12 @@ Se lanzan desde `export/debug/windows/bin` (el juego busca `assets\` en su carpe
 |---|---|
 | `-overworld <mundo> -shot` | Abre ese mapa, a los 3 s guarda una captura en `world_shot.png` junto al exe y se cierra. |
 | `-check-worlds` | Revisa todos los mundos de la build (también la partida entera), escribe el resultado en `check_worlds.txt` junto al exe y se cierra. |
+| `-song <canción> -test` | Juega una canción entera en botplay con capturas; ver `docs/SONG_PORTS.md` y `tools/run_songtest.ps1`. |
 | `-overworld-editor test_graph -selftest` | Prueba los botones de unir mundos, el aspecto desde la paleta, deshacer (con progreso, tiles y submundos), pintar, grupos, el rectángulo, los avisos nuevos y los de la partida entera. Escribe `SELFTEST OK/FAIL` por consola (49 comprobaciones) y borra sus mundos `zz_*`. |
-| `-playtest` | Monta 5 mundos de demostración con las funciones del editor y los juega por código: una canción de verdad, castillo, tuberías, salida lateral, menú, R, un mapa sin nodos abiertos, probar desde un nodo cerrado, salidas secretas (sin fallos y por precisión), un nodo de N superados, un atajo con condición, la cámara del revelado y el iris (99 comprobaciones). Deja `playtest_result.txt` y capturas en `playtest_shots\` (también del editor), borra sus mundos `zz_demo*` y se cierra. En cada captura comprueba que ningún sprite use una imagen ya liberada. |
+| `-playtest` | Monta 5 mundos de demostración con las funciones del editor y los juega por código: una canción de verdad, castillo, tuberías, salida lateral, menú, R, un mapa sin nodos abiertos, probar desde un nodo cerrado, salidas secretas (sin fallos y por precisión), un nodo de N superados, un atajo con condición, la cámara del revelado, el iris y el otro sprite de jugador (106 comprobaciones). Deja `playtest_result.txt` y capturas en `playtest_shots\` (también del editor), borra sus mundos `zz_demo*` y se cierra. En cada captura comprueba que ningún sprite use una imagen ya liberada. |
 
-Ninguna toca la partida del usuario ni simula teclas.
+Ninguna toca la partida del usuario ni simula teclas. `tools/run_playtest.ps1` lanza la prueba
+jugable y muestra su resultado.
 
 **Dónde está BF también se guarda** (clave `overworldPosition`: mundo, nodo y la pila de
 submundos): al abrir el juego otra vez, sigue en el mismo sitio, aunque sea dentro de un castillo.

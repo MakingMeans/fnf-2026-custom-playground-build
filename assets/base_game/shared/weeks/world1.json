@@ -1,0 +1,26 @@
+{
+	"songs": [
+		[
+			"YARARARA",
+			"icon-yararara-teto",
+			[
+				255,
+				0,
+				0
+			]
+		]
+	],
+	"weekCharacters": [
+		"",
+		"bf",
+		"gf"
+	],
+	"weekBackground": "stage",
+	"storyName": "Mundo 1",
+	"weekBefore": "",
+	"weekName": "Mundo 1",
+	"startUnlocked": true,
+	"difficulties": "",
+	"hideStoryMode": true,
+	"hideFreeplay": false
+}

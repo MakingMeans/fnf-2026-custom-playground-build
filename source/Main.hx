@@ -166,6 +166,7 @@ class Main extends Sprite
 		{
 			firstState = function():flixel.FlxState
 			{
+				initDirectLaunch();
 				var lines:Array<String> = [];
 				for (world in backend.OverworldData.listWorlds())
 				{
@@ -183,6 +184,7 @@ class Main extends Sprite
 		{
 			firstState = function():flixel.FlxState
 			{
+				initDirectLaunch();
 				states.OverworldPlaytest.start();
 				return new states.editors.OverworldEditorState('zz_demo');
 			};
@@ -195,7 +197,25 @@ class Main extends Sprite
 			if (editorArg + 1 < launchArgs.length && !launchArgs[editorArg + 1].startsWith('-'))
 				worldToOpen = launchArgs[editorArg + 1];
 
-			firstState = function():flixel.FlxState return new states.editors.OverworldEditorState(worldToOpen);
+			firstState = function():flixel.FlxState
+			{
+				initDirectLaunch();
+				return new states.editors.OverworldEditorState(worldToOpen);
+			};
+		}
+		else if (launchArgs.indexOf('-song') > -1 && launchArgs.indexOf('-song') + 1 < launchArgs.length)
+		{
+			// Arranque directo a una cancion: FNF2026Playground.exe -song <cancion>
+			// (en debug, con -test la juega en botplay, saca capturas y se cierra: ver SongTester)
+			var songToPlay:String = launchArgs[launchArgs.indexOf('-song') + 1];
+			firstState = function():flixel.FlxState
+			{
+				initDirectLaunch();
+				#if debug
+				if (launchArgs.contains('-test')) states.SongTester.start(songToPlay, launchArgs);
+				#end
+				return new states.QuickSongState(songToPlay);
+			};
 		}
 		else
 		{
@@ -217,6 +237,7 @@ class Main extends Sprite
 
 				firstState = function():flixel.FlxState
 				{
+					initDirectLaunch();
 					states.OverworldState.reset();
 
 					// Como el juego normal (sin mundo o con el de por defecto): se sigue donde se dejo
@@ -278,6 +299,18 @@ class Main extends Sprite
 			if (FlxG.game != null)
 			resetSpriteCache(FlxG.game);
 		});
+	}
+
+	/**
+	 * Lo que hace la pantalla de titulo al abrir el juego y que los arranques directos (-overworld,
+	 * -song, el editor...) se saltaban: sin esto se jugaba con las opciones por defecto (teclas,
+	 * downscroll, offset, shaders...) en vez de con las tuyas.
+	 */
+	static function initDirectLaunch():Void
+	{
+		ClientPrefs.loadPrefs();
+		Language.reloadPhrases();
+		if (FlxG.save.data != null && FlxG.save.data.fullscreen) FlxG.fullscreen = FlxG.save.data.fullscreen;
 	}
 
 	static function resetSpriteCache(sprite:Sprite):Void {

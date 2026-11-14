@@ -1,0 +1,36 @@
+{
+	"animations": [
+		{
+			"offsets": [
+				-3,
+				0
+			],
+			"loop": false,
+			"fps": 24,
+			"anim": "idle",
+			"indices": [],
+			"name": "idle"
+		}
+	],
+	"vocals_file": "",
+	"no_antialiasing": false,
+	"image": "characters/yararara/bf-gf",
+	"position": [
+		-190,
+		130
+	],
+	"healthicon": "icon-yararara-bf",
+	"flip_x": true,
+	"healthbar_colors": [
+		49,
+		216,
+		209
+	],
+	"camera_position": [
+		-10,
+		10
+	],
+	"sing_duration": 4,
+	"scale": 0.7,
+	"_editor_isPlayer": true
+}
