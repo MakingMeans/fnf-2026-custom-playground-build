@@ -13,6 +13,7 @@ actualiza):
 ```
 python tools/ports/yararara.py [carpeta del mod]
 python tools/ports/mario_madness.py [carpeta assets del mod]   (Last Course y Bad Day)
+python tools/ports/sonic_exe.py [carpeta sanic]                (chaos y endless-us; necesita Pillow)
 ```
 
 Si el mod tenía la lógica de la canción en su código (no en scripts), se reescribe en Haxe como una
@@ -53,6 +54,8 @@ Reglas que siguen todas:
     "reintentar" a los 10 s (si ese game over ya lo deja).
   - `-Hit "Bad Poison"`: el bot también pulsa las notas de esos tipos (normalmente deja pasar las
     que no hay que tocar), para ver qué pasa al tocarlas.
+  - `-Skip "emerald"`: el bot deja pasar las notas de esos tipos (p. ej. chaos sin esmeraldas).
+  - Las capturas de ventana salen vacías si la ventana del juego está minimizada.
 
 ## yararara (mundo 1, primer nivel)
 
@@ -130,3 +133,51 @@ Diferencias con el mod, todas a propósito:
   terminó, no quita vida (BF podía morir de camino al mapa).
 - Se mantiene a propósito: el evento "Camera Zoom Chain" ignora los valores de zoom que trae (el mod
   siempre usaba 0.015 / 0.03), y "Set Cam Pos" sin valores no hace nada.
+
+## chaos y endless-us (Vs Sonic.exe)
+
+Origen: carpeta `sanic` (`Vs Sonic.exe`, un Psych 1.0.4 modificado y compilado). Charts, personajes,
+escenarios y scripts van **dentro del exe** como recursos de Haxe; `tools/ports/sonic_exe.py` los
+saca de ahí (con el manifiesto `manifest/default.json`) y pasa las imágenes `.webp` a `.png`,
+devolviendo el margen a las que el mod había recortado (`image_trims.json`). La fuente `SonicCD.ttf`
+se copia de `sanic/assets/fonts/`.
+
+Lo que hacía el motor del mod, y sus scripts globales, está en Haxe:
+
+| Archivo | Qué hace |
+|---|---|
+| `source/states/stages/SonicStage.hx` | Lo común: cámara por puntos (`data/<canción>/cameraSettings.json`: punto de cada lado, punto medio con el evento `cameracenter` y cuánto se asoma hacia cada flecha), eventos `Tween Camera Zoom`, `Tweening Camera`, `Set Character Offset` y `Change Health Damage`, y el daño por nota del rival (HealthStuff.lua). |
+| `source/states/stages/objects/SonicHUD.hx` | La barra de vida del mod (customHealthBar.lua): marco de la canción, iconos que botan, "Score \| Misses" y, con botplay, "SUNKY IS PLAYING" en arcoíris. Medidas de `data/<canción>/healthProps.json`. |
+| `source/states/stages/objects/SonicLyrics.hx` | Las letras karaoke (evento `Normal Lyrics`): frases de `data/<canción>/lyrics.json` en el idioma del juego. |
+| `source/states/stages/objects/SonicSplashes.hx` | Sus splashes (noteSplashGlobal.lua): chispazo corto en cada "sick" y fundas en las notas largas (también las del rival). Sustituyen a los de Psych. |
+| `source/states/stages/FleetwayStage.hx` | chaos (escenario `fleetw`) y su game over (`ChaosGameOver`). |
+| `source/states/stages/MajinStage.hx` | endless-us (escenario `majin`), su pantalla de inicio y su game over (`MajinGameOver`). |
+
+**chaos** (`chaos-bf` contra `chaos-fleetway`):
+- La primera vez, intro con la estatua y el fondo apagado; al reintentar no se repite.
+- Una ventanita con Fleetway (pasos 464-529 y 1600) y letras en pantalla.
+- 7 notas "emerald" opcionales: cada una vuela hacia BF y se enciende abajo, junto a la barra. Con las
+  7, BF se vuelve Super y Fleetway cambia sus frases. **Es la salida secreta del nivel en el mapa**
+  (modo de salida secreta "canción": `OverworldState.songSecret`).
+- Láser ("Eat this!"): se esquiva con la tecla de esquivar en el último segundo; si pilla, BF muere.
+- Game over: BF hecho ceniza y Fleetway dice una de sus 12 frases, con subtítulo; la música baja
+  mientras habla. Reintentar: destello rojo.
+
+**endless-us** (`endless-us-bf` contra `endless-us-majin`):
+- Pantalla de inicio "ENDLESS ACT ∞" la primera vez; al reintentar no hay ni cuenta atrás.
+- Sus shaders de cámara (aberración, brillo, blanco y negro, color) con los eventos `bloomFlash`,
+  `chromFlash`, `bwFlash` y `colorFlash`; el resto (cuenta "3, 2, 1, Go" a mitad de canción, cambio
+  de skin de notas, giros de flechas, modchart suave) sigue en sus Lua, que solo usan funciones de Psych.
+- Game over: BF esqueleto rodeado de majins y una cuenta atrás de 10 s. Si llega a 0 sin reintentar,
+  BF se convierte en Majin (destello azul, zoom y dos sonidos) y se vuelve al mapa.
+
+Diferencias con el mod, todas a propósito:
+- chaos sin las 7 esmeraldas ya no mata a BF (el mod lo hacía en el láser después del pulso 252 y
+  en el paso 1999): ahora conseguirlas o no decide la salida del nivel.
+- En el mod, el game over de endless acababa cerrando la ventana del juego: ahora vuelve al mapa (o a
+  Freeplay). Su Majin final sale centrado en pantalla (en el mod su sitio dependía de por dónde iba
+  la cámara).
+- La frase del game over de chaos suena una vez (el mod la cargaba en bucle).
+- Las fundas de las notas largas reinician su tiempo al empezar otra nota larga (por un índice mal
+  puesto en el script del mod, podían desaparecer al momento).
+- No hay rótulo "BOTPLAY" de Psych en estas dos: el del mod es la puntuación en arcoíris.

@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="11.png">
+	<!-- Created with Adobe Animate version 24.0.10.14 -->
+	<!-- http://www.adobe.com/products/animate.html -->
+	<SubTexture name="11 instancia 10000" x="0" y="425" width="834" height="208" frameX="-1" frameY="-4" frameWidth="838" frameHeight="214"/>
+	<SubTexture name="11 instancia 10001" x="0" y="425" width="834" height="208" frameX="-1" frameY="-4" frameWidth="838" frameHeight="214"/>
+	<SubTexture name="11 instancia 10002" x="0" y="0" width="835" height="211" frameX="-1" frameY="-2" frameWidth="838" frameHeight="214"/>
+	<SubTexture name="11 instancia 10003" x="0" y="0" width="835" height="211" frameX="-1" frameY="-2" frameWidth="838" frameHeight="214"/>
+	<SubTexture name="11 instancia 10004" x="0" y="213" width="837" height="210" frameX="0" frameY="0" frameWidth="838" frameHeight="214"/>
+	<SubTexture name="11 instancia 10005" x="0" y="213" width="837" height="210" frameX="0" frameY="0" frameWidth="838" frameHeight="214"/>
+	<SubTexture name="11 instancia 10006" x="839" y="0" width="200" height="832" frameX="-2" frameY="0" frameWidth="838" frameHeight="214" rotated="true" />
+	<SubTexture name="11 instancia 10007" x="839" y="0" width="200" height="832" frameX="-2" frameY="0" frameWidth="838" frameHeight="214" rotated="true" />
+	<SubTexture name="11 instancia 10008" x="1041" y="0" width="197" height="830" frameX="-3" frameY="0" frameWidth="838" frameHeight="214" rotated="true" />
+	<SubTexture name="11 instancia 10009" x="1041" y="0" width="197" height="830" frameX="-3" frameY="0" frameWidth="838" frameHeight="214" rotated="true" />
+	<SubTexture name="11 instancia 10010" x="0" y="635" width="828" height="196" frameX="-4" frameY="0" frameWidth="838" frameHeight="214"/>
+	<SubTexture name="11 instancia 10011" x="0" y="635" width="828" height="196" frameX="-4" frameY="0" frameWidth="838" frameHeight="214"/>
+	<SubTexture name="11 instancia 10012" x="0" y="635" width="828" height="196" frameX="-4" frameY="0" frameWidth="838" frameHeight="214"/>
+	<SubTexture name="11 instancia 10013" x="0" y="635" width="828" height="196" frameX="-4" frameY="0" frameWidth="838" frameHeight="214"/>
+</TextureAtlas>

@@ -24,4 +24,6 @@ class GameOverCustom
 	public function canConfirm():Bool return true;
 	/** Se va a reintentar (antes de la animación de confirmar y del fundido). */
 	public function confirm():Void {}
+	/** Se sale del game over al menú o al mapa (BACK o `sub.exitToMenu()`). */
+	public function leave():Void {}
 }

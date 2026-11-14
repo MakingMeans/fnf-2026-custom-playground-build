@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="22.png">
+	<!-- Created with Adobe Animate version 24.0.10.14 -->
+	<!-- http://www.adobe.com/products/animate.html -->
+	<SubTexture name="22 instancia 10000" x="100" y="100" width="98" height="97" frameX="-1" frameY="-2" frameWidth="101" frameHeight="101"/>
+	<SubTexture name="22 instancia 10001" x="100" y="100" width="98" height="97" frameX="-1" frameY="-2" frameWidth="101" frameHeight="101"/>
+	<SubTexture name="22 instancia 10002" x="0" y="0" width="98" height="99" frameX="-1" frameY="-1" frameWidth="101" frameHeight="101"/>
+	<SubTexture name="22 instancia 10003" x="0" y="0" width="98" height="99" frameX="-1" frameY="-1" frameWidth="101" frameHeight="101"/>
+	<SubTexture name="22 instancia 10004" x="100" y="0" width="100" height="98" frameX="0" frameY="0" frameWidth="101" frameHeight="101"/>
+	<SubTexture name="22 instancia 10005" x="100" y="0" width="100" height="98" frameX="0" frameY="0" frameWidth="101" frameHeight="101"/>
+	<SubTexture name="22 instancia 10006" x="0" y="101" width="98" height="94" frameX="-2" frameY="0" frameWidth="101" frameHeight="101"/>
+	<SubTexture name="22 instancia 10007" x="0" y="101" width="98" height="94" frameX="-2" frameY="0" frameWidth="101" frameHeight="101"/>
+	<SubTexture name="22 instancia 10008" x="0" y="197" width="98" height="94" frameX="-3" frameY="0" frameWidth="101" frameHeight="101"/>
+	<SubTexture name="22 instancia 10009" x="0" y="197" width="98" height="94" frameX="-3" frameY="0" frameWidth="101" frameHeight="101"/>
+	<SubTexture name="22 instancia 10010" x="100" y="199" width="98" height="94" frameX="-3" frameY="0" frameWidth="101" frameHeight="101"/>
+	<SubTexture name="22 instancia 10011" x="100" y="199" width="98" height="94" frameX="-3" frameY="0" frameWidth="101" frameHeight="101"/>
+	<SubTexture name="22 instancia 10012" x="100" y="199" width="98" height="94" frameX="-3" frameY="0" frameWidth="101" frameHeight="101"/>
+	<SubTexture name="22 instancia 10013" x="100" y="199" width="98" height="94" frameX="-3" frameY="0" frameWidth="101" frameHeight="101"/>
+</TextureAtlas>

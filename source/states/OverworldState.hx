@@ -159,7 +159,7 @@ class OverworldState extends MusicBeatState
 		var file:OverworldFile = OverworldData.loadCached(curWorld);
 		var node:OverworldNodeFile = OverworldData.findNode(file, lastLevelNode);
 		var secretNow:Bool = misses >= 0 && node != null && OverworldData.hasSecret(file, node)
-			&& !OverworldData.isSecretCompleted(curWorld, node.id) && OverworldData.secretAchieved(node, misses, accuracy);
+			&& !OverworldData.isSecretCompleted(curWorld, node.id) && OverworldData.secretAchieved(node, misses, accuracy, songSecret);
 		if (secretNow)
 		{
 			OverworldData.setCompleted(curWorld, node.id + OverworldData.SECRET);
@@ -174,6 +174,12 @@ class OverworldState extends MusicBeatState
 
 	/** Al volver al mapa se avisa de que se acaba de sacar una salida secreta. */
 	static var secretMessage:Bool = false;
+
+	/**
+	 * Salida secreta en modo 'song': la pone a true la cancion (su escenario) cuando el jugador la
+	 * consigue, p. ej. chaos al reunir las 7 esmeraldas. PlayState la vuelve a false al empezar.
+	 */
+	public static var songSecret:Bool = false;
 
 	/** Vuelve al mapa (usado por PlayState, pausa y game over): el mapa se abre con el iris. */
 	public static function backToOverworld()

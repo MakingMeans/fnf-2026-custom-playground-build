@@ -1317,10 +1317,11 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		tab.add(nodeNeedStepper);
 
 		label(tab, x + 90, y - 17, 'Salida secreta:');
-		nodeSecretModeDropDown = new PsychUIDropDownMenu(x + 90, y, ['fallos', 'precision'], function(sel:Int, value:String)
+		// "cancion": la decide la propia cancion (p. ej. chaos, con las 7 esmeraldas); el contador no se usa
+		nodeSecretModeDropDown = new PsychUIDropDownMenu(x + 90, y, ['fallos', 'precision', 'cancion'], function(sel:Int, value:String)
 		{
 			if (selectedNode == null) return;
-			selectedNode.secretMode = (value == 'precision') ? 'accuracy' : 'fc';
+			selectedNode.secretMode = switch (value) { case 'precision': 'accuracy'; case 'cancion': 'song'; default: 'fc'; };
 			updateUI(); // el contador de al lado pasa a ser el de este modo
 		}, 110);
 		tab.add(nodeSecretModeDropDown);
@@ -2455,7 +2456,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			nodeUnlockedCheck.checked = selectedNode.unlocked;
 			nodeUnlocksInput.text = selectedNode.unlocks.join(', ');
 			nodeNeedStepper.value = selectedNode.needLevels;
-			nodeSecretModeDropDown.selectedLabel = selectedNode.secretMode == 'accuracy' ? 'precision' : 'fallos';
+			nodeSecretModeDropDown.selectedLabel = switch (selectedNode.secretMode) { case 'accuracy': 'precision'; case 'song': 'cancion'; default: 'fallos'; };
 			nodeSecretAccStepper.value = selectedNode.secretMode == 'accuracy' ? selectedNode.secretAccuracy : selectedNode.secretMisses;
 			nodeSecretInput.text = selectedNode.secretUnlocks.join(', ');
 			nodeXStepper.value = selectedNode.x;

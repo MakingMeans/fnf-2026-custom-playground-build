@@ -158,7 +158,7 @@ Además de *Desbloqueado al empezar* y *Desbloquea al completarlo*, hay tres reg
 |---|---|---|
 | **N superados** | Pestaña Nodo, contador *N superados* | El nodo también se abre en cuanto tienes N nodos superados **en este mundo** (niveles y castillos). Al intentar ir hacia él antes de tiempo, el mapa dice cuántos llevas. |
 | **Camino con condición propia** | Pestaña Camino (*Solo se abre al completar*), o modo L + clic en el camino | El camino no aparece hasta completar ese nodo, aunque sus dos extremos ya estén abiertos. Sirve para atajos. En el editor se ve **discontinuo** (naranja; amarillo si es de salida secreta). |
-| **Salida secreta** | Pestaña Nodo: *Salida secreta* (`fallos` o `precision`), el contador de al lado (*Max fallos / % min*) y *Su salida secreta desbloquea*; o modo L + SHIFT+clic | Al superar el nivel cumpliendo la condición que tú pones (como mucho N fallos, o al menos ese % de precisión), además se abre lo de su salida secreta. Puede sacarse repitiendo el nivel. En *practice* o *botplay* no cuenta. |
+| **Salida secreta** | Pestaña Nodo: *Salida secreta* (`fallos`, `precision` o `cancion`), el contador de al lado (*Max fallos / % min*) y *Su salida secreta desbloquea*; o modo L + SHIFT+clic | Al superar el nivel cumpliendo la condición que tú pones (como mucho N fallos, o al menos ese % de precisión), además se abre lo de su salida secreta. Con `cancion` la condición la pone la propia canción (chaos: reunir las 7 esmeraldas; su escenario pone `OverworldState.songSecret`). Puede sacarse repitiendo el nivel. En *practice* o *botplay* no cuenta. |
 
 En el juego, un nivel con salida secreta muestra `?` junto a su nombre hasta que la sacas, y
 después **SECRETO** en amarillo; al volver de la canción sale "¡Salida secreta!", y a la derecha
@@ -565,7 +565,7 @@ de la build al repo. También existe **Guardar como...** para elegir la ruta a m
       "unlocks": ["n1"],
       "needLevels": 0,                // >0: tambien se abre con N superados en este mundo
       "secretUnlocks": [],            // lo que abre su salida secreta (solo niveles)
-      "secretMode": "fc",             // "fc" = pocos fallos | "accuracy" = precision minima
+      "secretMode": "fc",             // "fc" = pocos fallos | "accuracy" = precision minima | "song" = lo decide la cancion
       "secretMisses": 0,              // con "fc": fallos maximos permitidos
       "secretAccuracy": 95            // con "accuracy": % minimo
     }
@@ -653,9 +653,10 @@ se edita en el editor, no volver a ejecutar ese script.
 | `camino-norte`, `camino-este` | Final de los caminos que seguirán a otros mundos |
 
 Las canciones se van añadiendo a medida que se portan (ver `docs/SONG_PORTS.md`); hasta entonces
-el editor avisa de los niveles sin canción. Ya tienen la suya `yararara`, `bad-day` y `last-course`
-(a `last-course` aún no se llega jugando: hace falta superar `chaos`). El mundo 1 todavía no es el
-mundo por defecto.
+el editor avisa de los niveles sin canción. Ya tienen la suya `yararara`, `bad-day`, `chaos`,
+`last-course` y `endless` (`endless-us`); falta el castillo (World of Chaos). La salida secreta de
+`chaos` usa el modo `cancion`: la da reunir las 7 esmeraldas, no los fallos. El mundo 1 todavía no es
+el mundo por defecto.
 
 ## Pruebas automáticas (solo build debug)
 
@@ -667,7 +668,7 @@ Se lanzan desde `export/debug/windows/bin` (el juego busca `assets\` en su carpe
 | `-check-worlds` | Revisa todos los mundos de la build (también la partida entera), escribe el resultado en `check_worlds.txt` junto al exe y se cierra. |
 | `-song <canción> -test` | Juega una canción entera en botplay con capturas; ver `docs/SONG_PORTS.md` y `tools/run_songtest.ps1`. |
 | `-overworld-editor test_graph -selftest` | Prueba los botones de unir mundos, el aspecto desde la paleta, deshacer (con progreso, tiles y submundos), pintar, grupos, el rectángulo, los avisos nuevos y los de la partida entera. Escribe `SELFTEST OK/FAIL` por consola (49 comprobaciones) y borra sus mundos `zz_*`. |
-| `-playtest` | Monta 5 mundos de demostración con las funciones del editor y los juega por código: una canción de verdad, castillo, tuberías y una estrella (con capturas a mitad del viaje), salida lateral, menú, R, un mapa sin nodos abiertos, probar desde un nodo cerrado, salidas secretas (sin fallos y por precisión), un nodo de N superados, un atajo con condición, la cámara del revelado, el iris y el otro sprite de jugador (109 comprobaciones). Deja `playtest_result.txt` y capturas en `playtest_shots\` (también del editor), borra sus mundos `zz_demo*` y se cierra. En cada captura comprueba que ningún sprite use una imagen ya liberada. |
+| `-playtest` | Monta 5 mundos de demostración con las funciones del editor y los juega por código: una canción de verdad, castillo, tuberías y una estrella (con capturas a mitad del viaje), salida lateral, menú, R, un mapa sin nodos abiertos, probar desde un nodo cerrado, salidas secretas (sin fallos, por precisión y el modo canción), un nodo de N superados, un atajo con condición, la cámara del revelado, el iris y el otro sprite de jugador (111 comprobaciones). Deja `playtest_result.txt` y capturas en `playtest_shots\` (también del editor), borra sus mundos `zz_demo*` y se cierra. En cada captura comprueba que ningún sprite use una imagen ya liberada. |
 
 Ninguna toca la partida del usuario ni simula teclas. `tools/run_playtest.ps1` lanza la prueba
 jugable y muestra su resultado.

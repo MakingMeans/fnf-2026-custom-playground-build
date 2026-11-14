@@ -34,6 +34,7 @@ class SongTester extends FlxBasic
 	var confirmed:Bool = false;
 	var deathTime:Float = -1; // s desde que se abre el game over
 	var hitTypes:Array<String> = []; // -hit: tipos de nota que el bot tambien pulsa
+	var skipTypes:Array<String> = []; // -skip: tipos de nota que el bot deja pasar (p. ej. "emerald")
 	var taken:Array<String> = [];
 	var log:Array<String> = [];
 	var started:Bool = false;
@@ -73,6 +74,9 @@ class SongTester extends FlxBasic
 		var hitIndex:Int = args.indexOf('-hit');
 		if (hitIndex > -1 && hitIndex + 1 < args.length)
 			tester.hitTypes = [for (type in args[hitIndex + 1].split(',')) type.trim()];
+		var skipIndex:Int = args.indexOf('-skip');
+		if (skipIndex > -1 && skipIndex + 1 < args.length)
+			tester.skipTypes = [for (type in args[skipIndex + 1].split(',')) type.trim()];
 		FlxG.plugins.addPlugin(tester);
 	}
 
@@ -154,6 +158,12 @@ class SongTester extends FlxBasic
 					play.goodNoteHit(note);
 				}
 			});
+		}
+		if (skipTypes.length > 0)
+		{
+			// -skip <tipos>: el bot no las toca (con botplay, PlayState no pulsa las notas ignoreNote)
+			for (note in play.unspawnNotes) if (skipTypes.contains(note.noteType)) note.ignoreNote = true;
+			for (note in play.notes.members) if (note != null && skipTypes.contains(note.noteType)) note.ignoreNote = true;
 		}
 		if (dieAt >= 0 && lastPos >= dieAt)
 		{

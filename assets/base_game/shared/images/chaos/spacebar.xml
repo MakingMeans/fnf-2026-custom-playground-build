@@ -1,0 +1,27 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="spacebar.png">
+	<!-- Created with Adobe Animate version 24.0.9.74 -->
+	<!-- http://www.adobe.com/products/animate.html -->
+	<SubTexture name="Símbolo 8 instancia 10000" x="0" y="649" width="487" height="129" frameX="-3" frameY="-91" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10001" x="0" y="649" width="487" height="129" frameX="-3" frameY="-91" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10002" x="0" y="649" width="487" height="129" frameX="-3" frameY="-91" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10003" x="0" y="780" width="487" height="113" frameX="-3" frameY="-107" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10004" x="0" y="780" width="487" height="113" frameX="-3" frameY="-107" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10005" x="0" y="780" width="487" height="113" frameX="-3" frameY="-107" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10006" x="0" y="443" width="491" height="204" frameX="-1" frameY="-19" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10007" x="0" y="443" width="491" height="204" frameX="-1" frameY="-19" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10008" x="0" y="225" width="491" height="216" frameX="-1" frameY="-7" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10009" x="0" y="225" width="491" height="216" frameX="-1" frameY="-7" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10010" x="0" y="0" width="491" height="223" frameX="-1" frameY="0" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10011" x="0" y="0" width="491" height="223" frameX="-1" frameY="0" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10012" x="0" y="0" width="491" height="223" frameX="-1" frameY="0" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10013" x="0" y="780" width="487" height="113" frameX="-3" frameY="-107" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10014" x="0" y="780" width="487" height="113" frameX="-3" frameY="-107" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10015" x="0" y="780" width="487" height="113" frameX="-3" frameY="-107" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10016" x="0" y="649" width="487" height="129" frameX="-3" frameY="-91" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10017" x="0" y="649" width="487" height="129" frameX="-3" frameY="-91" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10018" x="0" y="649" width="487" height="129" frameX="-3" frameY="-91" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10019" x="0" y="649" width="487" height="129" frameX="-3" frameY="-91" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10020" x="0" y="649" width="487" height="129" frameX="-3" frameY="-91" frameWidth="498" frameHeight="229"/>
+	<SubTexture name="Símbolo 8 instancia 10021" x="0" y="649" width="487" height="129" frameX="-3" frameY="-91" frameWidth="498" frameHeight="229"/>
+</TextureAtlas>

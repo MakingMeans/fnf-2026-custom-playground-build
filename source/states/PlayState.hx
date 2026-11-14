@@ -335,6 +335,7 @@ class PlayState extends MusicBeatState
 		#end
 
 		GameOverSubstate.resetVariables();
+		states.OverworldState.songSecret = false; // salida secreta que decide la cancion (la pone su escenario)
 		songName = Paths.formatToSongPath(SONG.song);
 		if(SONG.stage == null || SONG.stage.length < 1)
 			SONG.stage = StageData.vanillaSongStage(Paths.formatToSongPath(Song.loadedSongName));
@@ -381,6 +382,8 @@ class PlayState extends MusicBeatState
 			case 'stage': new StageWeek1(); //Tutorial / stage por defecto
 			case 'turmoilsweep': new TurmoilSweep(); //Last Course (Mario's Madness)
 			case 'superbad': new SuperBad(); //Bad Day (Mario's Madness)
+			case 'fleetw': new FleetwayStage(); //chaos (Vs Sonic.exe)
+			case 'majin': new MajinStage(); //endless-us (Vs Sonic.exe)
 		}
 		if(isPixelStage) introSoundsSuffix = '-pixel';
 
@@ -1858,6 +1861,7 @@ class PlayState extends MusicBeatState
 		#end
 
 		setOnScripts('botPlay', cpuControlled);
+		stagesFunc(function(stage:BaseStage) stage.updatePost(elapsed));
 		callOnScripts('onUpdatePost', [elapsed]);
 	}
 

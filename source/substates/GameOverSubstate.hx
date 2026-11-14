@@ -169,23 +169,7 @@ class GameOverSubstate extends MusicBeatSubstate
 			}
 			else if (controls.BACK)
 			{
-				#if DISCORD_ALLOWED DiscordClient.resetClientID(); #end
-				FlxG.camera.visible = false;
-				FlxG.sound.music.stop();
-				PlayState.deathCounter = 0;
-				PlayState.seenCutscene = false;
-				PlayState.chartingMode = false;
-	
-				Mods.loadTopMod();
-				if (states.OverworldState.fromOverworld)
-					states.OverworldState.backToOverworld();
-				else if (PlayState.isStoryMode)
-					MusicBeatState.switchState(new StoryMenuState());
-				else
-					MusicBeatState.switchState(new FreeplayState());
-	
-				FlxG.sound.playMusic(Paths.music('freakyMenu'));
-				PlayState.instance.callOnScripts('onGameOverConfirm', [false]);
+				exitToMenu();
 			}
 			else if (justPlayedLoop)
 			{
@@ -218,6 +202,32 @@ class GameOverSubstate extends MusicBeatSubstate
 	}
 
 	public var isEnding(default, null):Bool = false;
+
+	/** Lo que hace BACK: sale al mapa (si se vino de él), al modo historia o a Freeplay. */
+	public function exitToMenu():Void
+	{
+		if (isEnding) return;
+		isEnding = true;
+		if(custom != null) custom.leave();
+		#if DISCORD_ALLOWED DiscordClient.resetClientID(); #end
+		FlxG.camera.visible = false;
+		FlxG.sound.music.stop();
+		PlayState.deathCounter = 0;
+		PlayState.seenCutscene = false;
+		PlayState.chartingMode = false;
+
+		Mods.loadTopMod();
+		if (states.OverworldState.fromOverworld)
+			states.OverworldState.backToOverworld();
+		else if (PlayState.isStoryMode)
+			MusicBeatState.switchState(new StoryMenuState());
+		else
+			MusicBeatState.switchState(new FreeplayState());
+
+		FlxG.sound.playMusic(Paths.music('freakyMenu'));
+		PlayState.instance.callOnScripts('onGameOverConfirm', [false]);
+	}
+
 	function coolStartDeath(?volume:Float = 1):Void
 	{
 		FlxG.sound.music.play(true);

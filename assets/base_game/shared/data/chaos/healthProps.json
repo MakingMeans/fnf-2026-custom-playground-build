@@ -1,0 +1,24 @@
+{
+	"healthBar": {
+		"width": 601,
+		"height": 25,
+		"gapSize": 5,
+		"separatorWidth": 4,
+		"textBopAmount": 1.1,
+		"hideScore": false,
+		"offsetX": 0,
+		"offsetY": 0
+	},
+	"playerIcon": {
+		"scale": 1,
+		"offsetX": 0,
+		"offsetY": 0,
+		"bopAmount": 1.2
+	},
+	"opponentIcon": {
+		"scale": 1.05,
+		"offsetX": 0,
+		"offsetY": -5,
+		"bopAmount": 1.2
+	}
+}

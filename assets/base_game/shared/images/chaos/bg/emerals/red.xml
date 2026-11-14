@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="rojo.png">
+	<!-- Created with Adobe Animate version 24.0.12.3 -->
+	<!-- http://www.adobe.com/products/animate.html -->
+	<SubTexture name="Símbolo 1 copia 3 instancia 10000" x="0" y="206" width="273" height="196" frameX="-1" frameY="-8" frameWidth="275" frameHeight="204"/>
+	<SubTexture name="Símbolo 1 copia 3 instancia 10001" x="0" y="206" width="273" height="196" frameX="-1" frameY="-8" frameWidth="275" frameHeight="204"/>
+	<SubTexture name="Símbolo 1 copia 3 instancia 10002" x="0" y="206" width="273" height="196" frameX="-1" frameY="-8" frameWidth="275" frameHeight="204"/>
+	<SubTexture name="Símbolo 1 copia 3 instancia 10003" x="0" y="206" width="273" height="196" frameX="-1" frameY="-8" frameWidth="275" frameHeight="204"/>
+	<SubTexture name="Símbolo 1 copia 3 instancia 10004" x="0" y="206" width="273" height="196" frameX="-1" frameY="-8" frameWidth="275" frameHeight="204"/>
+	<SubTexture name="Símbolo 1 copia 3 instancia 10005" x="277" y="0" width="271" height="201" frameX="-2" frameY="-3" frameWidth="275" frameHeight="204"/>
+	<SubTexture name="Símbolo 1 copia 3 instancia 10006" x="277" y="0" width="271" height="201" frameX="-2" frameY="-3" frameWidth="275" frameHeight="204"/>
+	<SubTexture name="Símbolo 1 copia 3 instancia 10007" x="277" y="0" width="271" height="201" frameX="-2" frameY="-3" frameWidth="275" frameHeight="204"/>
+	<SubTexture name="Símbolo 1 copia 3 instancia 10008" x="277" y="0" width="271" height="201" frameX="-2" frameY="-3" frameWidth="275" frameHeight="204"/>
+	<SubTexture name="Símbolo 1 copia 3 instancia 10009" x="277" y="0" width="271" height="201" frameX="-2" frameY="-3" frameWidth="275" frameHeight="204"/>
+	<SubTexture name="Símbolo 1 copia 3 instancia 10010" x="0" y="0" width="275" height="204"/>
+	<SubTexture name="Símbolo 1 copia 3 instancia 10011" x="0" y="0" width="275" height="204"/>
+	<SubTexture name="Símbolo 1 copia 3 instancia 10012" x="0" y="0" width="275" height="204"/>
+	<SubTexture name="Símbolo 1 copia 3 instancia 10013" x="0" y="0" width="275" height="204"/>
+	<SubTexture name="Símbolo 1 copia 3 instancia 10014" x="0" y="0" width="275" height="204"/>
+	<SubTexture name="Símbolo 1 copia 3 instancia 10015" x="277" y="203" width="273" height="199" frameX="-2" frameY="-5" frameWidth="275" frameHeight="204"/>
+	<SubTexture name="Símbolo 1 copia 3 instancia 10016" x="277" y="203" width="273" height="199" frameX="-2" frameY="-5" frameWidth="275" frameHeight="204"/>
+	<SubTexture name="Símbolo 1 copia 3 instancia 10017" x="277" y="203" width="273" height="199" frameX="-2" frameY="-5" frameWidth="275" frameHeight="204"/>
+	<SubTexture name="Símbolo 1 copia 3 instancia 10018" x="277" y="203" width="273" height="199" frameX="-2" frameY="-5" frameWidth="275" frameHeight="204"/>
+	<SubTexture name="Símbolo 1 copia 3 instancia 10019" x="277" y="203" width="273" height="199" frameX="-2" frameY="-5" frameWidth="275" frameHeight="204"/>
+</TextureAtlas>

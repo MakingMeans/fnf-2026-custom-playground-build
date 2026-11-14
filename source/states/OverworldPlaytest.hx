@@ -618,6 +618,16 @@ class OverworldPlaytest extends FlxBasic
 		expectSecret(RULES_WORLD, 'R2', true);
 		expectUnlocked('S2', true);
 
+		// --- modo "cancion" (chaos: la secreta la dan las 7 esmeraldas, no los fallos ni la precision)
+		add('salida secreta en modo cancion', function()
+		{
+			var node:OverworldNodeFile = Reflect.copy(OverworldData.findNode(OverworldData.loadCached(RULES_WORLD), 'R1'));
+			node.secretMode = 'song';
+			check(!OverworldData.secretAchieved(node, 0, 1, false), 'modo cancion: sin lo que pide la cancion no hay secreta aunque sea sin fallos');
+			check(OverworldData.secretAchieved(node, 40, 0.2, true), 'modo cancion: con lo que pide la cancion hay secreta aunque haya fallos');
+			return true;
+		});
+
 		// --- el atajo R3-G solo se abre al superar R3
 		walk(1, 0, 'a la derecha (R3)');
 		expectPath('R3', 'G', false);

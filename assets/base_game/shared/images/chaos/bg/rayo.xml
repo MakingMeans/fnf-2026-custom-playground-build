@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="rayo.png">
+	<!-- Created with Adobe Animate version 24.0.12.3 -->
+	<!-- http://www.adobe.com/products/animate.html -->
+	<SubTexture name="ramaquin instancia 10000" x="4843" y="2520" width="1136" height="2500" frameX="-175" frameY="-29" frameWidth="1416" frameHeight="2545"/>
+	<SubTexture name="ramaquin instancia 10001" x="4843" y="2520" width="1136" height="2500" frameX="-175" frameY="-29" frameWidth="1416" frameHeight="2545"/>
+	<SubTexture name="ramaquin instancia 10002" x="1302" y="0" width="1222" height="2506" frameX="-145" frameY="-26" frameWidth="1416" frameHeight="2545"/>
+	<SubTexture name="ramaquin instancia 10003" x="1302" y="0" width="1222" height="2506" frameX="-145" frameY="-26" frameWidth="1416" frameHeight="2545"/>
+	<SubTexture name="ramaquin instancia 10004" x="5981" y="0" width="1109" height="2528" frameX="-151" frameY="-1" frameWidth="1416" frameHeight="2545"/>
+	<SubTexture name="ramaquin instancia 10005" x="5981" y="0" width="1109" height="2528" frameX="-151" frameY="-1" frameWidth="1416" frameHeight="2545"/>
+	<SubTexture name="ramaquin instancia 10006" x="5981" y="2530" width="1093" height="2527" frameX="-164" frameY="-2" frameWidth="1416" frameHeight="2545"/>
+	<SubTexture name="ramaquin instancia 10007" x="5981" y="2530" width="1093" height="2527" frameX="-164" frameY="-2" frameWidth="1416" frameHeight="2545"/>
+	<SubTexture name="ramaquin instancia 10008" x="0" y="0" width="1300" height="2536" frameX="-39" frameY="0" frameWidth="1416" frameHeight="2545"/>
+	<SubTexture name="ramaquin instancia 10009" x="0" y="0" width="1300" height="2536" frameX="-39" frameY="0" frameWidth="1416" frameHeight="2545"/>
+	<SubTexture name="ramaquin instancia 10010" x="0" y="2538" width="1275" height="2525" frameX="-45" frameY="-5" frameWidth="1416" frameHeight="2545"/>
+	<SubTexture name="ramaquin instancia 10011" x="0" y="2538" width="1275" height="2525" frameX="-45" frameY="-5" frameWidth="1416" frameHeight="2545"/>
+	<SubTexture name="ramaquin instancia 10012" x="1277" y="2538" width="1251" height="2529" frameX="-84" frameY="-3" frameWidth="1416" frameHeight="2545"/>
+	<SubTexture name="ramaquin instancia 10013" x="1277" y="2538" width="1251" height="2529" frameX="-84" frameY="-3" frameWidth="1416" frameHeight="2545"/>
+	<SubTexture name="ramaquin instancia 10014" x="2530" y="2569" width="1163" height="2520" frameX="-148" frameY="-6" frameWidth="1416" frameHeight="2545"/>
+	<SubTexture name="ramaquin instancia 10015" x="2530" y="2569" width="1163" height="2520" frameX="-148" frameY="-6" frameWidth="1416" frameHeight="2545"/>
+	<SubTexture name="ramaquintranqui instancia 10000" x="3695" y="2569" width="1146" height="2520" frameX="-53" frameY="-23" frameWidth="1265" frameHeight="2570"/>
+	<SubTexture name="ramaquintranqui instancia 10001" x="3695" y="2569" width="1146" height="2520" frameX="-53" frameY="-23" frameWidth="1265" frameHeight="2570"/>
+	<SubTexture name="ramaquintranqui instancia 10002" x="4862" y="0" width="1098" height="2460" frameX="-78" frameY="-53" frameWidth="1265" frameHeight="2570"/>
+	<SubTexture name="ramaquintranqui instancia 10003" x="4862" y="0" width="1098" height="2460" frameX="-78" frameY="-53" frameWidth="1265" frameHeight="2570"/>
+	<SubTexture name="ramaquintranqui instancia 10004" x="2530" y="0" width="1184" height="2567" frameX="-34" frameY="0" frameWidth="1265" frameHeight="2570" />
+	<SubTexture name="ramaquintranqui instancia 10005" x="2530" y="0" width="1184" height="2567" frameX="-34" frameY="0" frameWidth="1265" frameHeight="2570" />
+	<SubTexture name="ramaquintranqui instancia 10006" x="3716" y="0" width="1144" height="2518" frameX="-54" frameY="-24" frameWidth="1265" frameHeight="2570"/>
+	<SubTexture name="ramaquintranqui instancia 10007" x="3716" y="0" width="1144" height="2518" frameX="-54" frameY="-24" frameWidth="1265" frameHeight="2570"/>
+</TextureAtlas>

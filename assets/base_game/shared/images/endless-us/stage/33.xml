@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="33.png">
+	<!-- Created with Adobe Animate version 24.0.10.14 -->
+	<!-- http://www.adobe.com/products/animate.html -->
+	<SubTexture name="33 instancia 10000" x="0" y="228" width="993" height="110" frameX="0" frameY="-1" frameWidth="995" frameHeight="113"/>
+	<SubTexture name="33 instancia 10001" x="0" y="340" width="993" height="110" frameX="0" frameY="-1" frameWidth="995" frameHeight="113"/>
+	<SubTexture name="33 instancia 10002" x="0" y="0" width="992" height="112" frameX="0" frameY="0" frameWidth="995" frameHeight="113"/>
+	<SubTexture name="33 instancia 10003" x="0" y="114" width="992" height="112" frameX="0" frameY="0" frameWidth="995" frameHeight="113"/>
+	<SubTexture name="33 instancia 10004" x="0" y="452" width="993" height="110" frameX="0" frameY="0" frameWidth="995" frameHeight="113"/>
+	<SubTexture name="33 instancia 10005" x="0" y="564" width="993" height="110" frameX="0" frameY="0" frameWidth="995" frameHeight="113"/>
+	<SubTexture name="33 instancia 10006" x="0" y="676" width="992" height="107" frameX="-1" frameY="0" frameWidth="995" frameHeight="113"/>
+	<SubTexture name="33 instancia 10007" x="0" y="785" width="992" height="107" frameX="-1" frameY="0" frameWidth="995" frameHeight="113"/>
+	<SubTexture name="33 instancia 10008" x="995" y="0" width="105" height="993" frameX="-1" frameY="0" frameWidth="995" frameHeight="113" rotated="true" />
+	<SubTexture name="33 instancia 10009" x="995" y="0" width="105" height="993" frameX="-1" frameY="0" frameWidth="995" frameHeight="113" rotated="true" />
+	<SubTexture name="33 instancia 10010" x="1102" y="0" width="104" height="994" frameX="-1" frameY="0" frameWidth="995" frameHeight="113" rotated="true" />
+	<SubTexture name="33 instancia 10011" x="0" y="894" width="993" height="104" frameX="-1" frameY="0" frameWidth="995" frameHeight="113"/>
+	<SubTexture name="33 instancia 10012" x="0" y="894" width="993" height="104" frameX="-1" frameY="0" frameWidth="995" frameHeight="113"/>
+	<SubTexture name="33 instancia 10013" x="1208" y="0" width="104" height="994" frameX="-1" frameY="0" frameWidth="995" frameHeight="113" rotated="true" />
+</TextureAtlas>

@@ -26,6 +26,24 @@
 				64,
 				112
 			]
+		],
+		[
+			"Chaos",
+			"chaos-fleetway",
+			[
+				146,
+				113,
+				253
+			]
+		],
+		[
+			"Endless US",
+			"endless-us-majin",
+			[
+				0,
+				15,
+				255
+			]
 		]
 	],
 	"weekCharacters": [

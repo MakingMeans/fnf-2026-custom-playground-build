@@ -1,0 +1,262 @@
+{
+	"camera_boyfriend": [
+		150,
+		0
+	],
+	"girlfriend": [
+		400,
+		130
+	],
+	"stageUI": "",
+	"boyfriend": [
+		745,
+		55
+	],
+	"objects": [
+		{
+			"x": -739,
+			"y": -324,
+			"scale": [
+				2,
+				2
+			],
+			"image": "endless-us/stage/bg",
+			"flipX": false,
+			"filters": 3,
+			"color": "FFFFFF",
+			"angle": 0,
+			"name": "fondo",
+			"antialiasing": true,
+			"flipY": false,
+			"scroll": [
+				1,
+				1
+			],
+			"alpha": 1,
+			"type": "sprite"
+		},
+		{
+			"x": -339,
+			"y": -163,
+			"scale": [
+				2,
+				2
+			],
+			"image": "endless-us/stage/33",
+			"flipX": false,
+			"filters": 2,
+			"color": "FFFFFF",
+			"angle": 0,
+			"name": "sprite7",
+			"firstAnimation": "Idle",
+			"antialiasing": true,
+			"flipY": false,
+			"scroll": [
+				1,
+				1
+			],
+			"alpha": 1,
+			"animations": [
+				{
+					"offsets": null,
+					"loop": false,
+					"fps": 24,
+					"anim": "Idle",
+					"indices": [],
+					"name": "33"
+				}
+			],
+			"type": "animatedSprite"
+		},
+		{
+			"x": -739,
+			"y": -324,
+			"scale": [
+				2,
+				2
+			],
+			"image": "endless-us/stage/3",
+			"flipX": false,
+			"filters": 3,
+			"color": "FFFFFF",
+			"angle": 0,
+			"name": "sprite6",
+			"antialiasing": true,
+			"flipY": false,
+			"scroll": [
+				1,
+				1
+			],
+			"alpha": 1,
+			"type": "sprite"
+		},
+		{
+			"x": 1011,
+			"y": -55,
+			"scale": [
+				2,
+				2
+			],
+			"image": "endless-us/stage/22",
+			"flipX": false,
+			"filters": 2,
+			"color": "FFFFFF",
+			"angle": 0,
+			"name": "pajines2",
+			"firstAnimation": "Idle",
+			"antialiasing": true,
+			"flipY": false,
+			"scroll": [
+				1,
+				1
+			],
+			"alpha": 1,
+			"animations": [
+				{
+					"loop": false,
+					"offsets": null,
+					"anim": "Idle",
+					"fps": 24,
+					"name": "22",
+					"indices": []
+				}
+			],
+			"type": "animatedSprite"
+		},
+		{
+			"x": -844,
+			"y": -367,
+			"scale": [
+				2,
+				2
+			],
+			"image": "endless-us/stage/2",
+			"flipX": false,
+			"filters": 3,
+			"color": "FFFFFF",
+			"angle": 0,
+			"name": "arboles2",
+			"antialiasing": true,
+			"flipY": false,
+			"scroll": [
+				1,
+				1
+			],
+			"alpha": 1,
+			"type": "sprite"
+		},
+		{
+			"x": -62,
+			"y": -37,
+			"scale": [
+				2,
+				2
+			],
+			"image": "endless-us/stage/11",
+			"flipX": false,
+			"filters": 2,
+			"color": "FFFFFF",
+			"angle": 0,
+			"name": "pajines",
+			"firstAnimation": "Idle",
+			"antialiasing": true,
+			"flipY": false,
+			"scroll": [
+				1,
+				1
+			],
+			"alpha": 1,
+			"animations": [
+				{
+					"loop": false,
+					"offsets": null,
+					"anim": "Idle",
+					"fps": 24,
+					"name": "11",
+					"indices": []
+				}
+			],
+			"type": "animatedSprite"
+		},
+		{
+			"x": -699,
+			"y": -407,
+			"scale": [
+				2,
+				2
+			],
+			"image": "endless-us/stage/1",
+			"flipX": false,
+			"filters": 3,
+			"color": "FFFFFF",
+			"angle": 0,
+			"name": "suelo",
+			"antialiasing": true,
+			"flipY": false,
+			"scroll": [
+				1,
+				1
+			],
+			"alpha": 1,
+			"type": "sprite"
+		},
+		{
+			"type": "dad"
+		},
+		{
+			"type": "boyfriend"
+		},
+		{
+			"type": "gf"
+		},
+		{
+			"x": 1092,
+			"y": -212,
+			"scale": [
+				1.5,
+				1.5
+			],
+			"image": "endless-us/stage/a",
+			"flipX": true,
+			"filters": 2,
+			"color": "FFFFFF",
+			"angle": 0,
+			"name": "pajin_frontal2",
+			"firstAnimation": "Idle",
+			"antialiasing": true,
+			"flipY": false,
+			"scroll": [
+				0.85,
+				0
+			],
+			"alpha": 0.9,
+			"animations": [
+				{
+					"loop": false,
+					"offsets": null,
+					"anim": "Idle",
+					"fps": 24,
+					"name": "a",
+					"indices": []
+				}
+			],
+			"type": "animatedSprite"
+		}
+	],
+	"camera_girlfriend": [
+		0,
+		0
+	],
+	"defaultZoom": 0.65,
+	"camera_speed": 1,
+	"directory": "",
+	"opponent": [
+		0,
+		140
+	],
+	"camera_opponent": [
+		-100,
+		150
+	],
+	"hide_girlfriend": true
+}

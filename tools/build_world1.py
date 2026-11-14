@@ -31,13 +31,13 @@ DOT_LOOK = {'image': 'overworld/dot', 'anim': 'idle', 'animDone': '', 'fps': 6}
 PIPE_LOOK = {'image': 'overworld/pipe', 'anim': 'idle', 'animDone': '', 'fps': 6}
 
 
-def node(node_id, x, y, name, kind='level', song='', look=None, unlocked=False, unlocks=None, secret=None):
+def node(node_id, x, y, name, kind='level', song='', look=None, unlocked=False, unlocks=None, secret=None, secret_mode='fc'):
     data = {
         'id': node_id, 'x': x, 'y': y, 'type': kind,
         'image': '', 'anim': '', 'animDone': '', 'fps': 0,
         'name': name, 'song': song, 'week': WEEK if kind == 'level' else '', 'difficulty': '', 'world': '',
         'unlocked': unlocked, 'unlocks': unlocks or [],
-        'needLevels': 0, 'secretUnlocks': secret or [], 'secretMode': 'fc', 'secretMisses': 0, 'secretAccuracy': 95,
+        'needLevels': 0, 'secretUnlocks': secret or [], 'secretMode': secret_mode, 'secretMisses': 0, 'secretAccuracy': 95,
     }
     data.update(look or (LEVEL_LOOK if kind == 'level' else DOT_LOOK))
     return data
@@ -54,11 +54,11 @@ def build():
         node('tuberia', 80, 208, 'Tuberia (sin destino)', kind='empty', look=PIPE_LOOK, unlocked=True),
         node('yararara', 176, 272, 'YARARARA', song='yararara', unlocked=True, unlocks=['bad-day']),
         node('bad-day', 352, 272, 'Bad Day', song='bad-day', unlocks=['chaos']),
-        # salida normal: los escalones a la meseta; salida secreta (7 esmeraldas): el puente al norte
-        node('chaos', 352, 200, 'Chaos', unlocks=['last-course'], secret=['endless']),
+        # salida normal: los escalones a la meseta; salida secreta (7 esmeraldas, la decide la cancion): el puente al norte
+        node('chaos', 352, 200, 'Chaos', song='chaos', unlocks=['last-course'], secret=['endless'], secret_mode='song'),
         node('last-course', 352, 88, 'Last Course', song='last-course', unlocks=['castillo']),
         node('castillo', 448, 88, 'World of Chaos', look=CASTLE_LOOK, unlocks=['camino-este']),
-        node('endless', 208, 88, 'Endless', unlocks=['camino-norte']),
+        node('endless', 208, 88, 'Endless', song='endless-us', unlocks=['camino-norte']),
         node('camino-norte', 208, 24, 'Hacia el norte', kind='empty'),
         node('camino-este', 560, 88, 'Hacia el este', kind='empty'),
     ]

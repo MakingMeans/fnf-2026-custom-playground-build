@@ -66,6 +66,8 @@ class BaseStage extends FlxBasic
 	public function create() {}
 	public function createPost() {}
 	//public function update(elapsed:Float) {}
+	/** Al final del update de PlayState (como onUpdatePost de los scripts): flechas y vida ya al dia. */
+	public function updatePost(elapsed:Float) {}
 	public function countdownTick(count:Countdown, num:Int) {}
 	public function startSong() {}
 

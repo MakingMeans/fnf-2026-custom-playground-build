@@ -14,3 +14,9 @@ bad-day-bf
 bad-day-mario
 bad-day-gf
 bad-day-bf-dead
+chaos-bf
+chaos-fleetway
+chaos-bf-dead
+endless-us-bf
+endless-us-majin
+endless-us-bf-dead

@@ -1,0 +1,57 @@
+{
+	"animations": [
+		{
+			"loop": false,
+			"offsets": [
+				143,
+				183
+			],
+			"anim": "firstDeath",
+			"fps": 24,
+			"name": "muerte",
+			"indices": []
+		},
+		{
+			"loop": true,
+			"offsets": [
+				-28,
+				-256
+			],
+			"anim": "deathLoop",
+			"fps": 24,
+			"name": "loop",
+			"indices": []
+		},
+		{
+			"loop": false,
+			"offsets": [
+				-28,
+				-245
+			],
+			"anim": "deathConfirm",
+			"fps": 24,
+			"name": "confirm",
+			"indices": []
+		}
+	],
+	"vocals_file": "",
+	"no_antialiasing": false,
+	"image": "characters/chaos/bf-dead",
+	"position": [
+		0,
+		0
+	],
+	"healthicon": "chaos-bf",
+	"flip_x": true,
+	"healthbar_colors": [
+		38,
+		38,
+		38
+	],
+	"camera_position": [
+		0,
+		0
+	],
+	"sing_duration": 4,
+	"scale": 1
+}
