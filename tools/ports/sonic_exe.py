@@ -18,6 +18,7 @@ Es idempotente: se puede volver a ejecutar.
 """
 import io
 import json
+import math
 import os
 import re
 import shutil
@@ -174,6 +175,175 @@ class Mod:
         return out.getvalue()
 
 
+# ---------------------------------------------------------------- atlas de Animate: offsets de flixel-animate
+class AnimateBounds:
+    """Recuadro de cada simbolo de un atlas de Animate, calculado como flixel-animate.
+
+    El mod dibuja sus personajes de atlas con flixel-animate, que coloca cada animacion respecto al
+    recuadro de todo el timeline de su simbolo (Timeline.getWholeBounds: union de todos sus
+    fotogramas, sin capas ocultas ni mascaras y con el margen de los filtros), y escala desde el centro
+    del recuadro del timeline principal. Nuestro flxanimate dibuja el simbolo en sus coordenadas
+    propias y escala desde (0, 0). Para que se vean igual: offset nuestro = offset del mod
+    + esquina del recuadro * escala - centro principal * (1 - escala) (ver convert_atlas_offsets).
+    """
+
+    def __init__(self, folder):
+        anim = json.load(open(os.path.join(folder, 'Animation.json'), encoding='utf-8-sig'))
+        sheet = json.load(open(os.path.join(folder, 'spritemap1.json'), encoding='utf-8-sig'))
+        self.sprites = {}
+        for entry in sheet['ATLAS']['SPRITES']:
+            s = entry['SPRITE']
+            self.sprites[s['name']] = (s['h'], s['w']) if s.get('rotated') else (s['w'], s['h'])
+        self.main = anim['AN']['SN']
+        self.symbols = {self.main: anim['AN']['TL']}
+        for s in anim.get('SD', {}).get('S', []):
+            self.symbols[s['SN']] = s['TL']
+        self.counts = {name: max([sum(fr['DU'] for fr in layer.get('FR', [])) for layer in tl['L']] or [0])
+                       for name, tl in self.symbols.items()}
+        self.cache = {}
+
+    @staticmethod
+    def _matrix(el):
+        m = el.get('M3D') or el.get('Matrix3D')
+        if isinstance(m, dict):
+            return (m['m00'], m['m01'], m['m10'], m['m11'], m['m30'], m['m31'])
+        if m is None:
+            mx = el.get('MX') or el.get('Matrix')
+            return tuple(mx) if mx else (1, 0, 0, 1, 0, 0)
+        return (m[0], m[1], m[4], m[5], m[12], m[13])
+
+    @staticmethod
+    def _mul(p, q):  # q y luego p
+        a, b, c, d, tx, ty = p
+        e, f, g, h, ux, uy = q
+        return (a * e + c * f, b * e + d * f, a * g + c * h, b * g + d * h, a * ux + c * uy + tx, b * ux + d * uy + ty)
+
+    @staticmethod
+    def _union(r, s):
+        if r is None:
+            return s
+        if s is None:
+            return r
+        return (min(r[0], s[0]), min(r[1], s[1]), max(r[2], s[2]), max(r[3], s[3]))
+
+    @staticmethod
+    def _frame(layer, index):
+        for fr in layer.get('FR', []):
+            if fr['I'] <= index < fr['I'] + fr['DU']:
+                return fr
+        return None
+
+    def _sub_index(self, si, index):
+        """SymbolInstance.getFrameIndex (sin LF, que estos atlas no traen)."""
+        first = si.get('FF', 0)
+        count = self.counts.get(si['SN'], 0)
+        loop = si.get('LP', 'LP')
+        if count <= 0:
+            return 0
+        if loop in ('SF', 'singleframe'):
+            return first
+        if loop in ('PO', 'playonce'):
+            return first + min(index, count - first - 1)
+        return (first + index) % count
+
+    @staticmethod
+    def _filter_margin(filters):
+        """FilterRenderer.expandFilterBounds para desenfoque, resplandor y sombra."""
+        if isinstance(filters, dict):
+            filters = [dict(v, _type=k) for k, v in filters.items()]
+        left = top = right = bottom = 0
+        for f in filters or []:
+            kind = f.get('_type') or f.get('N') or ''
+            bx = math.ceil(f.get('BLX', f.get('blurX', 0)) or 0)
+            by = math.ceil(f.get('BLY', f.get('blurY', 0)) or 0)
+            if kind in ('BLF', 'blurFilter') or (kind in ('GF', 'glowFilter') and not f.get('IN')):
+                left, right, top, bottom = left + bx, right + bx, top + by, bottom + by
+            elif kind in ('DSF', 'dropShadowFilter'):
+                dist, ang = f.get('D', 4), f.get('AL', 45)
+                ox, oy = int(dist * math.cos(math.radians(ang))), int(dist * math.sin(math.radians(ang)))
+                left += math.ceil(max(-ox, 0) + bx)
+                right += math.ceil(max(ox, 0) + bx)
+                top += math.ceil(max(-oy, 0) + by)
+                bottom += math.ceil(max(oy, 0) + by)
+        return left, top, right, bottom
+
+    def _element(self, el, local, m, depth):
+        if 'SI' in el:
+            si = el['SI']
+            if si['SN'] not in self.symbols:
+                return None
+            r = self._timeline(si['SN'], self._sub_index(si, local), self._mul(m, self._matrix(si)), depth + 1)
+            if r is not None and si.get('F') and si.get('ST') in ('MC', 'movieclip'):
+                l, t, rr, b = self._filter_margin(si['F'])
+                r = (r[0] - l, r[1] - t, r[2] + rr, r[3] + b)
+            return r
+        if 'ASI' in el:
+            asi = el['ASI']
+            w, h = self.sprites.get(asi['N'], (0, 0))
+            mm = self._mul(m, self._matrix(asi))
+            xs = [mm[0] * x + mm[2] * y + mm[4] for x, y in ((0, 0), (w, 0), (0, h), (w, h))]
+            ys = [mm[1] * x + mm[3] * y + mm[5] for x, y in ((0, 0), (w, 0), (0, h), (w, h))]
+            return (min(xs), min(ys), max(xs), max(ys))
+        return None
+
+    def _timeline(self, name, index, m, depth=0):
+        if depth > 40:
+            return None
+        layers = self.symbols[name]['L']
+        rect = None
+        for i, layer in enumerate(layers):
+            if layer.get('LT') in ('Clp', 'Clipper'):
+                continue  # las mascaras no se dibujan
+            mask = None
+            if layer.get('Clpb') is not None:
+                mask = next((l for l in reversed(layers[:i]) if l.get('LN') == layer['Clpb'] and l.get('LT') in ('Clp', 'Clipper')), None)
+                if mask is None:
+                    continue  # enmascarada por una capa que no existe: flixel-animate la oculta
+            fr = self._frame(layer, index)
+            if fr is None or not fr.get('E'):
+                continue
+            r = None
+            for el in fr['E']:
+                r = self._union(r, self._element(el, index - fr['I'], m, depth))
+            if r is not None and mask is not None:
+                mfr = self._frame(mask, index)
+                mr = None
+                for el in (mfr or {}).get('E', []):
+                    mr = self._union(mr, self._element(el, index - mfr['I'], m, depth))
+                if mr is not None:
+                    r = (max(r[0], mr[0]), max(r[1], mr[1]), min(r[2], mr[2]), min(r[3], mr[3]))
+            rect = self._union(rect, r)
+        return rect
+
+    def whole(self, name):
+        """(x, y, ancho, alto) de todo el timeline del simbolo."""
+        if name not in self.cache:
+            rect = None
+            for i in range(self.counts.get(name, 0)):
+                rect = self._union(rect, self._timeline(name, i, (1, 0, 0, 1, 0, 0)))
+            self.cache[name] = (0, 0, 0, 0) if rect is None else (rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1])
+        return self.cache[name]
+
+
+def convert_atlas_offsets(data, atlas_rel):
+    """Pasa los offsets de un personaje de atlas del mod (flixel-animate) a los de nuestro flxanimate."""
+    bounds = AnimateBounds(os.path.join(SHARED, 'images', *atlas_rel.split('/')))
+    scale = data.get('scale', 1)
+    main = bounds.whole(bounds.main)
+    # origen: centro del recuadro del timeline principal, con el tamano entero (frameWidth/frameHeight)
+    origin_x, origin_y = int(main[2]) * 0.5, int(main[3]) * 0.5
+    for anim in data['animations']:
+        name = anim['name']
+        if name not in bounds.symbols:
+            print('  aviso: %s no tiene el simbolo "%s"' % (atlas_rel, name))
+            continue
+        box = bounds.whole(name)
+        offsets = anim.get('offsets') or [0, 0]
+        anim['offsets'] = [round(offsets[0] + box[0] * scale - origin_x * (1 - scale), 1),
+                           round(offsets[1] + box[1] * scale - origin_y * (1 - scale), 1)]
+    return main
+
+
 def write(rel, data):
     path = os.path.join(SHARED, *rel.split('/')) if not os.path.isabs(rel) else rel
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -243,18 +413,22 @@ def port_atlas(mod, src_folder, dst_folder):
 
 
 def port_characters(mod, folder, names, images, icons):
+    atlases = set()
+    for old, new in images.items():
+        src = 'contents/%s/images/%s' % (folder, old)
+        if src + '/Animation.json' in mod.assets:
+            port_atlas(mod, src, new)
+            atlases.add(new)
+        else:
+            port_image(mod, src, new)
     for old, new in names.items():
         data = mod.json('contents/%s/characters/%s.json' % (folder, old))
         data['image'] = images[data['image']]
         data['healthicon'] = icons.get(data['healthicon'], data['healthicon'])
         data.pop('_editor_isPlayer', None)
+        if data['image'] in atlases:
+            convert_atlas_offsets(data, data['image'])
         write_json('characters/%s.json' % new, data)
-    for old, new in images.items():
-        src = 'contents/%s/images/%s' % (folder, old)
-        if src + '/Animation.json' in mod.assets:
-            port_atlas(mod, src, new)
-        else:
-            port_image(mod, src, new)
     for old, new in icons.items():
         src = 'contents/%s/images/icons/%s' % (folder, old)
         if src + '.webp' not in mod.assets:
@@ -346,12 +520,13 @@ def port_endless_scripts(mod):
 
 def port_endless_game_over(mod):
     """Game over de endless-us: el BF muerto general del mod (atlas "game over"), los majins y sus sonidos."""
+    port_atlas(mod, 'assets/shared/images/characters/game over', 'characters/endless-us/bf-dead')
     data = mod.json('assets/shared/characters/bf-dead.json')
     data['image'] = 'characters/endless-us/bf-dead'
     data['healthicon'] = 'endless-us-bf'
     data.pop('_editor_isPlayer', None)
+    convert_atlas_offsets(data, data['image'])
     write_json('characters/endless-us-bf-dead.json', data)
-    port_atlas(mod, 'assets/shared/images/characters/game over', 'characters/endless-us/bf-dead')
     port_atlas(mod, 'contents/MAJIN/images/gameovers/us/us', 'endless-us/gameover/us')
     port_image(mod, 'contents/MAJIN/images/gameovers/us/evil majin', 'endless-us/gameover/evil majin')
     port_image(mod, 'contents/MAJIN/images/hud/blueVg', 'endless-us/hud/blueVg')

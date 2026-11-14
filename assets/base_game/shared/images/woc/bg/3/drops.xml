@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='utf-8'?>
+<TextureAtlas imagePath="drops.png">
+<SubTexture name="drops 10000" x="434" y="430" width="257" height="214" frameX="-990" frameY="-83" frameWidth="1600" frameHeight="899" />
+<SubTexture name="drops 20000" x="725" y="0" width="257" height="214" frameX="-246" frameY="-431" frameWidth="1600" frameHeight="899" />
+<SubTexture name="drops 30000" x="658" y="0" width="67" height="380" frameX="-545" frameY="-491" frameWidth="1600" frameHeight="899" />
+<SubTexture name="drops 40000" x="0" y="663" width="313" height="167" frameX="-920" frameY="-463" frameWidth="1600" frameHeight="899" />
+<SubTexture name="drops 50000" x="313" y="663" width="313" height="167" frameX="-343" frameY="-67" frameWidth="1600" frameHeight="899" />
+<SubTexture name="drops 60000" x="0" y="430" width="217" height="233" frameX="-1358" frameY="-50" frameWidth="1600" frameHeight="899" />
+<SubTexture name="drops 70000" x="217" y="430" width="217" height="233" frameX="-16" frameY="-635" frameWidth="1600" frameHeight="899" />
+<SubTexture name="drops 80000" x="0" y="0" width="329" height="430" frameX="-1250" frameY="-449" frameWidth="1600" frameHeight="899" />
+<SubTexture name="drops 90000" x="329" y="0" width="329" height="430" frameX="-10" frameY="-7" frameWidth="1600" frameHeight="899" />
+</TextureAtlas>

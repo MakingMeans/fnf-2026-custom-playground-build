@@ -653,8 +653,8 @@ se edita en el editor, no volver a ejecutar ese script.
 | `camino-norte`, `camino-este` | Final de los caminos que seguirán a otros mundos |
 
 Las canciones se van añadiendo a medida que se portan (ver `docs/SONG_PORTS.md`); hasta entonces
-el editor avisa de los niveles sin canción. Ya tienen la suya `yararara`, `bad-day`, `chaos`,
-`last-course` y `endless` (`endless-us`); falta el castillo (World of Chaos). La salida secreta de
+el editor avisa de los niveles sin canción. Ya tienen todos la suya: `yararara`, `bad-day`, `chaos`,
+`last-course`, `endless` (`endless-us`) y el castillo (`world-of-chaos`). La salida secreta de
 `chaos` usa el modo `cancion`: la da reunir las 7 esmeraldas, no los fallos. El mundo 1 todavía no es
 el mundo por defecto.
 

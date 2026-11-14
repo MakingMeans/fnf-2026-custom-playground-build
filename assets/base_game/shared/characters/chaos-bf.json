@@ -3,8 +3,8 @@
 		{
 			"loop": false,
 			"offsets": [
-				0,
-				0
+				-13.6,
+				-0.0
 			],
 			"anim": "idle",
 			"fps": 24,
@@ -14,8 +14,8 @@
 		{
 			"loop": false,
 			"offsets": [
-				52,
-				17
+				40.7,
+				0.9
 			],
 			"anim": "singLEFT",
 			"fps": 24,
@@ -25,8 +25,8 @@
 		{
 			"loop": false,
 			"offsets": [
-				33,
-				-18
+				28.9,
+				-12.9
 			],
 			"anim": "singDOWN",
 			"fps": 24,
@@ -36,8 +36,8 @@
 		{
 			"loop": false,
 			"offsets": [
-				-13,
-				41
+				-13.0,
+				36.9
 			],
 			"anim": "singUP",
 			"fps": 24,
@@ -47,8 +47,8 @@
 		{
 			"loop": false,
 			"offsets": [
-				-14,
-				25
+				-14.8,
+				16.7
 			],
 			"anim": "singRIGHT",
 			"fps": 24,
@@ -58,8 +58,8 @@
 		{
 			"loop": false,
 			"offsets": [
-				40,
-				12
+				40.2,
+				2.0
 			],
 			"anim": "singLEFTmiss",
 			"fps": 24,
@@ -69,8 +69,8 @@
 		{
 			"loop": false,
 			"offsets": [
-				45,
-				-10
+				28.8,
+				-13.2
 			],
 			"anim": "singDOWNmiss",
 			"fps": 24,
@@ -80,8 +80,8 @@
 		{
 			"loop": false,
 			"offsets": [
-				-5,
-				37
+				-12.8,
+				37.0
 			],
 			"anim": "singUPmiss",
 			"fps": 24,
@@ -91,8 +91,8 @@
 		{
 			"loop": false,
 			"offsets": [
-				0,
-				17
+				-15.1,
+				16.9
 			],
 			"anim": "singRIGHTmiss",
 			"fps": 24,
@@ -102,8 +102,8 @@
 		{
 			"loop": false,
 			"offsets": [
-				714,
-				329
+				-21.5,
+				24.8
 			],
 			"anim": "dodge",
 			"fps": 24,
@@ -113,8 +113,8 @@
 		{
 			"loop": false,
 			"offsets": [
-				2,
-				95
+				-0.6,
+				76.9
 			],
 			"anim": "super",
 			"fps": 24,
@@ -124,8 +124,8 @@
 		{
 			"loop": true,
 			"offsets": [
-				0,
-				0
+				-70.0,
+				-92.0
 			],
 			"anim": "idle-alt",
 			"fps": 24,
@@ -135,8 +135,8 @@
 		{
 			"loop": false,
 			"offsets": [
-				300,
-				-10
+				55.8,
+				-87.9
 			],
 			"anim": "singLEFT-alt",
 			"fps": 24,
@@ -146,8 +146,8 @@
 		{
 			"loop": false,
 			"offsets": [
-				80,
-				-60
+				-11.2,
+				-180.5
 			],
 			"anim": "singDOWN-alt",
 			"fps": 24,
@@ -157,8 +157,8 @@
 		{
 			"loop": false,
 			"offsets": [
-				70,
-				240
+				-35.2,
+				67.2
 			],
 			"anim": "singUP-alt",
 			"fps": 24,
@@ -168,8 +168,8 @@
 		{
 			"loop": false,
 			"offsets": [
-				10,
-				-20
+				-123.4,
+				-91.5
 			],
 			"anim": "singRIGHT-alt",
 			"fps": 24,
@@ -179,8 +179,8 @@
 		{
 			"loop": true,
 			"offsets": [
-				300,
-				-10
+				55.8,
+				-87.9
 			],
 			"anim": "singLEFT-alt-loop",
 			"fps": 24,
@@ -194,8 +194,8 @@
 		{
 			"loop": true,
 			"offsets": [
-				80,
-				-60
+				-11.2,
+				-180.5
 			],
 			"anim": "singDOWN-alt-loop",
 			"fps": 24,
@@ -209,8 +209,8 @@
 		{
 			"loop": true,
 			"offsets": [
-				70,
-				240
+				-35.2,
+				67.2
 			],
 			"anim": "singUP-alt-loop",
 			"fps": 24,
@@ -224,8 +224,8 @@
 		{
 			"loop": true,
 			"offsets": [
-				10,
-				-20
+				-123.4,
+				-91.5
 			],
 			"anim": "singRIGHT-alt-loop",
 			"fps": 24,
@@ -239,8 +239,8 @@
 		{
 			"loop": false,
 			"offsets": [
-				216,
-				-11
+				56.0,
+				-88.6
 			],
 			"anim": "singLEFTmiss-alt",
 			"fps": 24,
@@ -250,8 +250,8 @@
 		{
 			"loop": false,
 			"offsets": [
-				80,
-				-60
+				-11.2,
+				-180.5
 			],
 			"anim": "singDOWNmiss-alt",
 			"fps": 24,
@@ -261,8 +261,8 @@
 		{
 			"loop": false,
 			"offsets": [
-				63,
-				158
+				-35.3,
+				66.8
 			],
 			"anim": "singUPmiss-alt",
 			"fps": 24,
@@ -271,8 +271,8 @@
 		},
 		{
 			"offsets": [
-				0,
-				-34
+				-123.5,
+				-91.4
 			],
 			"loop": false,
 			"fps": 24,
@@ -283,8 +283,8 @@
 		{
 			"loop": true,
 			"offsets": [
-				216,
-				-11
+				56.0,
+				-88.6
 			],
 			"anim": "singLEFTmiss-alt-loop",
 			"fps": 24,
@@ -298,8 +298,8 @@
 		{
 			"loop": true,
 			"offsets": [
-				80,
-				-60
+				-11.2,
+				-180.5
 			],
 			"anim": "singDOWNmiss-alt-loop",
 			"fps": 24,
@@ -313,8 +313,8 @@
 		{
 			"loop": true,
 			"offsets": [
-				63,
-				158
+				-35.3,
+				66.8
 			],
 			"anim": "singUPmiss-alt-loop",
 			"fps": 24,
@@ -328,8 +328,8 @@
 		{
 			"loop": true,
 			"offsets": [
-				0,
-				-34
+				-123.5,
+				-91.4
 			],
 			"anim": "singRIGHTmiss-alt-loop",
 			"fps": 24,
@@ -343,8 +343,8 @@
 		},
 		{
 			"offsets": [
-				760,
-				179
+				-97.8,
+				-97.7
 			],
 			"indices": [],
 			"fps": 24,

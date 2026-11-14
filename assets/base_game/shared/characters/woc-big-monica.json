@@ -1,0 +1,79 @@
+{
+	"animations": [
+		{
+			"anim": "idle",
+			"name": "idle",
+			"fps": 12,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				-22.0,
+				10.0
+			]
+		},
+		{
+			"anim": "singDOWN",
+			"name": "down",
+			"fps": 12,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				-20.0,
+				-4.0
+			]
+		},
+		{
+			"anim": "singLEFT",
+			"name": "left",
+			"fps": 12,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				-16.0,
+				-4.0
+			]
+		},
+		{
+			"anim": "singRIGHT",
+			"name": "right",
+			"fps": 12,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				-28.0,
+				-8.0
+			]
+		},
+		{
+			"anim": "singUP",
+			"name": "up",
+			"fps": 12,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				-24.0,
+				-4.0
+			]
+		}
+	],
+	"no_antialiasing": false,
+	"image": "characters/woc/bigmonica",
+	"position": [
+		0.0,
+		-200.0
+	],
+	"healthicon": "woc-monikaaksak",
+	"flip_x": false,
+	"healthbar_colors": [
+		255,
+		84,
+		21
+	],
+	"camera_position": [
+		-180.0,
+		-30.0
+	],
+	"sing_duration": 2.909,
+	"scale": 4.0,
+	"vocals_file": ""
+}

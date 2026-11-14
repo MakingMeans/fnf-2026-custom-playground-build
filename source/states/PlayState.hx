@@ -384,6 +384,7 @@ class PlayState extends MusicBeatState
 			case 'superbad': new SuperBad(); //Bad Day (Mario's Madness)
 			case 'fleetw': new FleetwayStage(); //chaos (Vs Sonic.exe)
 			case 'majin': new MajinStage(); //endless-us (Vs Sonic.exe)
+			case 'club': new ClubStage(); //World of Chaos (ClubP Literature, Codename Engine)
 		}
 		if(isPixelStage) introSoundsSuffix = '-pixel';
 
@@ -1904,6 +1905,9 @@ class PlayState extends MusicBeatState
 		return health;
 	}
 
+	/** Menu de pausa propio de un escenario (p. ej. World of Chaos); null = el de Psych. */
+	public var pauseMenuFactory:Void->FlxSubState = null;
+
 	function openPauseMenu()
 	{
 		FlxG.camera.followLerp = 0;
@@ -1925,7 +1929,7 @@ class PlayState extends MusicBeatState
 					note.resetAnim = 0;
 				}
 		}
-		openSubState(new PauseSubState());
+		openSubState(pauseMenuFactory != null ? pauseMenuFactory() : new PauseSubState());
 
 		#if DISCORD_ALLOWED
 		if(autoUpdateRPC) DiscordClient.changePresence(detailsPausedText, SONG.song + " (" + storyDifficultyText + ")", iconP2.getCharacter());

@@ -73,11 +73,11 @@ class GameOverSubstate extends MusicBeatSubstate
 		boyfriend.skipDance = true;
 		add(boyfriend);
 
-		FlxG.sound.play(Paths.sound(deathSoundName));
+		if(deathSoundName.length > 0) FlxG.sound.play(Paths.sound(deathSoundName)); // '' = sin sonido (game over propio)
 		FlxG.camera.scroll.set();
 		FlxG.camera.target = null;
 
-		boyfriend.playAnim('firstDeath');
+		if(boyfriend.hasAnimation('firstDeath')) boyfriend.playAnim('firstDeath');
 
 		camFollow = new FlxObject(0, 0, 1, 1);
 		camFollow.setPosition(boyfriend.getGraphicMidpoint().x + boyfriend.cameraPosition[0], boyfriend.getGraphicMidpoint().y + boyfriend.cameraPosition[1]);
@@ -87,7 +87,7 @@ class GameOverSubstate extends MusicBeatSubstate
 		
 		PlayState.instance.setOnScripts('inGameOver', true);
 		PlayState.instance.callOnScripts('onGameOverStart', []);
-		FlxG.sound.music.loadEmbedded(Paths.music(loopSoundName), true);
+		if(loopSoundName.length > 0) FlxG.sound.music.loadEmbedded(Paths.music(loopSoundName), true);
 
 		if(characterName == 'pico-dead')
 		{
@@ -230,6 +230,7 @@ class GameOverSubstate extends MusicBeatSubstate
 
 	function coolStartDeath(?volume:Float = 1):Void
 	{
+		if(loopSoundName.length == 0) return; // sin musica de game over
 		FlxG.sound.music.play(true);
 		FlxG.sound.music.volume = volume;
 	}
@@ -259,7 +260,7 @@ class GameOverSubstate extends MusicBeatSubstate
 				overlay.offset.set(overlayConfirmOffsets.x, overlayConfirmOffsets.y);
 			}
 			FlxG.sound.music.stop();
-			FlxG.sound.play(Paths.music(endSoundName));
+			if(endSoundName.length > 0) FlxG.sound.play(Paths.music(endSoundName));
 			new FlxTimer().start(custom != null ? custom.endFadeDelay : 0.7, function(tmr:FlxTimer)
 			{
 				FlxG.camera.fade(FlxColor.BLACK, custom != null ? custom.endFadeTime : 2, false, function()

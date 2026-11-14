@@ -35,6 +35,8 @@ class SongTester extends FlxBasic
 	var deathTime:Float = -1; // s desde que se abre el game over
 	var hitTypes:Array<String> = []; // -hit: tipos de nota que el bot tambien pulsa
 	var skipTypes:Array<String> = []; // -skip: tipos de nota que el bot deja pasar (p. ej. "emerald")
+	var pauseAt:Float = -1; // -pause: ms de cancion en que se abre el menu de pausa (se captura y se acaba)
+	var pauseTime:Float = -1;
 	var taken:Array<String> = [];
 	var log:Array<String> = [];
 	var started:Bool = false;
@@ -77,6 +79,9 @@ class SongTester extends FlxBasic
 		var skipIndex:Int = args.indexOf('-skip');
 		if (skipIndex > -1 && skipIndex + 1 < args.length)
 			tester.skipTypes = [for (type in args[skipIndex + 1].split(',')) type.trim()];
+		times = [];
+		readTimes(args, '-pause', times);
+		if (times.length > 0) tester.pauseAt = times[0];
 		FlxG.plugins.addPlugin(tester);
 	}
 
@@ -117,6 +122,23 @@ class SongTester extends FlxBasic
 		if (deathTime >= 0)
 		{
 			updateDeath(elapsed);
+			return;
+		}
+
+		// -pause: menu de pausa abierto; a los 1.5 s se pide la captura de la ventana y se acaba
+		if (pauseTime >= 0)
+		{
+			pauseTime += elapsed;
+			if (pauseTime >= 1.5 && pauseTime < 100 && !FileSystem.exists('song_winshot.txt'))
+			{
+				File.saveContent('song_winshot.txt', '$song-pause');
+				pauseTime = 100;
+			}
+			else if (pauseTime >= 100 && !FileSystem.exists('song_winshot.txt'))
+			{
+				log.push('Menu de pausa abierto: ${Type.getClassName(Type.getClass(FlxG.state.subState))}');
+				finish();
+			}
 			return;
 		}
 
@@ -164,6 +186,14 @@ class SongTester extends FlxBasic
 			// -skip <tipos>: el bot no las toca (con botplay, PlayState no pulsa las notas ignoreNote)
 			for (note in play.unspawnNotes) if (skipTypes.contains(note.noteType)) note.ignoreNote = true;
 			for (note in play.notes.members) if (note != null && skipTypes.contains(note.noteType)) note.ignoreNote = true;
+		}
+		if (pauseAt >= 0 && lastPos >= pauseAt && FlxG.state.subState == null)
+		{
+			pauseAt = -1;
+			pauseTime = 0;
+			log.push('Pausa abierta en el segundo ${Math.round(lastPos / 100) / 10}');
+			play.openPauseMenu();
+			return;
 		}
 		if (dieAt >= 0 && lastPos >= dieAt)
 		{

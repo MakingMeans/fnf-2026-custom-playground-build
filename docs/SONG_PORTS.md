@@ -14,6 +14,7 @@ actualiza):
 python tools/ports/yararara.py [carpeta del mod]
 python tools/ports/mario_madness.py [carpeta assets del mod]   (Last Course y Bad Day)
 python tools/ports/sonic_exe.py [carpeta sanic]                (chaos y endless-us; necesita Pillow)
+python tools/ports/world_of_chaos.py [carpeta clubpe]          (World of Chaos; necesita Pillow)
 ```
 
 Si el mod tenía la lógica de la canción en su código (no en scripts), se reescribe en Haxe como una
@@ -55,6 +56,7 @@ Reglas que siguen todas:
   - `-Hit "Bad Poison"`: el bot también pulsa las notas de esos tipos (normalmente deja pasar las
     que no hay que tocar), para ver qué pasa al tocarlas.
   - `-Skip "emerald"`: el bot deja pasar las notas de esos tipos (p. ej. chaos sin esmeraldas).
+  - `-Pause 30`: abre el menu de pausa en el segundo 30, captura la ventana y acaba.
   - Las capturas de ventana salen vacías si la ventana del juego está minimizada.
 
 ## yararara (mundo 1, primer nivel)
@@ -142,6 +144,16 @@ saca de ahí (con el manifiesto `manifest/default.json`) y pasa las imágenes `.
 devolviendo el margen a las que el mod había recortado (`image_trims.json`). La fuente `SonicCD.ttf`
 se copia de `sanic/assets/fonts/`.
 
+**Personajes de atlas de Animate** (Fleetway, el BF de chaos, Majin y el BF muerto de endless): el
+mod los dibuja con flixel-animate, que coloca cada animación respecto al recuadro de todo el timeline
+de su símbolo (y escala desde el centro del recuadro del timeline principal); nuestro flxanimate los
+dibuja en las coordenadas del símbolo y escala desde (0, 0). Por eso `sonic_exe.py` calcula ese
+recuadro como flixel-animate (`AnimateBounds`: todos los fotogramas, sin capas ocultas ni máscaras y
+con el margen de los filtros) y guarda en el JSON `offset del mod + esquina del recuadro × escala −
+centro principal × (1 − escala)`. Sin eso los personajes salían desplazados y cada animación en un
+sitio distinto. Además, `Character` pide el símbolo con su nombre exacto (flxanimate buscaba por
+prefijo: la intro de Fleetway, símbolo `1`, podía coger `1idle`).
+
 Lo que hacía el motor del mod, y sus scripts globales, está en Haxe:
 
 | Archivo | Qué hace |
@@ -181,3 +193,37 @@ Diferencias con el mod, todas a propósito:
 - Las fundas de las notas largas reinician su tiempo al empezar otra nota larga (por un índice mal
   puesto en el script del mod, podían desaparecer al momento).
 - No hay rótulo "BOTPLAY" de Psych en estas dos: el del mod es la puntuación en arcoíris.
+
+## World of Chaos (ClubP Literature, Codename Engine)
+
+Origen: carpeta `clubpe` (mod de Codename Engine). Es el castillo del mundo 1. `tools/ports/world_of_chaos.py`:
+
+- **Chart**: Codename no tiene secciones; pasa a psych_v1 con secciones de 4 pulsos (el cambio a 154 BPM
+  va al empezar la sección 26, 39 ms antes que en el mod). Las notas de Monika (rival) y Saori
+  (jugadora) mantienen sus tiempos. Los 147 eventos de Codename (los del chart y los de `events.json`)
+  se guardan como `WoC <nombre>` con sus parámetros en JSON; `Change Character` pasa al de Psych.
+- **Personajes** (`woc-monica-faker`, `woc-monica`, `woc-big-monica`, `woc-saori`, `woc-saori-chibi`):
+  del XML de Codename al JSON de Psych con sus cuentas: el x/y del XML es la posición (negado en la
+  jugadora), los offsets de cada animación se multiplican por la escala, a la jugadora se le
+  intercambian singLEFT y singRIGHT y se compensa la doble inversión con la que Codename la dibuja.
+  En `camera_position` va el punto de cámara de Codename (centro del primer fotograma, ±100/150, camx
+  y camy del XML y del escenario), que usa el escenario.
+
+Lógica en Haxe:
+
+| Archivo | Qué hace |
+|---|---|
+| `source/states/stages/ClubStage.hx` | Escenario `club`: fondo en tres fases (pasos 446 y 1786), gotas, panel negro del principio y el final, cámara de Codename (sigue a quien diga `Camera Movement`, se asoma 15 px hacia la flecha y `Camera Position` la fija), zoom y "bops" cada N pulsos, balanceo de la cámara, barras de cine, flash y fundido, velocidad de las notas, animaciones `-alt` y `Play Animation` (LOCK: las notas no la cortan), shaders de color y distorsión, flechas de Saori a la izquierda y más pequeñas (las de Monika no se ven), flechas flotando desde el paso 1500, y la animación quieta mientras dura una nota larga (animFix.hx). |
+| `source/states/stages/objects/DokiHUD.hx` | La barra "Doki" con los colores de cada personaje, los iconos sobre ella y los textos Score / Misses / Accuracy de Codename con la fuente `doki.ttf`. Sin barra de tiempo (Codename no tiene). |
+| `source/substates/WoCPauseSubState.hx` | Su menú de pausa (seguir, reiniciar, opciones, controles y salir), con su música. Se pone con `PlayState.pauseMenuFactory`. |
+| `WoCGameOver` (en `ClubStage.hx`) | Su game over: sin personaje muerto, Saori cayendo en bucle aparece en 9 s con su música; reintentar: sonido "reset" y destello rojo. |
+
+Cuenta atrás y calificaciones del mod con `"stageUI": "woc"` (`images/wocUI/`); las calificaciones
+salen en el mundo, como en Codename (nodo `ratings` del escenario).
+
+Diferencias con el mod, todas a propósito:
+- Al acabar, la canción vuelve al mapa (o a Freeplay) como las demás; el mod iba al menú principal.
+- "Salir" de la pausa y BACK en el game over también vuelven al mapa.
+- En downscroll Codename volteaba toda la cámara del HUD; aquí solo se mueven la barra, los iconos y
+  los textos arriba.
+

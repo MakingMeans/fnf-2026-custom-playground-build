@@ -27,6 +27,12 @@ import substates.GameOverSubstate;
 class FleetwayStage extends SonicStage
 {
 	static final COLORS:Array<String> = ['green', 'yellow', 'blue', 'purple', 'gray', 'cyan', 'red'];
+	/**
+	 * Tamano de Fleetway y de BF en el motor del mod (flixel-animate: el recuadro del timeline principal
+	 * de su atlas), que sus scripts usaban con getMidpoint() y height. Aqui los atlas miden 0x0.
+	 */
+	static final FLEETWAY_SIZE:Array<Float> = [1601, 1475];
+	static inline final BF_HEIGHT:Float = 895;
 	static final COLORS_HEX:Array<FlxColor> = [0xFF00FF44, 0xFFFFFF00, 0xFF2736FF, 0xFFFF35E4, 0xFFCECECE, 0xFF32FFFF, 0xFFFF0000];
 
 	// ---- fondo (chaosBG de fleetw.hx)
@@ -234,10 +240,14 @@ class FleetwayStage extends SonicStage
 		bgCam = new FlxCamera();
 		bgCam.bgColor = 0x0;
 
-		// orden del mod: juego, HUD, bgCam, camOpp y camOther (la de las transiciones, siempre la ultima)
+		// orden del mod (lo metia en la posicion 2, y su motor tenia una camara mas debajo del HUD):
+		// juego, bgCam, camOpp, HUD y camOther. Por eso las flechas del rival, que quedan encima de la
+		// ventanita, se apagan mientras esta abierta.
+		FlxG.cameras.remove(camHUD, false);
 		FlxG.cameras.remove(camOther, false);
 		FlxG.cameras.add(bgCam, false);
 		FlxG.cameras.add(camOpp, false);
+		FlxG.cameras.add(camHUD, false);
 		FlxG.cameras.add(camOther, false);
 
 		black = new FlxSprite().makeGraphic(FlxG.width, FlxG.height, FlxColor.BLACK);
@@ -316,11 +326,10 @@ class FleetwayStage extends SonicStage
 		camOppBG.updateHitbox();
 		camOppBG.alpha = camOpp.alpha;
 
-		// El mod apuntaba al centro de Fleetway mas (-400, -500): su cabeza y su pecho. Aqui los
-		// personajes atlas miden 0x0, asi que se apunta ahi directamente (medido en pantalla: la
-		// cabeza queda unos 60 px a la derecha y 60 por encima de su posicion).
-		var x:Float = dad.x + 60;
-		var y:Float = dad.y - 60;
+		// El mod seguia a Fleetway (su centro) mas (-400, -500). Su centro sale de su tamano en el motor
+		// del mod (FLEETWAY_SIZE); aqui los personajes atlas miden 0x0.
+		var x:Float = dad.x + FLEETWAY_SIZE[0] / 2 - 400;
+		var y:Float = dad.y + FLEETWAY_SIZE[1] / 2 - 500;
 		switch (dad.getAnimationName())
 		{
 			case 'singLEFT': x -= 75;
@@ -471,7 +480,7 @@ class FleetwayStage extends SonicStage
 
 		FlxG.sound.play(Paths.sound('chaos/emerald'));
 		orbit.moving = false;
-		FlxTween.tween(orbit.sprite, {x: boyfriend.x, y: boyfriend.y + boyfriend.height / 6}, 2, {ease: FlxEase.cubeInOut, onComplete: function(_)
+		FlxTween.tween(orbit.sprite, {x: boyfriend.x, y: boyfriend.y + BF_HEIGHT / 6}, 2, {ease: FlxEase.cubeInOut, onComplete: function(_)
 		{
 			orbit.target = boyfriend;
 			orbit.targetRef = boyfriendGroup;
@@ -676,7 +685,8 @@ class FleetwayStage extends SonicStage
 		{
 			spacebar.animation.play('idle', true);
 			attackBeats++;
-			if (attackBeats == 3 && firstAttack)
+			// el mod pedia 'eat', pero Fleetway no tiene esa animacion: alli no hacia nada
+			if (attackBeats == 3 && firstAttack && dad.hasAnimation('eat'))
 			{
 				dad.playAnim('eat', true);
 				dad.specialAnim = true;

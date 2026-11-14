@@ -12,6 +12,7 @@
 # esos segundos desde que se abre el game over y -DeathConfirm 10 pulsa "reintentar" a los 10 s.
 # -Hit "Bad Poison": el bot tambien pulsa las notas de esos tipos (normalmente las deja pasar).
 # -Skip "emerald": el bot deja pasar las notas de esos tipos (p. ej. jugar chaos sin esmeraldas).
+# -Pause 30: abre el menu de pausa en el segundo 30, captura la ventana y acaba.
 param(
 	[Parameter(Mandatory = $true)][string]$Song,
 	[string]$Shots = "",
@@ -23,7 +24,8 @@ param(
 	[string]$DeathShots = "",
 	[string]$DeathConfirm = "",
 	[string]$Hit = "",
-	[string]$Skip = ""
+	[string]$Skip = "",
+	[string]$Pause = ""
 )
 Add-Type -AssemblyName System.Drawing
 Add-Type @"
@@ -47,6 +49,7 @@ if ($DeathShots -ne "") { $gameArgs += @("-deathshots", $DeathShots) }
 if ($DeathConfirm -ne "") { $gameArgs += @("-deathconfirm", $DeathConfirm) }
 if ($Hit -ne "") { $gameArgs += @("-hit", "`"$Hit`"") }
 if ($Skip -ne "") { $gameArgs += @("-skip", "`"$Skip`"") }
+if ($Pause -ne "") { $gameArgs += @("-pause", $Pause) }
 $log = Join-Path $Out "songtest_$Song.log"
 $p = Start-Process -FilePath "$bin\FNF2026Playground.exe" -ArgumentList $gameArgs -WorkingDirectory $bin -RedirectStandardOutput $log -PassThru
 $start = Get-Date

@@ -1,0 +1,37 @@
+<?xml version='1.0' encoding='utf-8'?>
+<TextureAtlas imagePath="saoriGameover.png">
+<SubTexture name="Dead Loop0000" x="351" y="0" width="361" height="432" frameX="-603" frameY="-219" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0001" x="351" y="0" width="361" height="432" frameX="-603" frameY="-219" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0002" x="0" y="0" width="351" height="442" frameX="-619" frameY="-211" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0003" x="0" y="0" width="351" height="442" frameX="-619" frameY="-211" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0004" x="1072" y="0" width="346" height="404" frameX="-630" frameY="-247" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0005" x="1072" y="0" width="346" height="404" frameX="-630" frameY="-247" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0006" x="0" y="852" width="352" height="385" frameX="-636" frameY="-266" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0007" x="0" y="852" width="352" height="385" frameX="-636" frameY="-266" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0008" x="693" y="852" width="344" height="379" frameX="-651" frameY="-277" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0009" x="693" y="852" width="344" height="379" frameX="-651" frameY="-277" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0010" x="352" y="852" width="341" height="382" frameX="-651" frameY="-278" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0011" x="352" y="852" width="341" height="382" frameX="-651" frameY="-278" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0012" x="1418" y="0" width="342" height="369" frameX="-630" frameY="-297" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0013" x="1418" y="0" width="342" height="369" frameX="-630" frameY="-297" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0014" x="0" y="1237" width="355" height="348" frameX="-608" frameY="-314" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0015" x="0" y="1237" width="355" height="348" frameX="-608" frameY="-314" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0016" x="355" y="1237" width="352" height="345" frameX="-595" frameY="-314" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0017" x="355" y="1237" width="352" height="345" frameX="-595" frameY="-314" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0018" x="1418" y="732" width="328" height="349" frameX="-593" frameY="-308" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0019" x="1418" y="732" width="328" height="349" frameX="-593" frameY="-308" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0020" x="1418" y="369" width="322" height="363" frameX="-576" frameY="-293" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0021" x="1418" y="369" width="322" height="363" frameX="-576" frameY="-293" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0022" x="1037" y="852" width="316" height="377" frameX="-584" frameY="-276" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0023" x="1037" y="852" width="316" height="377" frameX="-584" frameY="-276" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0024" x="1072" y="404" width="304" height="402" frameX="-596" frameY="-249" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0025" x="1072" y="404" width="304" height="402" frameX="-596" frameY="-249" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0026" x="0" y="442" width="307" height="410" frameX="-604" frameY="-240" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0027" x="0" y="442" width="307" height="410" frameX="-604" frameY="-240" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0028" x="307" y="442" width="318" height="408" frameX="-613" frameY="-241" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0029" x="307" y="442" width="318" height="408" frameX="-613" frameY="-241" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0030" x="625" y="442" width="346" height="407" frameX="-599" frameY="-242" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0031" x="625" y="442" width="346" height="407" frameX="-599" frameY="-242" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0032" x="712" y="0" width="360" height="426" frameX="-600" frameY="-224" frameWidth="1600" frameHeight="900" />
+<SubTexture name="Dead Loop0033" x="712" y="0" width="360" height="426" frameX="-600" frameY="-224" frameWidth="1600" frameHeight="900" />
+</TextureAtlas>

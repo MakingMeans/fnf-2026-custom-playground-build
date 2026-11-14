@@ -1,0 +1,222 @@
+{
+	"animations": [
+		{
+			"anim": "idle",
+			"name": "idle",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				434.0,
+				273.0
+			]
+		},
+		{
+			"anim": "scared",
+			"name": "scared0",
+			"fps": 17,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				76.0,
+				-93.0
+			]
+		},
+		{
+			"anim": "singDOWN",
+			"name": "down0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				80.0,
+				-82.0
+			]
+		},
+		{
+			"anim": "singDOWN-alt",
+			"name": "altdown0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				100.0,
+				-84.0
+			]
+		},
+		{
+			"anim": "singDOWNmiss",
+			"name": "downmiss0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				106.0,
+				-88.0
+			]
+		},
+		{
+			"anim": "singDOWNmiss-alt",
+			"name": "downmiss0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				106.0,
+				-88.0
+			]
+		},
+		{
+			"anim": "singLEFT",
+			"name": "left0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				84.0,
+				-84.0
+			]
+		},
+		{
+			"anim": "singLEFT-alt",
+			"name": "altright0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				92.0,
+				-87.0
+			]
+		},
+		{
+			"anim": "singLEFTmiss",
+			"name": "rightmiss0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				84.0,
+				-84.0
+			]
+		},
+		{
+			"anim": "singLEFTmiss-alt",
+			"name": "rightmiss0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				84.0,
+				-84.0
+			]
+		},
+		{
+			"anim": "singRIGHT",
+			"name": "right0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				86.0,
+				-82.0
+			]
+		},
+		{
+			"anim": "singRIGHT-alt",
+			"name": "altleft0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				90.0,
+				-84.0
+			]
+		},
+		{
+			"anim": "singRIGHTmiss",
+			"name": "leftmiss0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				84.0,
+				-81.0
+			]
+		},
+		{
+			"anim": "singRIGHTmiss-alt",
+			"name": "leftmiss0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				84.0,
+				-81.0
+			]
+		},
+		{
+			"anim": "singUP",
+			"name": "up0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				88.0,
+				-93.0
+			]
+		},
+		{
+			"anim": "singUP-alt",
+			"name": "altup0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				93.0,
+				-82.0
+			]
+		},
+		{
+			"anim": "singUPmiss",
+			"name": "upmiss0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				101.0,
+				-94.0
+			]
+		},
+		{
+			"anim": "singUPmiss-alt",
+			"name": "upmiss0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				101.0,
+				-94.0
+			]
+		}
+	],
+	"no_antialiasing": false,
+	"image": "characters/woc/saori",
+	"position": [
+		-900.0,
+		-20.0
+	],
+	"healthicon": "woc-saori",
+	"flip_x": true,
+	"healthbar_colors": [
+		149,
+		238,
+		255
+	],
+	"camera_position": [
+		-60.0,
+		620.0
+	],
+	"sing_duration": 3.182,
+	"scale": 1.0,
+	"vocals_file": ""
+}

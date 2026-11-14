@@ -1,0 +1,144 @@
+{
+	"animations": [
+		{
+			"anim": "idle",
+			"name": "saoriChiqui idle",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				-137.8,
+				310.1
+			]
+		},
+		{
+			"anim": "singDOWN",
+			"name": "saoriChiqui down",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				-407.4,
+				44.1
+			]
+		},
+		{
+			"anim": "singDOWNmiss",
+			"name": "miss0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				-381.8,
+				52.7
+			]
+		},
+		{
+			"anim": "singLEFT",
+			"name": "saoriChiqui left0",
+			"fps": 24,
+			"loop": false,
+			"indices": [
+				10,
+				11,
+				12,
+				13,
+				14,
+				15,
+				16,
+				17,
+				18
+			],
+			"offsets": [
+				-360.5,
+				38.5
+			]
+		},
+		{
+			"anim": "singLEFTmiss",
+			"name": "miss0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				-388.2,
+				55.4
+			]
+		},
+		{
+			"anim": "singRIGHT",
+			"name": "saoriChiqui left",
+			"fps": 24,
+			"loop": false,
+			"indices": [
+				0,
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8,
+				9
+			],
+			"offsets": [
+				-453.6,
+				54.6
+			]
+		},
+		{
+			"anim": "singRIGHTmiss",
+			"name": "miss0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				-389.2,
+				47.3
+			]
+		},
+		{
+			"anim": "singUP",
+			"name": "saoriChiqui up",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				-405.3,
+				48.3
+			]
+		},
+		{
+			"anim": "singUPmiss",
+			"name": "miss0",
+			"fps": 24,
+			"loop": false,
+			"indices": [],
+			"offsets": [
+				-390.5,
+				54.9
+			]
+		}
+	],
+	"no_antialiasing": false,
+	"image": "characters/woc/saoriChiqui",
+	"position": [
+		-850.0,
+		150.0
+	],
+	"healthicon": "woc-saori",
+	"flip_x": false,
+	"healthbar_colors": [
+		144,
+		191,
+		255
+	],
+	"camera_position": [
+		1400.0,
+		920.0
+	],
+	"sing_duration": 3.636,
+	"scale": 0.7,
+	"vocals_file": ""
+}

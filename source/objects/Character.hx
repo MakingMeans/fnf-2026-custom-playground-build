@@ -222,7 +222,12 @@ class Character extends FlxSprite
 					if(animIndices != null && animIndices.length > 0)
 						atlas.anim.addBySymbolIndices(animAnim, animName, animIndices, animFps, animLoop);
 					else
-						atlas.anim.addBySymbol(animAnim, animName, animFps, animLoop);
+					{
+						// flxanimate busca el simbolo por prefijo: con "1" podia coger "1idle", o con "left"
+						// "left hand". Si existe uno con ese nombre exacto, se pide ese ("\" al final = exacto)
+						var symbols = atlas.anim.symbolDictionary;
+						atlas.anim.addBySymbol(animAnim, (symbols != null && symbols.exists(animName)) ? animName + '\\' : animName, animFps, animLoop);
+					}
 				}
 				#end
 

@@ -57,7 +57,7 @@ def build():
         # salida normal: los escalones a la meseta; salida secreta (7 esmeraldas, la decide la cancion): el puente al norte
         node('chaos', 352, 200, 'Chaos', song='chaos', unlocks=['last-course'], secret=['endless'], secret_mode='song'),
         node('last-course', 352, 88, 'Last Course', song='last-course', unlocks=['castillo']),
-        node('castillo', 448, 88, 'World of Chaos', look=CASTLE_LOOK, unlocks=['camino-este']),
+        node('castillo', 448, 88, 'World of Chaos', song='world-of-chaos', look=CASTLE_LOOK, unlocks=['camino-este']),
         node('endless', 208, 88, 'Endless', song='endless-us', unlocks=['camino-norte']),
         node('camino-norte', 208, 24, 'Hacia el norte', kind='empty'),
         node('camino-este', 560, 88, 'Hacia el este', kind='empty'),
