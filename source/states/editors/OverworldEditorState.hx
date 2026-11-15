@@ -2337,6 +2337,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			spr.updateHitbox();
 		}
 		spr.setPosition(data.x, data.y);
+		// un tile quieto no necesita update(): con un mapa pintado entero son miles por fotograma
+		if (spr.animation.curAnim == null || spr.animation.curAnim.numFrames < 2) spr.active = false;
 		return spr;
 	}
 

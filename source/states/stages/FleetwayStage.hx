@@ -12,15 +12,20 @@ import substates.GameOverSubstate;
 /**
  * chaos (Vs Sonic.exe, carpeta FLEETWAY), escenario "fleetw". Port de stages/fleetw.hx,
  * data/chaos/emeralds.hx, custom_events/chaosEvent.lua y FlashCamera.lua del mod:
- *  - Fondo por capas (su makeBackground), con la intro del robot la primera vez que se juega.
- *  - Una ventanita con Fleetway (camOpp) en los pasos 464-529 y 1600.
+ *  - Fondo por capas (su makeBackground), con la intro de Sonic cayendo a la fuente.
+ *  - Una ventanita con Fleetway (camOpp) en los pasos 464-529 y 1600. Como en el mod, es una camara
+ *    "por defecto" mas: dentro se ve el escenario entero desde su encuadre, no solo a Fleetway.
  *  - 7 notas "emerald" opcionales: cada una que se coge vuela hacia BF y se ilumina abajo en el
  *    HUD. Con las 7, BF se transforma en Super (paso 1008) y Fleetway cambia sus frases.
  *  - Laser ("eatthis"): hay que pulsar la tecla de esquivar (ESPACIO por defecto) en el ultimo
  *    segundo antes del disparo, o BF muere.
- * Cambios a proposito (decision del usuario): sin las 7 esmeraldas ya no hay muerte forzada (el mod
- * mataba a BF en el paso 1999 y en el laser despues del pulso 252); conseguirlas es la salida
- * secreta del nivel en el mapa (OverworldState.songSecret).
+ * Cambios a proposito (decisiones del usuario):
+ *  - Sin las 7 esmeraldas la cancion se puede pasar (el mod mataba a BF en el paso 1999 y en el laser
+ *    despues del pulso 252) y Fleetway hace lo mismo que con ellas (frases, animaciones, letras, zoom
+ *    y el fundido final): solo se salta su "What?" (pasos 1034-1039), que reacciona al Super BF. Lo
+ *    que si cambia es lo de BF: transformarse, sus notas -alt y las esmeraldas que absorbe.
+ *    Conseguirlas es la salida secreta del nivel en el mapa (OverworldState.songSecret).
+ *  - La intro se ve cada vez que se empieza o se reintenta la cancion (el mod, solo la primera).
  */
 @:access(states.PlayState)
 @:access(backend.MusicBeatState)
@@ -44,7 +49,6 @@ class FleetwayStage extends SonicStage
 	var statue:FlxAnimate;         // 'sonic'
 	var porker:FlxSprite;          // 'cochinito'
 	var colorShader:ColorSwap;
-	var firstPlay:Bool;
 
 	// ---- ventanita de Fleetway
 	var camOpp:FlxCamera;
@@ -98,7 +102,6 @@ class FleetwayStage extends SonicStage
 		hudFrame = 'chaos/hud/hud_chaos';
 		hudFrameOffset.set(-190, -75);
 		GameOverSubstate.custom = new ChaosGameOver();
-		firstPlay = !PlayState.seenCutscene;
 		canTransform = false;
 		muteOpponentVocals = false;
 		collectedEmeralds = missedEmeralds = 0;
@@ -120,7 +123,7 @@ class FleetwayStage extends SonicStage
 		buildCameras();
 		buildBackground();
 		buildTimeline();
-		if (firstPlay) setStartCallback(introCutscene);
+		setStartCallback(introCutscene);
 	}
 
 	// ------------------------------------------------------------------ fondo
@@ -167,6 +170,12 @@ class FleetwayStage extends SonicStage
 		statue.antialiasing = ClientPrefs.data.antialiasing;
 		statue.scale.set(0.545, 0.545);
 		statue.updateHitbox();
+		// flixel-animate (el del mod) dibuja la animacion desde la esquina del recuadro de su timeline;
+		// nuestro flxanimate, desde el (0, 0) del simbolo. El recuadro de 'intro' empieza en
+		// (922.4, -56.15) (AnimateBounds de tools/ports/sonic_exe.py): sin esto Sonic caia 500 px a la
+		// derecha de la fuente, fuera del plano de la intro. Se suma al offset de updateHitbox, que se
+		// compensa con el origen (cambiarlo por este lo bajaba 360 px).
+		statue.offset.add(922.4 * 0.545, -56.15 * 0.545);
 		var pillars = bgSprite('chaos/bg/1', 1400, 500, 0.9, 1.1, 1.3, 1.1);
 		bgTop = [floor2, statue, pillars];
 		porker = bgSprite('chaos/bg/puelco', 3900, 2150, 1.2, 1.2, 1.3, 1.3, [{name: 'Porker Lewis', looped: false}]);
@@ -174,27 +183,19 @@ class FleetwayStage extends SonicStage
 
 		for (spr in bgBack) add(spr);
 
-		if (firstPlay)
+		// como antes de la intro: Sonic quieto arriba, la fuente apagada y el fondo con otro tono
+		statue.anim.play('intro', true);
+		statue.anim.pause();
+		for (spr in fuentes)
 		{
-			statue.anim.play('intro', true);
-			statue.anim.pause();
-			for (spr in fuentes)
-			{
-				spr.animation.play('ramaquintranqui', true);
-				spr.offset.set(0, 0);
-			}
-			colorShader = new ColorSwap();
-			colorShader.hue = Math.abs(182 - 48) / 180;
-			colorShader.saturation = -0.2;
-			colorShader.brightness = -0.2;
-			for (spr in shaded) spr.shader = colorShader.shader;
+			spr.animation.play('ramaquintranqui', true);
+			spr.offset.set(0, 0);
 		}
-		else
-			for (spr in fuentes)
-			{
-				spr.animation.play('ramaquin instancia', true);
-				spr.offset.set(75, -25);
-			}
+		colorShader = new ColorSwap();
+		colorShader.hue = Math.abs(182 - 48) / 180;
+		colorShader.saturation = -0.2;
+		colorShader.brightness = -0.2;
+		for (spr in shaded) spr.shader = colorShader.shader;
 	}
 
 	override function createPost()
@@ -236,6 +237,7 @@ class FleetwayStage extends SonicStage
 		camOpp.zoom = 0.7;
 		camOpp.alpha = 0;
 		camOpp.active = false;
+		camOpp.visible = false; // updateCamOpp la enseña solo mientras esta abierta
 
 		bgCam = new FlxCamera();
 		bgCam.bgColor = 0x0;
@@ -243,10 +245,13 @@ class FleetwayStage extends SonicStage
 		// orden del mod (lo metia en la posicion 2, y su motor tenia una camara mas debajo del HUD):
 		// juego, bgCam, camOpp, HUD y camOther. Por eso las flechas del rival, que quedan encima de la
 		// ventanita, se apagan mientras esta abierta.
+		// camOpp es una camara "por defecto", como en el mod (FlxG.cameras.insert(camOpp, 2) sin el
+		// tercer argumento): todo lo del escenario se dibuja tambien en ella, y la ventanita ensena el
+		// fondo detras de Fleetway. Sin eso salia negra.
 		FlxG.cameras.remove(camHUD, false);
 		FlxG.cameras.remove(camOther, false);
 		FlxG.cameras.add(bgCam, false);
-		FlxG.cameras.add(camOpp, false);
+		FlxG.cameras.add(camOpp, true);
 		FlxG.cameras.add(camHUD, false);
 		FlxG.cameras.add(camOther, false);
 
@@ -316,6 +321,8 @@ class FleetwayStage extends SonicStage
 
 	function updateCamOpp()
 	{
+		// cerrada no se dibuja: si no, todo el escenario se pintaria dos veces en cada fotograma
+		camOpp.visible = camOpp.active || camOpp.alpha > 0;
 		if (!camOpp.active)
 		{
 			camOppBG.alpha = 0;
@@ -340,9 +347,14 @@ class FleetwayStage extends SonicStage
 		oppFocus.setPosition(x, y);
 	}
 
-	// ------------------------------------------------------------------ intro (primera vez)
+	// ------------------------------------------------------------------ intro (cada vez)
 	function introCutscene()
 	{
+		// la intro mira a la fuente donde cae Sonic: el punto medio de cameraSettings.json (MiddleX y
+		// MiddleY, debajo de la esmeralda maestra). Sin esto miraba al punto de Fleetway, que aun no esta
+		cameraCenter = true;
+		updateCameraTarget();
+		camGame.snapToTarget();
 		play.cameraSpeed = 9999;
 		boyfriend.visible = false;
 		camHUD.alpha = 0;
@@ -370,6 +382,7 @@ class FleetwayStage extends SonicStage
 
 				new FlxTimer().start(4, function(_)
 				{
+					cameraCenter = false; // y la camara pasa a seguir a quien canta
 					startCountdown();
 					FlxG.sound.play(Paths.sound('chaos/beam'), 0.6);
 					camGame.flash(0xFFFFFFBB, 1, null, true);
@@ -726,6 +739,11 @@ class FleetwayStage extends SonicStage
 				else
 					FlxTween.num(velocityMult, 3.5, 3, {onComplete: function(_) FlxTween.num(velocityMult, 0.1, 1, null, function(v:Float) velocityMult = v)},
 						function(v:Float) velocityMult = v);
+			// Decision del usuario: con o sin las esmeraldas, Fleetway hace lo mismo que en la version Super
+			// (frases, animaciones, letras, zoom y el fundido final). Lo unico que se salta sin ellas es su
+			// "What?" (pasos 1034-1039: audio, animacion y letra), que reacciona a la transformacion de BF.
+			// El mod, sin ellas, cambiaba "again" por "2again", se saltaba el resto de frases callando su
+			// voz (y como nada le devolvia el volumen, se quedaba muda hasta el final) y subia el dano.
 			case 1034:
 				if (canTransform)
 				{
@@ -733,33 +751,28 @@ class FleetwayStage extends SonicStage
 					lyric('lyrics.chaos.6', 1);
 				}
 				else muteOpponentVocals = true;
+			case 1039:
+				if (muteOpponentVocals)
+				{
+					muteOpponentVocals = false;
+					play.opponentVocals.volume = 1; // PlayState no la vuelve a subir
+				}
 			case 1040:
-				playAnimOn(dad, canTransform ? 'again' : '2again');
+				playAnimOn(dad, 'again');
 			case 1070:
-				if (canTransform) play.triggerEvent('Alt Idle Animation', 'dad', '-alt', Conductor.songPosition);
+				play.triggerEvent('Alt Idle Animation', 'dad', '-alt', Conductor.songPosition);
 			case 1216:
-				if (canTransform)
-				{
-					playAnimOn(dad, 'grrr');
-					lyric('lyrics.chaos.16', 1);
-					tweenCameraZoom('0.8, true', '0.75, sineInOut');
-				}
-				else muteOpponentVocals = true;
+				playAnimOn(dad, 'grrr');
+				lyric('lyrics.chaos.16', 1);
+				tweenCameraZoom('0.8, true', '0.75, sineInOut');
 			case 1322:
-				if (canTransform)
-				{
-					playAnimOn(dad, 'showyou');
-					lyric('lyrics.chaos.8', 1);
-					tweenCameraZoom('1, true', '0.9, smootherStepInOut');
-				}
-				else muteOpponentVocals = true;
-			case 1345: if (canTransform) lyric('lyrics.chaos.8', 2);
-			case 1347: if (canTransform) lyric('lyrics.chaos.8', 3);
-			case 1352: if (canTransform) lyric('lyrics.chaos.8', 4);
-			case 1356: if (canTransform) lyric('lyrics.chaos.8', 5);
-			case 1039 | 1230 | 1359: muteOpponentVocals = false;
-			case 1221: if (!canTransform) healthDamage = 0.035;
-			case 1328: if (!canTransform) healthDamage = 0.045;
+				playAnimOn(dad, 'showyou');
+				lyric('lyrics.chaos.8', 1);
+				tweenCameraZoom('1, true', '0.9, smootherStepInOut');
+			case 1345: lyric('lyrics.chaos.8', 2);
+			case 1347: lyric('lyrics.chaos.8', 3);
+			case 1352: lyric('lyrics.chaos.8', 4);
+			case 1356: lyric('lyrics.chaos.8', 5);
 		}
 	}
 
@@ -810,12 +823,9 @@ class FleetwayStage extends SonicStage
 						if (canTransform) playAnimOn(boyfriend, 'super');
 					case 'bftransform':
 						if (canTransform) transform();
-					case 'getblacklmao':
-						if (canTransform)
-						{
-							camGame.alpha = 0;
-							new FlxTimer().start(3, function(_) FlxTween.tween(camHUD, {alpha: 0}, 2));
-						}
+					case 'getblacklmao': // el final: tambien sin las esmeraldas (el mod solo con ellas)
+						camGame.alpha = 0;
+						new FlxTimer().start(3, function(_) FlxTween.tween(camHUD, {alpha: 0}, 2));
 				}
 
 			case 'FlashCamera':

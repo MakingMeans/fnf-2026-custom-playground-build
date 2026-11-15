@@ -9,6 +9,7 @@ import flixel.FlxObject;
 import flixel.addons.display.FlxBackdrop;
 import flixel.graphics.frames.FlxAtlasFrames;
 import flixel.graphics.frames.FlxFrame;
+import flixel.graphics.frames.FlxFrame.FlxFrameAngle;
 import flixel.group.FlxGroup.FlxTypedGroup;
 import flixel.text.FlxText.FlxTextFormat;
 import flixel.text.FlxText.FlxTextFormatMarkerPair;
@@ -80,7 +81,8 @@ class OverworldState extends MusicBeatState
 	{
 		if (returnToEditor || curNodeId == null) return;
 		#if debug
-		if (OverworldPlaytest.running) return; // la prueba automatica no pisa la posicion de la partida
+		// la prueba automatica y las capturas (-shot) no pisan la posicion de la partida
+		if (OverworldPlaytest.running || Sys.args().contains('-shot')) return;
 		#end
 
 		// un nodo cerrado no se guarda: al volver, BF apareceria en un mapa sin sitio donde estar
@@ -422,8 +424,15 @@ class OverworldState extends MusicBeatState
 		}
 		for (spr in file.sprites)
 		{
-			if (spr.x + 64 > targetWidth) targetWidth = spr.x + 64;
-			if (spr.y + 64 > targetHeight) targetHeight = spr.y + 64;
+			// lo que ocupa el dibujo: su fotograma por la escala (64 si la imagen no se puede leer).
+			// Antes se suponian siempre 64 px, y un mapa de tiles de 8 pintado hasta el borde crecia
+			// un fondo entero de mar vacio por la derecha y por abajo
+			var info:OverworldImageInfo = (spr.image != null && spr.image.length > 0) ? OverworldData.imageInfo(spr.image) : null;
+			var scale:Float = spr.scale > 0 ? spr.scale : 1;
+			var right:Float = spr.x + ((info != null && info.frameWidth > 0) ? info.frameWidth * scale : 64);
+			var bottom:Float = spr.y + ((info != null && info.frameHeight > 0) ? info.frameHeight * scale : 64);
+			if (right > targetWidth) targetWidth = right;
+			if (bottom > targetHeight) targetHeight = bottom;
 		}
 
 		return [Math.ceil(targetWidth / tileWidth) * tileWidth, Math.ceil(targetHeight / tileHeight) * tileHeight];
@@ -488,6 +497,8 @@ class OverworldState extends MusicBeatState
 			if (data.front) spritesFront.add(spr);
 			else spritesBack.add(spr);
 		}
+		bakeStillSprites(spritesBack);
+		bakeStillSprites(spritesFront);
 
 		// antes de dibujar nodos y caminos: un nodo 'world' recien superado cambia los dos
 		buildPaths(collectRevealNodes());
@@ -573,6 +584,86 @@ class OverworldState extends MusicBeatState
 
 		mapWidth = bgWidth;
 		mapHeight = bgHeight;
+	}
+
+	/** Tramos de menos decorados quietos que esto se quedan como sprites sueltos. */
+	static inline final BAKE_MIN:Int = 8;
+
+	/**
+	 * Junta en una sola imagen cada tramo seguido de decorados quietos (un fotograma, sin escala,
+	 * giro ni transparencia: los tiles pintados). Un mapa pintado entero son miles de sprites de 8x8
+	 * y actualizarlos y dibujarlos uno a uno bajaba los FPS. Los animados se quedan como sprites
+	 * entre los tramos, asi que el orden de dibujo no cambia. Solo en el juego: el editor necesita
+	 * los sprites sueltos para editarlos.
+	 */
+	static function bakeStillSprites(group:FlxTypedGroup<FlxSprite>)
+	{
+		var result:Array<FlxSprite> = [];
+		var run:Array<FlxSprite> = [];
+
+		function flush()
+		{
+			if (run.length >= BAKE_MIN)
+			{
+				result.push(bakeRun(run));
+				for (spr in run) spr.destroy();
+			}
+			else
+				for (spr in run) result.push(spr);
+			run = [];
+		}
+
+		for (spr in group.members)
+		{
+			if (spr == null) continue;
+			if (isStill(spr)) run.push(spr);
+			else
+			{
+				flush();
+				result.push(spr);
+			}
+		}
+		flush();
+
+		group.clear();
+		for (spr in result) group.add(spr);
+	}
+
+	static function isStill(spr:FlxSprite):Bool
+	{
+		if (spr.frame == null || spr.frame.angle != FlxFrameAngle.ANGLE_0) return false;
+		if (spr.alpha != 1 || spr.scale.x != 1 || spr.scale.y != 1 || spr.angle != 0) return false;
+		return spr.animation.curAnim == null || spr.animation.curAnim.numFrames < 2;
+	}
+
+	static function bakeRun(run:Array<FlxSprite>):FlxSprite
+	{
+		var minX:Float = Math.POSITIVE_INFINITY;
+		var minY:Float = Math.POSITIVE_INFINITY;
+		var maxX:Float = Math.NEGATIVE_INFINITY;
+		var maxY:Float = Math.NEGATIVE_INFINITY;
+		for (spr in run)
+		{
+			minX = Math.min(minX, Math.floor(spr.x));
+			minY = Math.min(minY, Math.floor(spr.y));
+			maxX = Math.max(maxX, spr.x + spr.frameWidth);
+			maxY = Math.max(maxY, spr.y + spr.frameHeight);
+		}
+
+		var bitmap:openfl.display.BitmapData = new openfl.display.BitmapData(Math.ceil(maxX - minX), Math.ceil(maxY - minY), true, 0);
+		var point:openfl.geom.Point = new openfl.geom.Point();
+		for (spr in run)
+		{
+			point.setTo(Math.floor(spr.x) - minX, Math.floor(spr.y) - minY);
+			if (spr.flipX || spr.flipY) spr.frame.paintRotatedAndFlipped(bitmap, point, FlxFrameAngle.ANGLE_0, spr.flipX, spr.flipY, true);
+			else spr.frame.paint(bitmap, point, true);
+		}
+
+		// sin cache: es de este mapa y se libera con el sprite al salir
+		var baked:FlxSprite = new FlxSprite(minX, minY);
+		baked.loadGraphic(flixel.graphics.FlxGraphic.fromBitmapData(bitmap, false, null, false));
+		baked.antialiasing = false;
+		return baked;
 	}
 
 	/**

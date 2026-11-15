@@ -746,7 +746,7 @@ class OverworldPlaytest extends FlxBasic
 		// tipos y destinos con los desplegables del editor
 		ed.selectedNode = c;
 		ed.nodeTypeDropDown.onSelect(1, 'world');
-		ed.setNodeTile(c, 'overworld/og_mario/level_blocks', 'tile0010', false); // un castillo
+		ed.setNodeTile(c, 'overworld/og_mario/level_tiles', 'tile0008', false); // un castillo (level_blocks tile0010 son 4 puntos)
 		ed.selectedNode = p;
 		ed.nodeTypeDropDown.onSelect(4, 'warp');
 		ed.nodeWorldDropDown.onSelect(0, 'zz_demo_hub');

@@ -79,13 +79,13 @@
 		},
 		{
 			"anim": "singLEFT-alt",
-			"name": "altright0",
+			"name": "altleft0",
 			"fps": 24,
 			"loop": false,
 			"indices": [],
 			"offsets": [
-				92.0,
-				-87.0
+				90.0,
+				-84.0
 			]
 		},
 		{
@@ -123,13 +123,13 @@
 		},
 		{
 			"anim": "singRIGHT-alt",
-			"name": "altleft0",
+			"name": "altright0",
 			"fps": 24,
 			"loop": false,
 			"indices": [],
 			"offsets": [
-				90.0,
-				-84.0
+				92.0,
+				-87.0
 			]
 		},
 		{

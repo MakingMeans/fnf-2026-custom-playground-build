@@ -139,10 +139,12 @@ def convert_character(name, stage_cam):
             'x': float(a.get('x', 0)), 'y': float(a.get('y', 0)),
         })
 
-    if is_player:  # swapLeftRightAnimations(): singLEFT<v> <-> singRIGHT<v>
+    if is_player:  # swapLeftRightAnimations(): singLEFT <-> singRIGHT y singLEFTmiss <-> singRIGHTmiss
+        # Solo la normal y la de fallo, como el Codename del mod (1.1.0 pre). El de GitHub de ahora
+        # tambien intercambia las "-alt", pero en el mod las especiales de Saori iban sin intercambiar:
+        # con el intercambio salian al reves (al pulsar derecha, la pose de la izquierda).
         by_name = {anim['anim']: anim for anim in anims}
-        variants = [''] + [n[len('singRIGHT'):] for n in by_name if n.startswith('singRIGHT') and n != 'singRIGHT']
-        for v in variants:
+        for v in ('', 'miss'):
             left, right = by_name.get('singLEFT' + v), by_name.get('singRIGHT' + v)
             if left is not None:
                 left['anim'] = 'singRIGHT' + v

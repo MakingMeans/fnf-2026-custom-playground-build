@@ -255,6 +255,8 @@ class PlayState extends MusicBeatState
 	private var luaDebugGroup:FlxTypedGroup<psychlua.DebugLuaText>;
 	#end
 	public var introSoundsSuffix:String = '';
+	/** false: la cuenta atras (3, 2, 1, go) se ve pero no suena (lo pone el escenario, p. ej. Vs Sonic.exe). */
+	public var countdownSounds:Bool = true;
 
 	// Less laggy controls
 	private var keysArray:Array<String>;
@@ -1012,19 +1014,19 @@ class PlayState extends MusicBeatState
 				switch (swagCounter)
 				{
 					case 0:
-						FlxG.sound.play(Paths.sound('intro3' + introSoundsSuffix), 0.6);
+						if (countdownSounds) FlxG.sound.play(Paths.sound('intro3' + introSoundsSuffix), 0.6);
 						tick = THREE;
 					case 1:
 						countdownReady = createCountdownSprite(introAlts[0], antialias);
-						FlxG.sound.play(Paths.sound('intro2' + introSoundsSuffix), 0.6);
+						if (countdownSounds) FlxG.sound.play(Paths.sound('intro2' + introSoundsSuffix), 0.6);
 						tick = TWO;
 					case 2:
 						countdownSet = createCountdownSprite(introAlts[1], antialias);
-						FlxG.sound.play(Paths.sound('intro1' + introSoundsSuffix), 0.6);
+						if (countdownSounds) FlxG.sound.play(Paths.sound('intro1' + introSoundsSuffix), 0.6);
 						tick = ONE;
 					case 3:
 						countdownGo = createCountdownSprite(introAlts[2], antialias);
-						FlxG.sound.play(Paths.sound('introGo' + introSoundsSuffix), 0.6);
+						if (countdownSounds) FlxG.sound.play(Paths.sound('introGo' + introSoundsSuffix), 0.6);
 						tick = GO;
 					case 4:
 						tick = START;

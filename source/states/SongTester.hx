@@ -14,6 +14,9 @@ import substates.GameOverSubstate;
  * salen por consola (en debug, FunkinLua.luaTrace los imprime aunque el script no tenga
  * luaDebugMode).
  *
+ * -wallshots 4,6.5 pide capturas de ventana en esos segundos de reloj desde que arranca el juego (para
+ * lo que pasa antes de la cancion, como una intro).
+ *
  * Para probar un game over: -die <segundo> deja la vida a 0 en ese segundo de cancion;
  * -deathshots 0.5,3 pide capturas de ventana en esos segundos desde que se abre el game over, y
  * -deathconfirm <segundo> pulsa "reintentar" (si el game over ya lo permite).
@@ -28,7 +31,8 @@ class SongTester extends FlxBasic
 	var song:String;
 	var shots:Array<Float> = []; // ms de cancion
 	var winShots:Array<Float> = []; // ms de cancion: avisos para capturar la ventana desde fuera
-	var dieAt:Float = -1; // ms de cancion
+	var wallShots:Array<Float> = []; // -wallshots: s de reloj desde el arranque (intros antes de la cancion)
+	var dieAt:Float = Math.NaN; // ms de cancion (negativo = durante la cuenta atras); NaN = no
 	var deathShots:Array<Float> = []; // ms desde que se abre el game over (ventana real)
 	var confirmAt:Float = -1; // s desde que se abre el game over
 	var confirmed:Bool = false;
@@ -66,6 +70,7 @@ class SongTester extends FlxBasic
 		// -winshots: en esos segundos escribe song_winshot.txt para que un script capture la ventana
 		// real (PrintWindow), que si incluye videos y shaders
 		readTimes(args, '-winshots', tester.winShots);
+		readTimes(args, '-wallshots', tester.wallShots);
 		readTimes(args, '-deathshots', tester.deathShots);
 		var times:Array<Float> = [];
 		readTimes(args, '-die', times);
@@ -117,6 +122,14 @@ class SongTester extends FlxBasic
 			log.push('TIMEOUT: la cancion no termino en ${TIMEOUT}s');
 			finish();
 			return;
+		}
+
+		// -wallshots: capturas de la ventana por tiempo real desde el arranque (lo que pasa antes de
+		// que empiece la cancion, como la intro de chaos)
+		if (wallShots.length > 0 && wallTime * 1000 >= wallShots[0] && !FileSystem.exists('song_winshot.txt'))
+		{
+			var seconds:String = Std.string(Math.round(wallShots.shift() / 100) / 10);
+			File.saveContent('song_winshot.txt', '$song-wall-$seconds');
 		}
 
 		if (deathTime >= 0)
@@ -195,9 +208,9 @@ class SongTester extends FlxBasic
 			play.openPauseMenu();
 			return;
 		}
-		if (dieAt >= 0 && lastPos >= dieAt)
+		if (!Math.isNaN(dieAt) && lastPos >= dieAt)
 		{
-			dieAt = -1;
+			dieAt = Math.NaN;
 			log.push('Vida a 0 (forzado) en el segundo ${Math.round(lastPos / 100) / 10}');
 			play.health = 0;
 		}
@@ -265,7 +278,8 @@ class SongTester extends FlxBasic
 			File.saveBytes('song_shots/$name.png', png);
 			bmp.dispose();
 			taken.push(name);
-			log.push('Captura $name (paso ${play.curStep}, ${play.boyfriend.curCharacter} vs ${play.dad.curCharacter}, vida ${Math.round(play.health * 100) / 100})');
+			log.push('Captura $name (paso ${play.curStep}, ${play.boyfriend.curCharacter} vs ${play.dad.curCharacter}, vida ${Math.round(play.health * 100) / 100}, '
+				+ 'anim rival ${play.dad.getAnimationName()}, voz rival ${play.opponentVocals.length > 0 ? Std.string(play.opponentVocals.volume) : "-"})');
 		}
 		catch (e:Dynamic)
 		{

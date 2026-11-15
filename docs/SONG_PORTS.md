@@ -50,7 +50,10 @@ Reglas que siguen todas:
     `-noshaders`.
   - `-winshots`: captura la ventana real (PrintWindow), con vídeos y shaders. Necesita la pantalla
     encendida.
-  - Game over: `-Die 40` deja la vida a 0 en el segundo 40 de canción, `-DeathShots "0.5,3,8"`
+  - `-WallShots "1.5,2,3"`: captura la ventana en esos segundos de reloj desde que arranca el juego,
+    para lo que pasa antes de que empiece la canción (como la intro de chaos).
+  - Game over: `-Die 40` deja la vida a 0 en el segundo 40 de canción (`-Die:'-0.5'`, en plena
+    cuenta atrás), `-DeathShots "0.5,3,8"`
     captura la ventana en esos segundos desde que se abre el game over y `-DeathConfirm 10` pulsa
     "reintentar" a los 10 s (si ese game over ya lo deja).
   - `-Hit "Bad Poison"`: el bot también pulsa las notas de esos tipos (normalmente deja pasar las
@@ -152,7 +155,11 @@ recuadro como flixel-animate (`AnimateBounds`: todos los fotogramas, sin capas o
 con el margen de los filtros) y guarda en el JSON `offset del mod + esquina del recuadro × escala −
 centro principal × (1 − escala)`. Sin eso los personajes salían desplazados y cada animación en un
 sitio distinto. Además, `Character` pide el símbolo con su nombre exacto (flxanimate buscaba por
-prefijo: la intro de Fleetway, símbolo `1`, podía coger `1idle`).
+prefijo: la intro de Fleetway, símbolo `1`, podía coger `1idle`). La estatua de Sonic de la intro de
+chaos es otro atlas: `FleetwayStage` le suma al offset la esquina del recuadro de `intro` × escala.
+
+En el mod los sonidos de la cuenta atrás son silencio (los cuatro son el mismo ogg): en estas
+canciones la cuenta atrás se ve pero no suena (`PlayState.countdownSounds`, lo pone `SonicStage`).
 
 Lo que hacía el motor del mod, y sus scripts globales, está en Haxe:
 
@@ -166,8 +173,10 @@ Lo que hacía el motor del mod, y sus scripts globales, está en Haxe:
 | `source/states/stages/MajinStage.hx` | endless-us (escenario `majin`), su pantalla de inicio y su game over (`MajinGameOver`). |
 
 **chaos** (`chaos-bf` contra `chaos-fleetway`):
-- La primera vez, intro con la estatua y el fondo apagado; al reintentar no se repite.
-- Una ventanita con Fleetway (pasos 464-529 y 1600) y letras en pantalla.
+- Intro: Sonic clásico pensativo en la fuente, se asusta y cae dentro; la cámara mira al punto medio
+  de `cameraSettings.json` (la fuente). Se repite cada vez que se empieza o se reintenta.
+- Una ventanita con Fleetway (pasos 464-529 y 1600) y letras en pantalla. La ventanita es una cámara
+  "por defecto" más, como en el mod: dentro se ve el escenario, no un fondo negro. Cerrada no se dibuja.
 - 7 notas "emerald" opcionales: cada una vuela hacia BF y se enciende abajo, junto a la barra. Con las
   7, BF se vuelve Super y Fleetway cambia sus frases. **Es la salida secreta del nivel en el mapa**
   (modo de salida secreta "canción": `OverworldState.songSecret`).
@@ -184,8 +193,14 @@ Lo que hacía el motor del mod, y sus scripts globales, está en Haxe:
   BF se convierte en Majin (destello azul, zoom y dos sonidos) y se vuelve al mapa.
 
 Diferencias con el mod, todas a propósito:
-- chaos sin las 7 esmeraldas ya no mata a BF (el mod lo hacía en el láser después del pulso 252 y
-  en el paso 1999): ahora conseguirlas o no decide la salida del nivel.
+- chaos sin las 7 esmeraldas se puede pasar (el mod mataba a BF en el láser después del pulso 252 y
+  en el paso 1999) y Fleetway hace lo mismo que con ellas: sus frases con sus animaciones, letras y
+  zoom, y el fundido a negro final. Solo se salta su "What?" (pasos 1034-1039: audio, animación y
+  letra), que reacciona al Super BF. El mod, sin ellas, cambiaba "again" por "2again", callaba su voz
+  en las demás frases (y como nada le devolvía el volumen, se quedaba muda hasta el final) y subía el
+  daño por nota. Lo de BF sí depende de las esmeraldas: transformarse y sus animaciones de Super.
+  Conseguirlas o no decide la salida del nivel.
+- La intro de chaos se ve en cada intento (el mod solo la primera vez).
 - En el mod, el game over de endless acababa cerrando la ventana del juego: ahora vuelve al mapa (o a
   Freeplay). Su Majin final sale centrado en pantalla (en el mod su sitio dependía de por dónde iba
   la cámara).
@@ -205,7 +220,9 @@ Origen: carpeta `clubpe` (mod de Codename Engine). Es el castillo del mundo 1. `
 - **Personajes** (`woc-monica-faker`, `woc-monica`, `woc-big-monica`, `woc-saori`, `woc-saori-chibi`):
   del XML de Codename al JSON de Psych con sus cuentas: el x/y del XML es la posición (negado en la
   jugadora), los offsets de cada animación se multiplican por la escala, a la jugadora se le
-  intercambian singLEFT y singRIGHT y se compensa la doble inversión con la que Codename la dibuja.
+  intercambian singLEFT y singRIGHT (y sus fallos, no las `-alt`: así lo hacía el Codename del mod;
+  intercambiadas, las poses especiales de Saori salían al revés) y se compensa la doble inversión con
+  la que Codename la dibuja.
   En `camera_position` va el punto de cámara de Codename (centro del primer fotograma, ±100/150, camx
   y camy del XML y del escenario), que usa el escenario.
 

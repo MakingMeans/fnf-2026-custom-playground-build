@@ -239,6 +239,8 @@ class Main extends Sprite
 				{
 					initDirectLaunch();
 					states.OverworldState.reset();
+					// -shot: si la ventana arranca sin foco, flixel se pausaria y la captura no llegaria nunca
+					if (launchArgs.contains('-shot')) FlxG.autoPause = false;
 
 					// Como el juego normal (sin mundo o con el de por defecto): se sigue donde se dejo
 					// a BF. Pidiendo otro mundo concreto, o con -from, se empieza en ese mundo.

@@ -185,7 +185,9 @@ Elige uno de los que ya hay (`overworld/test_world/bg1`, `overworld/selector/wor
    desplegables del editor sin tener que recompilar. (Si prefieres recompilar, `run.bat` también lo copia.)
 
 El fondo se dibuja en 0,0 sin escalar: lo que manda el tamaño del mapa es el png. Un fondo tipo SNES
-son 256x224 px; con zoom 3 llena bien la pantalla.
+son 256x224 px; con zoom 3 llena bien la pantalla. Con **Repetir el fondo (mosaico)** el mapa mide lo
+que ocupan los nodos y los decorados (cada decorado con su tamaño real), redondeado a fondos
+enteros: un mapa de tiles pintado hasta el borde de 3x2 fondos de mar mide justo eso.
 
 ### Paso 1 — crear el mundo
 
@@ -637,9 +639,25 @@ copiar el JSON a `export/.../assets/shared/overworlds/`) para verlo en el juego.
 
 ## Mundo 1 (`world1`)
 
-El primer mundo real, según el boceto del usuario. Se abre con `tests\test-world1.bat`. De momento
-es el grafo sobre el mar (el arte con tiles vendrá después) y lo genera `tools/build_world1.py`: si
-se edita en el editor, no volver a ejecutar ese script.
+El primer mundo real, según el boceto del usuario. Se abre con `tests\test-world1.bat`. Lo genera
+entero (grafo y arte) `tools/build_world1.py` (necesita Pillow): si se edita en el editor, no volver
+a ejecutar ese script, porque sobrescribiría esos cambios. Con un nombre de archivo como argumento
+guarda una vista previa del mapa completo, y con `--dry-run` solo hace la vista previa.
+
+El mapa mide 768x496 (3x2 fondos de mar) y, como en el boceto, la isla y la meseta llegan al borde
+derecho y el puente al de arriba:
+
+- **Isla baja**: Inicio con la tubería encima, yararara, Bad Day en la esquina y Chaos en el cruce.
+- **Meseta**: se sube desde Chaos por una **escalera tallada** en el acantilado hasta Last Course;
+  sigue el castillo (World of Chaos, que se ve derrumbado al superarlo) y el camino hacia el este.
+- **Puente** de madera al norte, con Endless encima; sigue hacia el norte fuera del mapa.
+
+El script dibuja el mapa en un lienzo con las celdas de la hoja de SMW (las piezas de la isla
+piloto) y dibujos propios, y lo trocea en tiles de 8x8. Los que existen en `og_mario/overworld_tiles`
+usan ese atlas; los que no (puente, escalera, la roca del acantilado y una esquina) van a un atlas
+propio, `overworld/world1/tiles`, que también sale en la paleta del editor. Son unos 3400 tiles: en
+el juego, los decorados quietos se juntan en una sola imagen al cargar el mapa
+(`OverworldState.bakeStillSprites`), y en el editor siguen sueltos para poder editarlos.
 
 | Nodo | Qué es |
 |---|---|
@@ -664,7 +682,7 @@ Se lanzan desde `export/debug/windows/bin` (el juego busca `assets\` en su carpe
 
 | Argumentos | Qué hace |
 |---|---|
-| `-overworld <mundo> -shot` | Abre ese mapa, a los 3 s guarda una captura en `world_shot.png` junto al exe y se cierra. |
+| `-overworld <mundo> -shot` | Abre ese mapa, a los 3 s guarda una captura en `world_shot.png` junto al exe y se cierra. No guarda la posición de BF y no se pausa aunque la ventana arranque sin foco. |
 | `-check-worlds` | Revisa todos los mundos de la build (también la partida entera), escribe el resultado en `check_worlds.txt` junto al exe y se cierra. |
 | `-song <canción> -test` | Juega una canción entera en botplay con capturas; ver `docs/SONG_PORTS.md` y `tools/run_songtest.ps1`. |
 | `-overworld-editor test_graph -selftest` | Prueba los botones de unir mundos, el aspecto desde la paleta, deshacer (con progreso, tiles y submundos), pintar, grupos, el rectángulo, los avisos nuevos y los de la partida entera. Escribe `SELFTEST OK/FAIL` por consola (49 comprobaciones) y borra sus mundos `zz_*`. |
