@@ -97,7 +97,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 	var dragPointPath:OverworldPathFile = null;
 	var dragPointIndex:Int = -1;
 
-	// avisos de checkWorld marcados sobre el mapa
+	// avisos de checkWorld marcados sobre el mapa (sin los pendientes: ver pendingText)
 	var problems:Array<OverworldProblem> = [];
 	var problemsDirty:Bool = true;
 	var problemsTimer:Float = 0;
@@ -135,6 +135,15 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 
 	// al unir dos nodos que no estan alineados, el camino se hace en L
 	var lPaths:Bool = true;
+
+	// capas (pestana Capas, F2 / F3): GRAFO = nodos, caminos, puntos de curva y flechas; DIBUJO = tiles
+	// pintados y decorados. Bloqueada: el raton no la toca (no se elige, arrastra, crea ni borra nada de
+	// ella), asi se puede pintar sin llevarse un nodo o un camino por delante, y al reves. Oculta: no
+	// se ve, y tampoco se toca.
+	var graphLocked:Bool = false;
+	var graphHidden:Bool = false;
+	var drawLocked:Bool = false;
+	var drawHidden:Bool = false;
 
 	// progreso de los nodos que han desaparecido en esta sesion: deshacer se lo devuelve
 	var removedProgress:Map<String, Bool> = new Map<String, Bool>();
@@ -207,6 +216,9 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		bandSprite.visible = false;
 		add(bandSprite);
 
+		pasteGroup = new FlxTypedGroup<FlxSprite>(); // vista previa al pegar (CTRL+V)
+		add(pasteGroup);
+
 		paletteGroup = new FlxSpriteGroup();
 		paletteGroup.cameras = [camPalette];
 		add(paletteGroup);
@@ -230,7 +242,11 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			FlxG.sound.playMusic(Paths.music('freakyMenu'), 0.4);
 
 		#if debug // autoprueba de "unir mundos" (-selftest): crea mundos zz_*, los comprueba y los borra
-		if (Sys.args().contains('-selftest')) runSelfTest();
+		if (Sys.args().contains('-selftest'))
+		{
+			FlxG.autoPause = false; // sin foco seguiria dibujando: la captura del final no sale en negro
+			runSelfTest();
+		}
 		#end
 
 		super.create();
@@ -604,6 +620,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 	/** El camino que pasa a menos de 4 px del raton, o null. */
 	function pathUnderMouse(mouseX:Float, mouseY:Float):OverworldPathFile
 	{
+		if (graphBlocked()) return null;
 		var best:OverworldPathFile = null;
 		var bestDist:Float = 4;
 		for (pth in worldFile.paths)
@@ -667,6 +684,13 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			add(viewLabel);
 		}
 		viewLabel.setPosition(area[0] + 3, area[1] + 2);
+
+		// capa GRAFO oculta: solo queda el rectangulo de lo que se ve en el juego
+		if (graphHidden)
+		{
+			linesSprite.dirty = true;
+			return;
+		}
 
 		for (pth in worldFile.paths)
 		{
@@ -823,7 +847,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		worldList = OverworldData.listWorlds().copy();
 		if (worldList.length < 1) worldList = [''];
 
-		UI_box = new PsychUIBox(FlxG.width - 380, 10, 370, 600, ['Mundo', 'Nodo', 'Deco', 'Camino', 'Tiles']);
+		UI_box = new PsychUIBox(FlxG.width - 380, 10, 370, 600, ['Mundo', 'Nodo', 'Deco', 'Camino', 'Tiles', 'Capas']);
 		UI_box.cameras = [camHUD];
 		UI_box.scrollFactor.set();
 		add(UI_box);
@@ -833,6 +857,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		addDecorTab();
 		addPathTab();
 		addTilesTab();
+		addLayersTab();
 		UI_box.selectedName = 'Mundo';
 		collectDropDowns();
 		for (dropDown in dropDowns) dropDown.showDropDown(false);
@@ -849,6 +874,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		outputTxt.scrollFactor.set();
 		add(outputTxt);
 
+		buildActionBar();
 		buildHelp();
 	}
 
@@ -873,12 +899,20 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			+ 'L  modo enlazar: clic en el nodo que desbloquea y luego en los que abre. SHIFT+clic: los\n'
 			+ '   abre su salida secreta. Clic en un camino: ese camino solo se abre al completarlo\n'
 			+ '   (+SHIFT: con su salida secreta). Otro clic quita el enlace; L, V o ESC salen\n'
+			+ '   CTRL+clic en el mapa (modo T): cuentagotas, coge el tile de debajo para pintar con el\n'
 			+ 'P  paleta de tiles     CTRL+clic en la paleta: tile como aspecto del nodo (+SHIFT: completado)\n'
+			+ 'F2 bloquear la capa GRAFO (nodos y caminos)   F3 bloquear la capa DIBUJO (tiles y decorados)\n'
+			+ '   con SHIFT: ocultarla. Una capa bloqueada u oculta no se toca con el raton (pestana Capas)\n'
 			+ 'E  siguiente aviso     U  flechas de desbloqueo (rosa normal, amarillo secreta, naranja camino)\n'
 			+ 'G  rejilla             Rueda: zoom      Raton central / flechas: mover la camara\n\n'
 			+ 'Clic derecho          borrar lo que hay bajo el raton (sobre un punto de curva, ese punto)\n'
 			+ 'SUPR                  borrar la seleccion (o el grupo)\n'
 			+ 'CTRL+D                duplicar la seleccion (o el grupo, con sus caminos de dentro)\n'
+			+ 'CTRL+C / X / V        copiar / cortar / pegar: al pegar, la copia sigue al raton y cada\n'
+			+ '                      clic deja una (ESC termina). Se puede pegar en otro mundo\n'
+			+ 'M                     mover lo elegido con el raton (clic lo suelta, ESC lo devuelve)\n'
+			+ 'CTRL+flechas          mover lo elegido una casilla (+SHIFT: un pixel)\n'
+			+ 'Al elegir algo (V) sale encima la barra Mover / Copiar / Borrar\n'
 			+ 'ALT (mantener)        colocar sin ajustar a la rejilla\n'
 			+ 'CTRL+Z / CTRL+Y       deshacer / rehacer\n'
 			+ 'CTRL+S                guardar\n'
@@ -1010,7 +1044,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		y += 32;
 		tab.add(new PsychUIButton(x, y, 'Comprobar mundo', function()
 		{
-			if (reportProblems()) showOutput('Todo correcto: el mundo se puede recorrer entero.');
+			if (reportProblems()) showOutput('Todo correcto: el mundo se puede recorrer entero.' + pendingText());
 		}, 155));
 
 		y += 32;
@@ -1653,11 +1687,149 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			+ '- clic en un tile de la paleta para elegirlo\n'
 			+ '- clic (o arrastra) en el mapa para pintar\n'
 			+ '- clic derecho borra el tile de debajo\n'
+			+ '- CTRL+clic en el mapa = cuentagotas: coge el\n'
+			+ '  tile de debajo (con su tileset) para pintar con el\n'
 			+ '- rueda del raton sobre la paleta = scroll\n'
 			+ '- P oculta o muestra la paleta\n\n'
-			+ 'Cada tile pintado es un decorado normal:\n'
-			+ 'en modo V puedes seleccionarlo y retocarlo.', 11);
+			+ 'Cada tile pintado es un decorado normal: en\n'
+			+ 'modo V lo eliges y sale la barra Mover / Copiar /\n'
+			+ 'Borrar (y CTRL+C / CTRL+V, M, CTRL+flechas).\n'
+			+ 'Para no tocar nodos ni caminos al pintar,\n'
+			+ 'bloquea la capa GRAFO (pestana Capas, F2).', 11);
 		tab.add(tip);
+	}
+
+	// ------------------------------------------------------------------ capas
+	var graphLockCheck:PsychUICheckBox;
+	var graphHideCheck:PsychUICheckBox;
+	var drawLockCheck:PsychUICheckBox;
+	var drawHideCheck:PsychUICheckBox;
+
+	function addLayersTab()
+	{
+		var tab:FlxSpriteGroup = UI_box.getTab('Capas').menu;
+		var x:Int = 10;
+		var y:Int = 20;
+
+		label(tab, x, y - 17, 'GRAFO: nodos, caminos, puntos de curva y flechas');
+		graphLockCheck = new PsychUICheckBox(x, y, 'Bloquear (F2)', 140, function() setGraphLayer(graphLockCheck.checked, graphHidden));
+		tab.add(graphLockCheck);
+		graphHideCheck = new PsychUICheckBox(x + 170, y, 'Ocultar (SHIFT+F2)', 150, function() setGraphLayer(graphLocked, graphHideCheck.checked));
+		tab.add(graphHideCheck);
+
+		y += 56;
+		label(tab, x, y - 17, 'DIBUJO: tiles pintados y decorados');
+		drawLockCheck = new PsychUICheckBox(x, y, 'Bloquear (F3)', 140, function() setDrawLayer(drawLockCheck.checked, drawHidden));
+		tab.add(drawLockCheck);
+		drawHideCheck = new PsychUICheckBox(x + 170, y, 'Ocultar (SHIFT+F3)', 150, function() setDrawLayer(drawLocked, drawHideCheck.checked));
+		tab.add(drawHideCheck);
+
+		y += 46;
+		var tip:FlxText = new FlxText(x, y, 340,
+			'Una capa BLOQUEADA no se puede tocar con el raton:\n'
+			+ 'no se elige, arrastra, crea ni borra nada de ella\n'
+			+ '(tampoco con el rectangulo ni con el clic derecho).\n'
+			+ 'Una capa OCULTA no se ve y tampoco se toca.\n\n'
+			+ 'Ejemplos:\n'
+			+ '- pintando tiles: bloquea el GRAFO y no moveras ni\n'
+			+ '  borraras un nodo o un camino sin querer;\n'
+			+ '- moviendo nodos: bloquea el DIBUJO y no te llevaras\n'
+			+ '  un tile al arrastrar;\n'
+			+ '- oculta el GRAFO para ver los tiles que tapan\n'
+			+ '  los nodos y caminos (el rectangulo de lo que se ve\n'
+			+ '  en el juego sigue).\n\n'
+			+ 'Las capas no se guardan con el mundo: al abrir el\n'
+			+ 'editor estan las dos desbloqueadas y visibles.', 11);
+		tab.add(tip);
+	}
+
+	inline function graphBlocked():Bool
+		return graphLocked || graphHidden;
+
+	inline function drawBlocked():Bool
+		return drawLocked || drawHidden;
+
+	/** Cambia la capa GRAFO: lo que tuviera elegido de ella se suelta (ya no se puede tocar). */
+	function setGraphLayer(locked:Bool, hidden:Bool)
+	{
+		var redraw:Bool = hidden != graphHidden;
+		graphLocked = locked;
+		graphHidden = hidden;
+		if (graphBlocked())
+		{
+			endMouseGestures();
+			pathStart = null;
+			linkStart = null;
+			dragPointPath = null;
+			selectedNode = null;
+			selectedPath = null;
+			if (groupNodes.length > 0)
+			{
+				groupNodes = [];
+				normalizeGroup();
+			}
+			if (selectedSprite == null && hasGroup()) selectedSprite = groupSprites[0];
+			updateUI();
+		}
+		if (redraw) reloadMap(true); // los caminos y las flechas se dibujan (o no) en el lienzo de lineas
+		applyLayerVisibility();
+		updateSelectionBox();
+		syncLayerChecks();
+	}
+
+	/** Cambia la capa DIBUJO: lo que tuviera elegido de ella se suelta. */
+	function setDrawLayer(locked:Bool, hidden:Bool)
+	{
+		drawLocked = locked;
+		drawHidden = hidden;
+		if (drawBlocked())
+		{
+			endMouseGestures();
+			selectedSprite = null;
+			if (groupSprites.length > 0)
+			{
+				groupSprites = [];
+				normalizeGroup();
+			}
+			if (selectedNode == null && hasGroup()) selectedNode = groupNodes[0];
+			updateUI();
+		}
+		applyLayerVisibility();
+		updateSelectionBox();
+		syncLayerChecks();
+	}
+
+	function applyLayerVisibility()
+	{
+		nodesGroup.visible = labelsGroup.visible = dotsGroup.visible = problemGroup.visible = !graphHidden;
+		spritesBack.visible = spritesFront.visible = !drawHidden;
+	}
+
+	function syncLayerChecks()
+	{
+		if (graphLockCheck == null) return;
+		graphLockCheck.checked = graphLocked;
+		graphHideCheck.checked = graphHidden;
+		drawLockCheck.checked = drawLocked;
+		drawHideCheck.checked = drawHidden;
+	}
+
+	/** Para el texto de arriba: como estan las capas (nada si estan normales). */
+	function layerStatus():String
+	{
+		var parts:Array<String> = [];
+		if (graphHidden) parts.push('GRAFO oculto');
+		else if (graphLocked) parts.push('GRAFO bloqueado');
+		if (drawHidden) parts.push('DIBUJO oculto');
+		else if (drawLocked) parts.push('DIBUJO bloqueado');
+		return parts.length > 0 ? '  |  ' + parts.join(', ') : '';
+	}
+
+	/** Aviso al intentar tocar una capa bloqueada u oculta. */
+	function warnLayer(graph:Bool)
+	{
+		if (graph) showOutput('La capa GRAFO (nodos y caminos) esta bloqueada u oculta: cambialo en la pestana Capas o con F2', true);
+		else showOutput('La capa DIBUJO (tiles y decorados) esta bloqueada u oculta: cambialo en la pestana Capas o con F3', true);
 	}
 
 	// --------------------------------------------- listas de sprites por categoria
@@ -1715,6 +1887,16 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 	inline function checkWorld():Array<String>
 		return OverworldData.checkWorld(worldFile, worldName);
 
+	/** Los warps y salidas hacia mundos por hacer, para anadirlos a un mensaje ('' si no hay). */
+	function pendingText():String
+	{
+		var notes:Array<String> = OverworldData.pendingWorlds(worldFile, worldName);
+		if (notes.length < 1) return '';
+		var shown:Array<String> = notes.slice(0, 2);
+		if (notes.length > 2) shown.push('(+${notes.length - 2} mas)');
+		return '\nPendiente (no es un fallo):\n' + shown.join('\n');
+	}
+
 	function reportProblems():Bool
 	{
 		var problems:Array<String> = checkWorld();
@@ -1755,6 +1937,9 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		// el progreso apartado es de los nodos de este mundo: en otro mundo se devolveria a quien no es
 		removedProgress.clear();
 		clearGroup();
+		// lo que se movia era del otro mundo (el portapapeles si se queda: se puede pegar en este)
+		carrying = false;
+		carryBefore = null;
 		undoStack = [];
 		redoStack = [];
 		lastUITarget = null;
@@ -2237,12 +2422,76 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			return;
 		}
 
-		paletteSelected = index;
-		paletteCursor.visible = true;
-		paletteCursor.setPosition(col * paletteCell, row * paletteCell);
-
+		selectPaletteTile(index);
 		curMode = MODE_TILE;
 		showOutput('Tile ${paletteFrames[index]} (${index + 1}/${paletteFrames.length}) elegido. Clic en el mapa para pintar.');
+	}
+
+	/** El tile `index` de la paleta pasa a ser el del pincel (con su recuadro en la paleta). */
+	function selectPaletteTile(index:Int)
+	{
+		paletteSelected = index;
+		paletteCursor.visible = true;
+		paletteCursor.setPosition((index % paletteColumns) * paletteCell, Std.int(index / paletteColumns) * paletteCell);
+	}
+
+	/**
+	 * Cuentagotas (CTRL+clic en el mapa en modo T): el tile pintado que hay debajo del raton (el de
+	 * mas arriba: primero los de delante de BF) pasa a ser el del pincel, con su tileset (cambia la
+	 * paleta si hace falta) y su capa (por delante o por detras de BF). Solo mira; no cambia el mundo.
+	 */
+	function pickTileUnderMouse(mouseX:Float, mouseY:Float):Bool
+	{
+		if (drawHidden)
+		{
+			warnLayer(false);
+			return false;
+		}
+
+		var picked:OverworldSpriteFile = null;
+		var locals:Array<Int> = decorLocalIndices();
+		for (front in [true, false])
+		{
+			var group = front ? spritesFront : spritesBack;
+			var index:Int = worldFile.sprites.length - 1;
+			while (index >= 0 && picked == null)
+			{
+				var data:OverworldSpriteFile = worldFile.sprites[index];
+				if (data.front == front && isPaintedTile(data) && locals[index] < group.length)
+				{
+					var spr:FlxSprite = group.members[locals[index]];
+					if (mouseX >= spr.x && mouseX < spr.x + spr.width && mouseY >= spr.y && mouseY < spr.y + spr.height) picked = data;
+				}
+				index--;
+			}
+			if (picked != null) break;
+		}
+		if (picked == null)
+		{
+			showOutput('Cuentagotas: ahi no hay ningun tile pintado', true);
+			return false;
+		}
+
+		if (picked.image != paletteImage)
+		{
+			if (tilesetDropDown != null) tilesetDropDown.selectedLabel = picked.image;
+			buildPalette(picked.image);
+		}
+		var index:Int = paletteFrames.indexOf(picked.anim);
+		if (index < 0)
+		{
+			showOutput('Cuentagotas: "${picked.anim}" no esta en el tileset ${picked.image}', true);
+			return false;
+		}
+
+		selectPaletteTile(index);
+		paintFront = picked.front;
+		if (paintFrontCheck != null) paintFrontCheck.checked = picked.front;
+		// que se vea en la paleta
+		var row:Int = Std.int(index / paletteColumns);
+		camPalette.scroll.y = Math.max(0, Math.min(paletteScrollMax, row * paletteCell - camPalette.height * 0.5));
+		showOutput('Cuentagotas: ${picked.anim} de ${picked.image}' + (picked.front ? ' (por delante de BF)' : '') + '. Clic para pintar con el');
+		return true;
 	}
 
 	/**
@@ -2585,6 +2834,9 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		modeTxt.text = 'Mundo: $worldName  |  Modo: ${MODE_NAMES[curMode]}  |  F1 = ayuda'
 			+ (problems.length > 0 ? '  |  ${problems.length} avisos (E)' : '')
 			+ (hasGroup() ? '  |  grupo: ${groupNodes.length} nodos, ${groupSprites.length} deco' : '')
+			+ layerStatus()
+			+ (pasting ? '  |  PEGANDO (ESC termina)' : '')
+			+ (carrying ? '  |  MOVIENDO (clic suelta, ESC cancela)' : '')
 			+ (unsavedProgress ? '  |  * sin guardar' : '');
 
 		if (helpBg.visible)
@@ -2613,15 +2865,36 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		}
 
 		updateSelectionBox();
+		updateActionBar();
 	}
 
 	function updateKeys(elapsed:Float)
 	{
 		if (FlxG.keys.pressed.CONTROL)
 		{
+			// moviendo algo con el raton, cualquier atajo lo devuelve antes a su sitio
+			var keys = FlxG.keys.justPressed;
+			if (carrying && (keys.Z || keys.Y || keys.S || keys.T || keys.D || keys.C || keys.X || keys.V)) finishCarry(false);
+
+			if (FlxG.keys.justPressed.C) copySelection();
+			if (FlxG.keys.justPressed.X) copySelection(true);
+			if (FlxG.keys.justPressed.V) startPaste();
+
+			// CTRL+flechas: mover lo elegido una casilla (con SHIFT, un pixel)
+			var step:Float = FlxG.keys.pressed.SHIFT ? 1 : Math.max(1, worldFile.gridSize);
+			if (FlxG.keys.justPressed.LEFT) nudgeSelection(-step, 0);
+			if (FlxG.keys.justPressed.RIGHT) nudgeSelection(step, 0);
+			if (FlxG.keys.justPressed.UP) nudgeSelection(0, -step);
+			if (FlxG.keys.justPressed.DOWN) nudgeSelection(0, step);
+
 			if (FlxG.keys.justPressed.S) saveWorld();
 			if (FlxG.keys.justPressed.T) testWorld(FlxG.keys.pressed.SHIFT);
-			if (FlxG.keys.justPressed.D) duplicateSelection();
+			if (FlxG.keys.justPressed.D)
+			{
+				if (selectedNode != null && graphBlocked()) warnLayer(true);
+				else if (selectedSprite != null && drawBlocked()) warnLayer(false);
+				else duplicateSelection();
+			}
 			if (FlxG.keys.justPressed.Z) FlxG.keys.pressed.SHIFT ? redo() : undo();
 			if (FlxG.keys.justPressed.Y) redo();
 			return;
@@ -2629,7 +2902,18 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 		if (FlxG.keys.justPressed.ESCAPE)
 		{
-			// ESC primero suelta el grupo
+			// ESC primero termina de pegar o de mover
+			if (pasting)
+			{
+				stopPaste();
+				return;
+			}
+			if (carrying)
+			{
+				finishCarry(false);
+				return;
+			}
+			// luego suelta el grupo
 			if (hasGroup())
 			{
 				clearGroup();
@@ -2661,12 +2945,18 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		// L hace de interruptor: pulsarla otra vez vuelve a SELECCIONAR
 		if (FlxG.keys.justPressed.L) curMode = (prevMode == MODE_LINK) ? MODE_SELECT : MODE_LINK;
 
+		// M: mover lo elegido con el raton (como el boton Mover)
+		if (FlxG.keys.justPressed.M && !carrying) startCarry();
+
 		if (curMode != prevMode)
 		{
-			// un enlace, un camino o un rectangulo a medias no sobrevive a un cambio de modo
+			// un enlace, un camino o un rectangulo a medias no sobrevive a un cambio de modo; pegar
+			// tampoco, y lo que se estaba moviendo vuelve a su sitio
 			linkStart = null;
 			pathStart = null;
 			cancelBand();
+			stopPaste();
+			finishCarry(false);
 
 			if (curMode == MODE_LINK)
 			{
@@ -2701,11 +2991,21 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			showOutput(showUnlocks ? 'Flechas de desbloqueo visibles' : 'Flechas de desbloqueo ocultas');
 		}
 
-		if (FlxG.keys.justPressed.DELETE)
+		// un nodo se puede elegir desde las pestanas o con E aunque su capa este bloqueada: avisa
+		if (FlxG.keys.justPressed.DELETE && !carrying) deleteSelection();
+
+		// capas: F2 = bloquear el GRAFO, F3 = bloquear el DIBUJO; con SHIFT, ocultarlos
+		if (FlxG.keys.justPressed.F2)
 		{
-			if (hasGroup()) deleteGroup();
-			else if (selectedNode != null) deleteSelectedNode();
-			else if (selectedSprite != null) deleteSelectedSprite();
+			if (FlxG.keys.pressed.SHIFT) setGraphLayer(graphLocked, !graphHidden);
+			else setGraphLayer(!graphLocked, graphHidden);
+			showOutput('Capa GRAFO (nodos y caminos): ' + (graphHidden ? 'oculta' : (graphLocked ? 'bloqueada' : 'normal')));
+		}
+		if (FlxG.keys.justPressed.F3)
+		{
+			if (FlxG.keys.pressed.SHIFT) setDrawLayer(drawLocked, !drawHidden);
+			else setDrawLayer(!drawLocked, drawHidden);
+			showOutput('Capa DIBUJO (tiles y decorados): ' + (drawHidden ? 'oculta' : (drawLocked ? 'bloqueada' : 'normal')));
 		}
 
 		var speed:Float = 320 * elapsed / camGame.zoom;
@@ -2745,10 +3045,32 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			return;
 		}
 
+		// los botones de la barra (Mover / Copiar / Borrar) se encargan de su clic
+		if (mouseOnActionBar()) return;
+
 		var mouse = FlxG.mouse.getWorldPosition(camGame);
 		var mouseX:Float = mouse.x;
 		var mouseY:Float = mouse.y;
 		mouse.put();
+
+		// pegando (CTRL+V): la copia sigue al raton; clic = pegar una, clic derecho = terminar
+		if (pasting)
+		{
+			var target:Array<Float> = cellAt(mouseX, mouseY);
+			positionPastePreview(target);
+			if (FlxG.mouse.justPressed) pasteAt(target);
+			else if (FlxG.mouse.justPressedRight) stopPaste();
+			return;
+		}
+
+		// moviendo (M): lo elegido sigue al raton; clic = soltarlo, clic derecho = devolverlo
+		if (carrying)
+		{
+			carryTo(cellAt(mouseX, mouseY));
+			if (FlxG.mouse.justPressed) finishCarry(true);
+			else if (FlxG.mouse.justPressedRight) finishCarry(false);
+			return;
+		}
 
 		if (FlxG.mouse.justPressedRight)
 		{
@@ -2764,6 +3086,11 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			if ((curMode == MODE_SELECT || curMode == MODE_PATH) && deletePointUnderMouse(mouseX, mouseY)) return;
 
 			// pintando, el clic derecho es la goma: no debe cargarse un nodo sin querer
+			if (curMode == MODE_TILE && drawBlocked())
+			{
+				warnLayer(false);
+				return;
+			}
 			deleteUnderMouse(mouseX, mouseY, curMode != MODE_TILE);
 			return;
 		}
@@ -2771,6 +3098,17 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		// pintar tiles: continuo mientras se arrastra
 		if (curMode == MODE_TILE && FlxG.mouse.pressed)
 		{
+			// CTRL+clic: cuentagotas (coge el tile de debajo), nunca pinta
+			if (FlxG.keys.pressed.CONTROL)
+			{
+				if (FlxG.mouse.justPressed) pickTileUnderMouse(mouseX, mouseY);
+				return;
+			}
+			if (drawBlocked())
+			{
+				if (FlxG.mouse.justPressed) warnLayer(false);
+				return;
+			}
 			// el paso de deshacer se guarda al pintar la primera casilla que cambia: un clic sobre
 			// lo mismo (o sin tile elegido) no debe gastar un paso ni borrar el rehacer
 			if (FlxG.mouse.justPressed) strokeUndoPending = true;
@@ -2884,16 +3222,20 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		switch (curMode)
 		{
 			case MODE_NODE:
-				createNode(snap(mouseX), snap(mouseY));
+				if (graphBlocked()) warnLayer(true);
+				else createNode(snap(mouseX), snap(mouseY));
 
 			case MODE_DECOR:
-				createDecor(snap(mouseX), snap(mouseY));
+				if (drawBlocked()) warnLayer(false);
+				else createDecor(snap(mouseX), snap(mouseY));
 
 			case MODE_PATH:
-				handlePathClick(mouseX, mouseY);
+				if (graphBlocked()) warnLayer(true);
+				else handlePathClick(mouseX, mouseY);
 
 			case MODE_LINK:
-				handleLinkClick(mouseX, mouseY);
+				if (graphBlocked()) warnLayer(true);
+				else handleLinkClick(mouseX, mouseY);
 
 			default:
 				selectUnderMouse(mouseX, mouseY, true);
@@ -2911,6 +3253,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 	function nodeUnderMouse(mouseX:Float, mouseY:Float):OverworldNodeFile
 	{
+		if (graphBlocked()) return null; // capa GRAFO bloqueada u oculta: el raton no la toca
 		var best:OverworldNodeFile = null;
 		var bestDist:Float = 9999;
 
@@ -2979,6 +3322,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 	function spriteUnderMouse(mouseX:Float, mouseY:Float):OverworldSpriteFile
 	{
+		if (drawBlocked()) return null; // capa DIBUJO bloqueada u oculta: el raton no la toca
 		var locals:Array<Int> = decorLocalIndices();
 		var index:Int = worldFile.sprites.length - 1;
 		while (index >= 0)
@@ -3175,8 +3519,10 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			else if (selectedSprite != null) groupSprites.push(selectedSprite);
 		}
 
-		for (node in worldFile.nodes)
-			if (inside(node.x, node.y) && !groupNodes.contains(node)) groupNodes.push(node);
+		// lo de una capa bloqueada u oculta no entra en el rectangulo
+		if (!graphBlocked())
+			for (node in worldFile.nodes)
+				if (inside(node.x, node.y) && !groupNodes.contains(node)) groupNodes.push(node);
 
 		var already:haxe.ds.ObjectMap<Dynamic, Bool> = new haxe.ds.ObjectMap<Dynamic, Bool>();
 		for (data in groupSprites) already.set(data, true);
@@ -3184,6 +3530,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		var back:Int = 0;
 		for (data in worldFile.sprites)
 		{
+			if (drawBlocked()) break;
 			var local:Int = data.front ? front++ : back++;
 			var group = data.front ? spritesFront : spritesBack;
 			if (local >= group.length || already.exists(data)) continue;
@@ -3342,8 +3689,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 	 */
 	function duplicateSelection()
 	{
-		var nodes:Array<OverworldNodeFile> = hasGroup() ? groupNodes.copy() : (selectedNode != null ? [selectedNode] : []);
-		var sprites:Array<OverworldSpriteFile> = hasGroup() ? groupSprites.copy() : (selectedSprite != null ? [selectedSprite] : []);
+		var nodes:Array<OverworldNodeFile> = selectionNodes();
+		var sprites:Array<OverworldSpriteFile> = selectionSprites();
 		if (nodes.length + sprites.length < 1)
 		{
 			showOutput('Elige antes algo para duplicar (o haz un grupo con SHIFT+clic o un rectangulo)', true);
@@ -3352,17 +3699,47 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 		pushUndo();
 		var offset:Float = Math.max(8, worldFile.gridSize);
+		placeCopies(nodes, pathsBetween(nodes), sprites, offset, offset);
+		showOutput('Duplicados ${nodes.length} nodos y ${sprites.length} decorados');
+	}
+
+	inline function hasSelection():Bool
+		return selectedNode != null || selectedSprite != null || hasGroup();
+
+	function selectionNodes():Array<OverworldNodeFile>
+		return hasGroup() ? groupNodes.copy() : (selectedNode != null ? [selectedNode] : []);
+
+	function selectionSprites():Array<OverworldSpriteFile>
+		return hasGroup() ? groupSprites.copy() : (selectedSprite != null ? [selectedSprite] : []);
+
+	/** Los caminos que van de un nodo de la lista a otro de la lista. */
+	function pathsBetween(nodes:Array<OverworldNodeFile>):Array<OverworldPathFile>
+	{
+		var ids:Map<String, Bool> = new Map<String, Bool>();
+		for (node in nodes) ids.set(node.id, true);
+		return [for (pth in worldFile.paths) if (ids.exists(pth.a) && ids.exists(pth.b)) pth];
+	}
+
+	/** Copia independiente (nada compartido: ni las listas de desbloqueos ni los puntos de curva). */
+	static inline function deepCopy<T>(value:T):T
+		return haxe.Json.parse(haxe.Json.stringify(value));
+
+	/**
+	 * Mete en el mundo copias de estos nodos (con los caminos de `paths` que van entre ellos) y de
+	 * estos decorados, desplazadas (dx, dy), y las deja elegidas. Los nodos copiados llevan IDs nuevos,
+	 * y los caminos y desbloqueos entre ellos apuntan a las copias. Sin paso de deshacer.
+	 */
+	function placeCopies(nodes:Array<OverworldNodeFile>, paths:Array<OverworldPathFile>, sprites:Array<OverworldSpriteFile>, dx:Float, dy:Float)
+	{
 		var idMap:Map<String, String> = new Map<String, String>();
 		var newNodes:Array<OverworldNodeFile> = [];
 		for (node in nodes)
 		{
-			var copy:OverworldNodeFile = Reflect.copy(node);
-			copy.unlocks = node.unlocks.copy();
-			copy.secretUnlocks = node.secretUnlocks.copy();
+			var copy:OverworldNodeFile = deepCopy(node);
 			var base:String = ~/[0-9]+$/.replace(node.id, '');
 			copy.id = OverworldData.uniqueNodeId(worldFile, base.length > 0 ? base : 'node');
-			copy.x += offset;
-			copy.y += offset;
+			copy.x += dx;
+			copy.y += dy;
 			idMap.set(node.id, copy.id);
 			worldFile.nodes.push(copy);
 			OverworldData.clearStaleProgress(worldName, copy.id);
@@ -3377,13 +3754,13 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			copy.unlocks = [for (id in copy.unlocks) remap(id)];
 			copy.secretUnlocks = [for (id in copy.secretUnlocks) remap(id)];
 		}
-		for (pth in worldFile.paths.copy())
+		for (pth in paths)
 		{
 			if (!idMap.exists(pth.a) || !idMap.exists(pth.b)) continue;
-			var copy:OverworldPathFile = Reflect.copy(pth);
+			var copy:OverworldPathFile = deepCopy(pth);
 			copy.a = idMap.get(pth.a);
 			copy.b = idMap.get(pth.b);
-			copy.points = [for (point in pth.points) [point[0] + offset, point[1] + offset]];
+			copy.points = [for (point in pth.points) [point[0] + dx, point[1] + dy]];
 			if (copy.unlockedBy != null && copy.unlockedBy.length > 0) copy.unlockedBy = remap(copy.unlockedBy);
 			worldFile.paths.push(copy);
 		}
@@ -3391,9 +3768,9 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		var newSprites:Array<OverworldSpriteFile> = [];
 		for (data in sprites)
 		{
-			var copy:OverworldSpriteFile = Reflect.copy(data);
-			copy.x += offset;
-			copy.y += offset;
+			var copy:OverworldSpriteFile = deepCopy(data);
+			copy.x += dx;
+			copy.y += dy;
 			worldFile.sprites.push(copy);
 			addDecorSprite(copy); // al final de su grupo, igual que en worldFile.sprites
 			newSprites.push(copy);
@@ -3409,7 +3786,338 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		updateUI();
 		refreshGroupBoxes();
 		updateSelectionBox();
-		showOutput('Duplicados ${newNodes.length} nodos y ${newSprites.length} decorados');
+	}
+
+	/** Si lo elegido es de una capa bloqueada u oculta, avisa y devuelve false. */
+	function canTouchSelection():Bool
+	{
+		if (selectionNodes().length > 0 && graphBlocked())
+		{
+			warnLayer(true);
+			return false;
+		}
+		if (selectionSprites().length > 0 && drawBlocked())
+		{
+			warnLayer(false);
+			return false;
+		}
+		return true;
+	}
+
+	/** Esquina de arriba a la izquierda de unos nodos (su centro) y decorados (su esquina). */
+	static function anchorOf(nodes:Array<OverworldNodeFile>, sprites:Array<OverworldSpriteFile>):Array<Float>
+	{
+		var x:Float = Math.POSITIVE_INFINITY;
+		var y:Float = Math.POSITIVE_INFINITY;
+		for (node in nodes)
+		{
+			x = Math.min(x, node.x);
+			y = Math.min(y, node.y);
+		}
+		for (data in sprites)
+		{
+			x = Math.min(x, data.x);
+			y = Math.min(y, data.y);
+		}
+		return [x, y];
+	}
+
+	/** La casilla de la rejilla bajo el raton (su esquina); con ALT, el pixel exacto. */
+	function cellAt(mouseX:Float, mouseY:Float):Array<Float>
+	{
+		var grid:Int = worldFile.gridSize;
+		if (FlxG.keys.pressed.ALT || grid < 2) return [Math.round(mouseX), Math.round(mouseY)];
+		return [Math.floor(mouseX / grid) * grid, Math.floor(mouseY / grid) * grid];
+	}
+
+	/** Mueve lo elegido (o el grupo) sin paso de deshacer. */
+	function moveSelectionBy(dx:Float, dy:Float)
+	{
+		if (dx == 0 && dy == 0) return;
+		if (hasGroup())
+		{
+			var previous = groupDragSprites;
+			groupDragSprites = decorSpriteMap(groupSprites);
+			moveGroupBy(dx, dy);
+			groupDragSprites = previous;
+		}
+		else if (selectedNode != null)
+		{
+			moveNodeTo(selectedNode, selectedNode.x + dx, selectedNode.y + dy);
+			nodeXStepper.value = selectedNode.x;
+			nodeYStepper.value = selectedNode.y;
+			reloadMap(true);
+		}
+		else if (selectedSprite != null)
+		{
+			selectedSprite.x += dx;
+			selectedSprite.y += dy;
+			decorXStepper.value = selectedSprite.x;
+			decorYStepper.value = selectedSprite.y;
+			moveDecorSprite(selectedSprite);
+		}
+		unsavedProgress = true;
+		updateSelectionBox();
+	}
+
+	// ------------------------------------------------------- ajuste fino con el teclado
+	var lastNudgeTime:Float = -999;
+
+	/** CTRL+flechas: mueve lo elegido una casilla (con SHIFT, un pixel). Toques seguidos = un paso de deshacer. */
+	function nudgeSelection(dx:Float, dy:Float)
+	{
+		if (!hasSelection())
+		{
+			showOutput('CTRL+flechas mueve lo elegido: elige antes algo (V)', true);
+			return;
+		}
+		if (!canTouchSelection()) return;
+		var now:Float = haxe.Timer.stamp();
+		if (now - lastNudgeTime > UI_EDIT_GAP) pushUndo();
+		lastNudgeTime = now;
+		moveSelectionBy(dx, dy);
+	}
+
+	// ------------------------------------------------------- mover (M): lo elegido sigue al raton
+	var carrying:Bool = false;
+	var carryBefore:String = null;
+	var carryAnchor:Array<Float> = null;
+	var carryStartAnchor:Array<Float> = null;
+
+	function startCarry()
+	{
+		if (!hasSelection())
+		{
+			showOutput('Elige antes algo para moverlo (V)', true);
+			return;
+		}
+		if (!canTouchSelection()) return;
+		stopPaste();
+		endMouseGestures();
+		carrying = true;
+		carryBefore = snapshot();
+		carryAnchor = anchorOf(selectionNodes(), selectionSprites());
+		carryStartAnchor = carryAnchor.copy();
+		showOutput('MOVER: lo elegido sigue al raton. Clic para soltarlo; ESC o clic derecho lo dejan donde estaba');
+	}
+
+	/** Lleva lo que se esta moviendo a la casilla `target` (su esquina de arriba a la izquierda). */
+	function carryTo(target:Array<Float>)
+	{
+		if (!hasSelection()) // se ha soltado lo elegido por otro lado (deshacer, otro mundo...)
+		{
+			carrying = false;
+			return;
+		}
+		var dx:Float = target[0] - carryAnchor[0];
+		var dy:Float = target[1] - carryAnchor[1];
+		if (dx == 0 && dy == 0) return;
+		moveSelectionBy(dx, dy);
+		carryAnchor = [target[0], target[1]];
+	}
+
+	/** Suelta lo que se esta moviendo (`keep`) o lo devuelve a su sitio. */
+	function finishCarry(keep:Bool)
+	{
+		if (!carrying) return;
+		carrying = false;
+		var moved:Bool = carryAnchor[0] != carryStartAnchor[0] || carryAnchor[1] != carryStartAnchor[1];
+		if (!keep) carryTo(carryStartAnchor);
+		else if (moved) pushUndo(carryBefore);
+		carryBefore = null;
+		showOutput(keep ? (moved ? 'Movido (CTRL+Z para deshacerlo)' : 'Sin mover') : 'Movimiento cancelado');
+	}
+
+	// ------------------------------------------------------- copiar / cortar / pegar
+	// portapapeles: copias independientes del mundo, que se pegan donde este el raton
+	var clipNodes:Array<OverworldNodeFile> = [];
+	var clipPaths:Array<OverworldPathFile> = [];
+	var clipSprites:Array<OverworldSpriteFile> = [];
+	var clipAnchor:Array<Float> = [0, 0];
+	var pasting:Bool = false;
+	var pasteGroup:FlxTypedGroup<FlxSprite>;
+	var pasteOffsets:Array<Array<Float>> = [];
+
+	/** CTRL+C (y CTRL+X con `cut`): lo elegido (o el grupo) va al portapapeles. */
+	function copySelection(cut:Bool = false):Bool
+	{
+		var nodes:Array<OverworldNodeFile> = selectionNodes();
+		var sprites:Array<OverworldSpriteFile> = selectionSprites();
+		if (nodes.length + sprites.length < 1)
+		{
+			showOutput('Elige antes algo para ${cut ? "cortar" : "copiar"} (o haz un grupo con SHIFT+clic o un rectangulo)', true);
+			return false;
+		}
+		if (!canTouchSelection()) return false;
+
+		clipNodes = [for (node in nodes) deepCopy(node)];
+		clipPaths = [for (pth in pathsBetween(nodes)) deepCopy(pth)];
+		clipSprites = [for (data in sprites) deepCopy(data)];
+		clipAnchor = anchorOf(clipNodes, clipSprites);
+
+		if (cut)
+		{
+			if (hasGroup()) deleteGroup();
+			else if (selectedNode != null) deleteSelectedNode();
+			else deleteSelectedSprite();
+		}
+		showOutput('${cut ? "Cortados" : "Copiados"} ${clipNodes.length} nodos y ${clipSprites.length} decorados: CTRL+V para pegarlos donde quieras');
+		return true;
+	}
+
+	/** CTRL+V: la copia sigue al raton; cada clic pega una (se puede pegar varias veces). */
+	function startPaste()
+	{
+		if (clipNodes.length + clipSprites.length < 1)
+		{
+			showOutput('No hay nada copiado: elige algo y pulsa CTRL+C (o el boton Copiar)', true);
+			return;
+		}
+		if (clipNodes.length > 0 && graphBlocked())
+		{
+			warnLayer(true);
+			return;
+		}
+		if (clipSprites.length > 0 && drawBlocked())
+		{
+			warnLayer(false);
+			return;
+		}
+		if (carrying) finishCarry(true);
+		endMouseGestures();
+		curMode = MODE_SELECT;
+		pasting = true;
+		buildPastePreview();
+		showOutput('PEGAR: clic para pegar una copia (puedes pegar varias); ESC o clic derecho para terminar');
+	}
+
+	function stopPaste()
+	{
+		if (!pasting) return;
+		pasting = false;
+		clearPastePreview();
+		showOutput('Pegado terminado');
+	}
+
+	/** Pega el portapapeles con su esquina de arriba a la izquierda en `target`. */
+	function pasteAt(target:Array<Float>)
+	{
+		pushUndo();
+		placeCopies(clipNodes, clipPaths, clipSprites, target[0] - clipAnchor[0], target[1] - clipAnchor[1]);
+		showOutput('Pegados ${clipNodes.length} nodos y ${clipSprites.length} decorados (clic para otra copia, ESC para terminar)');
+	}
+
+	/** Vista previa semitransparente de lo copiado, que sigue al raton. */
+	function buildPastePreview()
+	{
+		clearPastePreview();
+		for (data in clipSprites)
+		{
+			var spr:FlxSprite = buildDecorSprite(data);
+			spr.alpha *= 0.55;
+			pasteGroup.add(spr);
+			pasteOffsets.push([data.x - clipAnchor[0], data.y - clipAnchor[1]]);
+		}
+		for (node in clipNodes)
+		{
+			var spr:FlxSprite = OverworldState.buildSprite(node.image, node.anim, node.fps);
+			spr.alpha = 0.55;
+			pasteGroup.add(spr);
+			pasteOffsets.push([node.x - spr.width * 0.5 - clipAnchor[0], node.y - spr.height * 0.5 - clipAnchor[1]]);
+		}
+	}
+
+	function clearPastePreview()
+	{
+		pasteGroup.forEachAlive(function(spr:FlxSprite) spr.destroy());
+		pasteGroup.clear();
+		pasteOffsets = [];
+	}
+
+	function positionPastePreview(target:Array<Float>)
+	{
+		for (i in 0...pasteGroup.length)
+			pasteGroup.members[i].setPosition(target[0] + pasteOffsets[i][0], target[1] + pasteOffsets[i][1]);
+	}
+
+	// ------------------------------------------------------- barra de acciones (Mover / Copiar / Borrar)
+	var actionBar:FlxSpriteGroup;
+	static inline final ACTION_BAR_WIDTH:Int = 206;
+
+	function buildActionBar()
+	{
+		actionBar = new FlxSpriteGroup();
+		actionBar.add(new PsychUIButton(0, 0, 'Mover (M)', function() startCarry(), 66));
+		actionBar.add(new PsychUIButton(70, 0, 'Copiar', function() if (copySelection()) startPaste(), 66));
+		actionBar.add(new PsychUIButton(140, 0, 'Borrar', function() deleteSelection(), 66));
+		actionBar.cameras = [camHUD];
+		actionBar.scrollFactor.set();
+		actionBar.visible = false;
+		add(actionBar);
+	}
+
+	/** SUPR / boton Borrar: borra lo elegido o el grupo (si su capa se puede tocar). */
+	function deleteSelection()
+	{
+		if (!hasSelection()) return;
+		if (!canTouchSelection()) return;
+		if (hasGroup()) deleteGroup();
+		else if (selectedNode != null) deleteSelectedNode();
+		else if (selectedSprite != null) deleteSelectedSprite();
+	}
+
+	inline function mouseOnActionBar():Bool
+		return actionBar != null && actionBar.visible && FlxG.mouse.overlaps(actionBar, camHUD);
+
+	/** Rectangulo (en el mapa) de lo elegido: [izquierda, arriba, derecha, abajo], o null. */
+	function selectionBounds():Array<Float>
+	{
+		var bounds:Array<Float> = null;
+		function grow(left:Float, top:Float, right:Float, bottom:Float)
+		{
+			if (bounds == null) bounds = [left, top, right, bottom];
+			else bounds = [Math.min(bounds[0], left), Math.min(bounds[1], top), Math.max(bounds[2], right), Math.max(bounds[3], bottom)];
+		}
+		for (node in selectionNodes())
+		{
+			var index:Int = worldFile.nodes.indexOf(node);
+			var spr:FlxSprite = index > -1 && index < nodesGroup.length ? nodesGroup.members[index] : null;
+			if (spr != null) grow(spr.x, spr.y, spr.x + spr.width, spr.y + spr.height);
+			else grow(node.x - 8, node.y - 8, node.x + 8, node.y + 8);
+		}
+		var sprites:Array<OverworldSpriteFile> = selectionSprites();
+		if (sprites.length > 0)
+		{
+			var map = decorSpriteMap(sprites);
+			for (data in sprites)
+			{
+				var spr:FlxSprite = map.get(data);
+				if (spr != null) grow(spr.x, spr.y, spr.x + spr.width, spr.y + spr.height);
+			}
+		}
+		return bounds;
+	}
+
+	/** La barra sale encima de lo elegido (o debajo si no cabe), solo en SELECCIONAR y sin nada a medias. */
+	function updateActionBar()
+	{
+		if (actionBar == null) return;
+		var show:Bool = curMode == MODE_SELECT && hasSelection() && !dragging && !carrying && !pasting && bandStart == null && !helpBg.visible;
+		var bounds:Array<Float> = show ? selectionBounds() : null;
+		actionBar.visible = bounds != null;
+		if (bounds == null) return;
+
+		// del mapa a la pantalla: lo visible de camGame empieza en viewLeft / viewTop
+		var left:Float = (bounds[0] - camGame.viewLeft) * camGame.zoom;
+		var right:Float = (bounds[2] - camGame.viewLeft) * camGame.zoom;
+		var top:Float = (bounds[1] - camGame.viewTop) * camGame.zoom;
+		var bottom:Float = (bounds[3] - camGame.viewTop) * camGame.zoom;
+		var x:Float = (left + right) * 0.5 - ACTION_BAR_WIDTH * 0.5;
+		var maxX:Float = (UI_box != null ? UI_box.x : FlxG.width) - ACTION_BAR_WIDTH - 10;
+		x = Math.max(10, Math.min(maxX, x));
+		var y:Float = top - 28;
+		if (y < 70) y = bottom + 8;
+		actionBar.setPosition(x, Math.min(FlxG.height - 190, y));
 	}
 
 	function createNode(x:Float, y:Float)
@@ -3565,6 +4273,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 	/** Punto de curva bajo el raton: [camino, indice], o null. El radio no depende del zoom. */
 	function pointUnderMouse(mouseX:Float, mouseY:Float):Array<Dynamic>
 	{
+		if (graphBlocked()) return null; // los puntos de curva son de la capa GRAFO
 		var radius:Float = Math.max(3, 8 / camGame.zoom);
 		var best:Array<Dynamic> = null;
 		var bestDist:Float = radius;
@@ -3762,10 +4471,16 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		problemsTimer += elapsed;
 		if (problemsTimer < PROBLEM_DELAY) return;
 
-		problemsDirty = false;
 		// los otros mundos salen de la cache (se vacia al guardar y al abrir un mundo): releerlos
 		// todos de disco en cada comprobacion se notaba con mapas pintados
-		problems = OverworldData.checkWorldProblems(worldFile, worldName);
+		refreshProblems();
+	}
+
+	/** Los avisos de verdad (contorno rojo y tecla E): los pendientes no son fallos. */
+	function refreshProblems()
+	{
+		problemsDirty = false;
+		problems = [for (problem in OverworldData.checkWorldProblems(worldFile, worldName)) if (problem.pending != true) problem];
 		problemCursor = -1;
 		buildProblemMarkers();
 	}
@@ -3808,16 +4523,10 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 	/** E: salta al siguiente aviso, centra la camara en su nodo y lo selecciona. */
 	function gotoNextProblem()
 	{
-		if (problemsDirty)
-		{
-			problemsDirty = false;
-			problems = OverworldData.checkWorldProblems(worldFile, worldName);
-			problemCursor = -1;
-			buildProblemMarkers();
-		}
+		if (problemsDirty) refreshProblems();
 		if (problems.length < 1)
 		{
-			showOutput('Todo correcto: el mundo se puede recorrer entero.');
+			showOutput('Todo correcto: el mundo se puede recorrer entero.' + pendingText());
 			return;
 		}
 
@@ -4314,6 +5023,14 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		var deadProblems:Array<String> = OverworldData.checkWorld(OverworldData.load('zz_dead'), 'zz_dead');
 		check(Lambda.exists(deadProblems, t -> t.indexOf('nunca se llega a este mundo') > -1), 'partida completa: se detecta el mundo al que no se llega');
 
+		// un warp hacia un mundo por hacer es un pendiente, no un aviso (no deja el guardado en rojo)
+		pipe.world = 'zz_todavia_no';
+		var laterProblems:Array<OverworldProblem> = OverworldData.checkWorldProblems(selfFile, 'zz_self');
+		check(Lambda.exists(laterProblems, pr -> pr.node == 'q' && pr.pending == true)
+			&& !Lambda.exists(laterProblems, pr -> pr.node == 'q' && pr.pending != true && pr.text.indexOf('zz_todavia_no') > -1)
+			&& OverworldData.pendingWorlds(selfFile, 'zz_self').length == 1,
+			'warp a un mundo que aun no existe: pendiente, no aviso: ' + [for (pr in laterProblems) pr.text].join(' | '));
+
 		// 9. deshacer un borrado deja elegido el mismo nodo (antes, por posicion, otro distinto)
 		if (worldFile.nodes.length >= 2)
 		{
@@ -4420,6 +5137,111 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		check(hasGroup() && groupNodes.length >= 3, 'el rectangulo selecciona los nodos de dentro (${groupNodes.length} nodos, ${groupSprites.length} decorados)');
 		clearGroup();
 
+		// 14b. capas y cuentagotas
+		var nodeA:OverworldNodeFile = OverworldData.findNode(worldFile, 'a');
+		if (nodeA == null) nodeA = worldFile.nodes[0];
+		setGraphLayer(true, false);
+		check(nodeUnderMouse(nodeA.x, nodeA.y) == null && pathUnderMouse(nodeA.x, nodeA.y) == null, 'con el GRAFO bloqueado el raton no encuentra nodos ni caminos');
+		var nodesBefore:Int = worldFile.nodes.length;
+		deleteUnderMouse(nodeA.x, nodeA.y);
+		check(worldFile.nodes.length == nodesBefore, 'con el GRAFO bloqueado el clic derecho no borra un nodo');
+		bandStart = [0, 0];
+		finishBand(160, 160);
+		check(groupNodes.length == 0, 'con el GRAFO bloqueado el rectangulo no coge nodos');
+		clearGroup();
+		setGraphLayer(false, false);
+		check(nodeUnderMouse(nodeA.x, nodeA.y) == nodeA, 'al desbloquear el GRAFO vuelve a encontrar el nodo');
+		if (paletteFrames.length > 1)
+		{
+			var cell:Float = paletteTileSize;
+			selectPaletteTile(1);
+			check(pickTileUnderMouse(cell * 0.5, cell * 6.5) && paletteSelected == 0, 'el cuentagotas coge el tile de debajo (${paletteSelected})');
+			setDrawLayer(true, false);
+			var spritesBefore:Int = worldFile.sprites.length;
+			strokeUndoPending = true;
+			check(spriteUnderMouse(cell * 0.5, cell * 6.5) == null, 'con el DIBUJO bloqueado el raton no encuentra tiles');
+			deleteUnderMouse(cell * 0.5, cell * 6.5);
+			check(worldFile.sprites.length == spritesBefore, 'con el DIBUJO bloqueado el clic derecho no borra un tile');
+			setDrawLayer(false, false);
+			strokeUndoPending = false;
+
+			// 14c. copiar, cortar, pegar, mover y CTRL+flechas con un tile
+			var tile:OverworldSpriteFile = spriteUnderMouse(cell * 0.5, cell * 6.5);
+			clearGroup();
+			selectedNode = null;
+			selectedSprite = tile;
+			var count:Int = worldFile.sprites.length;
+			copySelection();
+			startPaste();
+			pasteAt([cell * 20, cell * 20]);
+			var pasted:OverworldSpriteFile = worldFile.sprites[worldFile.sprites.length - 1];
+			check(worldFile.sprites.length == count + 1 && pasted.x == cell * 20 && pasted.y == cell * 20 && pasted.anim == tile.anim,
+				'pegar pone una copia del tile donde se pide');
+			pasteAt([cell * 22, cell * 20]);
+			check(worldFile.sprites.length == count + 2, 'se puede pegar varias veces seguidas');
+			stopPaste();
+			undo();
+			undo();
+			check(worldFile.sprites.length == count, 'deshacer quita lo pegado');
+
+			selectedSprite = spriteUnderMouse(cell * 0.5, cell * 6.5);
+			var startX:Float = selectedSprite.x;
+			lastNudgeTime = -999;
+			nudgeSelection(worldFile.gridSize, 0);
+			nudgeSelection(worldFile.gridSize, 0);
+			check(selectedSprite.x == startX + worldFile.gridSize * 2, 'CTRL+flechas mueve el tile una casilla por toque');
+			undo();
+			selectedSprite = spriteUnderMouse(cell * 0.5, cell * 6.5);
+			check(selectedSprite != null && selectedSprite.x == startX, 'dos toques seguidos se deshacen de una vez');
+
+			startCarry();
+			carryTo([cell * 30, cell * 30]);
+			finishCarry(false);
+			check(selectedSprite.x == startX && !carrying, 'mover y cancelar lo devuelve a su sitio');
+			startCarry();
+			carryTo([cell * 30, cell * 30]);
+			finishCarry(true);
+			check(selectedSprite.x == cell * 30 && selectedSprite.y == cell * 30, 'mover y soltar lo deja donde se suelta');
+			undo();
+			check(spriteUnderMouse(cell * 0.5, cell * 6.5) != null, 'deshacer el movimiento lo devuelve');
+
+			selectedSprite = spriteUnderMouse(cell * 0.5, cell * 6.5);
+			count = worldFile.sprites.length;
+			copySelection(true);
+			check(worldFile.sprites.length == count - 1, 'cortar quita el tile');
+			startPaste();
+			pasteAt([cell * 24, cell * 24]);
+			stopPaste();
+			check(worldFile.sprites.length == count, 'y pegarlo lo pone en otro sitio');
+			undo();
+			undo();
+			check(spriteUnderMouse(cell * 0.5, cell * 6.5) != null && worldFile.sprites.length == count, 'deshacer pegar y cortar lo deja como estaba');
+			selectedSprite = null;
+		}
+
+		// 14d. copiar y pegar nodos: IDs nuevos y el camino entre ellos tambien
+		var pairA:OverworldNodeFile = OverworldData.findNode(worldFile, 'a');
+		var pairB:OverworldNodeFile = pairA == null ? null : Lambda.find(worldFile.nodes, n -> n != pairA && findPath(pairA.id, n.id) != null);
+		if (pairA != null && pairB != null)
+		{
+			groupNodes = [pairA, pairB];
+			groupSprites = [];
+			selectedNode = pairA;
+			var nodeCount:Int = worldFile.nodes.length;
+			var pathCount:Int = worldFile.paths.length;
+			copySelection();
+			startPaste();
+			pasteAt([400, 400]);
+			stopPaste();
+			var copies:Array<OverworldNodeFile> = worldFile.nodes.slice(nodeCount);
+			check(copies.length == 2 && copies[0].id != pairA.id && worldFile.paths.length == pathCount + 1
+				&& findPath(copies[0].id, copies[1].id) != null, 'pegar nodos les da IDs nuevos y copia el camino entre ellos');
+			undo();
+			check(worldFile.nodes.length == nodeCount && worldFile.paths.length == pathCount, 'deshacer quita los nodos pegados');
+			clearGroup();
+			selectedNode = null;
+		}
+
 		// 15. "Crear submundo" deshecho: al guardar se borra el submundo que ya no usa nadie
 		var castle:OverworldNodeFile = OverworldData.createNode('w', 128, 128);
 		castle.type = 'world';
@@ -4479,6 +5301,17 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		}
 		OverworldData.clearWorldCache();
 		OverworldData.simStartWorld = null;
+		// deja elegido un nodo en el centro de la pantalla: la barra Mover / Copiar / Borrar sale en la captura
+		if (worldFile.nodes.length > 0)
+		{
+			clearGroup();
+			selectedSprite = null;
+			selectedNode = worldFile.nodes[0];
+			UI_box.selectedName = 'Nodo';
+			updateUI();
+			camGame.zoom = 3;
+			camGame.scroll.set(selectedNode.x - FlxG.width * 0.5, selectedNode.y - FlxG.height * 0.5);
+		}
 		trace('SELFTEST FIN: ' + (fails == 0 ? 'todo correcto' : '$fails fallos'));
 	}
 	#end
@@ -4672,17 +5505,22 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		var orphans:Array<String> = cleanupOrphanWorlds();
 		refreshWorldLists();
 
+		// guardar nunca se bloquea: los avisos solo se ensenan (en naranja, no en rojo de error)
 		var problems:Array<String> = checkWorld();
 		if (problems.length > 0)
 		{
 			var shown:Array<String> = problems.slice(0, 3);
-			if (problems.length > 3) shown.push('(+${problems.length - 3} mas)');
-			showOutput('Guardado, pero con avisos:
-' + shown.join('
-'), true);
+			if (problems.length > 3) shown.push('(+${problems.length - 3} mas, tecla E)');
+			showOutput('GUARDADO. Avisos para revisar (no impiden guardar):\n' + shown.join('\n'));
+			outputTxt.color = FlxColor.ORANGE;
 		}
-		else showOutput('Guardado en: ' + saved.join('  +  '));
-		if (orphans.length > 0) showOutput(outputTxt.text + '\nBorrado el submundo sin usar: ' + orphans.join(', '), outputTxt.color == FlxColor.RED);
+		else showOutput('Guardado en: ' + saved.join('  +  ') + pendingText());
+		if (orphans.length > 0)
+		{
+			var color:FlxColor = outputTxt.color;
+			showOutput(outputTxt.text + '\nBorrado el submundo sin usar: ' + orphans.join(', '));
+			outputTxt.color = color;
+		}
 		return true;
 	}
 

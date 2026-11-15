@@ -1,7 +1,8 @@
 """Genera el mundo 1 (`world1`) segun el boceto del usuario: el grafo y el arte del mapa.
 
-Uso:  python tools/build_world1.py [vista_previa.png] [--dry-run]
-Necesita Pillow y numpy. Con --dry-run solo hace la vista previa.
+Uso:  python tools/build_world1.py [vista_previa.png] [--dry-run] [--force]
+Necesita Pillow y numpy. Con --dry-run solo hace la vista previa. Si world1.json se ha guardado desde el
+editor (o tocado a mano), no lo sobrescribe salvo con --force (se perderian esos cambios).
 
 Escribe:
   assets/shared/overworlds/world1.json        el mundo (nodos, caminos y el terreno como tiles)
@@ -9,9 +10,9 @@ Escribe:
                                               escalera del acantilado) y fish.* (los peces que saltan,
                                               del mundo 1 de Mario's Madness)
   assets/shared/images/overworld/backgrounds/world1_sea.*   el mar, en fotogramas de 32x32
+  assets/shared/images/overworld/level_dot.*  los niveles amarillo y rojo, con su ciclo de color
   assets/shared/sounds/overworld/*, music/overworld/world1   los sonidos y la musica del mapa de MM
-y lo copia a las builds que existan (export/*/...). Si se edita el mundo en el editor, NO volver a
-ejecutar este script: sobrescribiria esos cambios.
+y lo copia a las builds que existan (export/*/...).
 
 Diseno: el de la isla del mundo 1 de Mario's Madness (assets/images/warpzone/1/bg1.png de su mod), que el
 usuario eligio entre cuatro variantes el 14/11/2026: la isla es una caja con el borde festoneado
@@ -57,9 +58,10 @@ T = 8
 W, H = 416, 224  # cabe en la pantalla del juego (427x240 a zoom 3): la camara se queda quieta
 
 # ------------------------------------------------------------------------------------------ grafo
-# Como en SMW: los niveles son amarillos y el que tiene salida secreta, rojo (no cambian al superarlos)
-LEVEL_LOOK = {'image': 'overworld/og_mario/level_tiles', 'anim': 'tile0002', 'animDone': '', 'fps': 0}
-SECRET_LOOK = {'image': 'overworld/og_mario/level_tiles', 'anim': 'tile0003', 'animDone': '', 'fps': 0}
+# Como en SMW: los niveles son amarillos y el que tiene salida secreta, rojo (no cambian al superarlos), y
+# brillan cambiando un poco de color (overworld/level_dot, ver level_dot_frames)
+LEVEL_LOOK = {'image': 'overworld/level_dot', 'anim': 'yellow', 'animDone': '', 'fps': 6}
+SECRET_LOOK = {'image': 'overworld/level_dot', 'anim': 'red', 'animDone': '', 'fps': 6}
 CASTLE_LOOK = {'image': 'overworld/castle', 'anim': 'idle', 'animDone': 'dead', 'fps': 0}  # derrumbado al superarlo
 DOT_LOOK = {'image': 'overworld/dot', 'anim': 'idle', 'animDone': '', 'fps': 6}
 PIPE_LOOK = {'image': 'overworld/pipe', 'anim': 'idle', 'animDone': '', 'fps': 0}
@@ -295,17 +297,19 @@ def decorate():
     eyed_pillar(380, 40, 30)
     eyed_pillar(194, 40, 26)
     eyed_pillar(96, 40, 20)  # en el islote, a la izquierda del camino de Endless
-    # rocas en cuna, matorrales, piedrecitas y matas, lejos de caminos y nodos
+    # rocas en cuna, matorrales, piedrecitas y matas, lejos de caminos y nodos y enteros sobre la hierba
+    # (a 4 px o mas del borde: los que colgaban sobre el acantilado de abajo se subieron el 15/11/2026;
+    # bajo la carretera de la fila de abajo solo caben 8 px, asi que los de alli van encima de ella)
     for x, y, flip in [(84, 140, False), (152, 146, True), (250, 146, False), (330, 160, True), (372, 120, False),
                        (236, 66, True), (338, 66, False)]:
         put(ROCK, x, y, flip)
-    for x, y in [(36, 128), (98, 186), (176, 186), (290, 140), (300, 184), (392, 172), (360, 182),
+    for x, y in [(36, 128), (98, 161), (176, 149), (290, 140), (300, 180), (392, 172), (360, 180),
                  (196, 112), (262, 72), (360, 42), (132, 34), (40, 150), (50, 156), (150, 112), (162, 116),
-                 (330, 108), (342, 112), (388, 112), (280, 186), (200, 40), (330, 38), (250, 44), (318, 186)]:
+                 (330, 108), (342, 112), (388, 112), (280, 180), (200, 40), (330, 38), (250, 44), (318, 180)]:
         put(BUSH, x, y)
-    for x, y in [(110, 156), (180, 160), (270, 112), (350, 112), (300, 40), (230, 76)]:
+    for x, y in [(110, 156), (180, 160), (270, 112), (350, 112), (300, 40), (230, 74)]:
         put(PEBBLE, x, y)
-    for x, y in [(70, 122), (120, 190), (240, 120), (320, 120), (390, 150), (280, 50), (360, 60), (110, 50)]:
+    for x, y in [(70, 122), (106, 185), (240, 120), (320, 120), (390, 150), (280, 50), (360, 60), (110, 50)]:
         put(TUFT, x, y)
     # rocas blancas en el mar, lejos de los peces
     for x, y in [(8, 8), (220, 2), (300, 0), (4, 90)]:
@@ -314,7 +318,7 @@ def decorate():
 
 # peces que saltan (bg2 del mundo 1 de Mario's Madness, en bucle: 12 fotogramas y una pausa). Miden
 # 18x44: tienen que quedar dentro del mapa (W x H), o el juego lo agranda y la camara se mueve
-FISH = [(40, 50), (160, 64), (4, 140)]
+FISH = [(48, 32), (152, 40), (4, 140)]  # los dos primeros, donde los dejo el usuario en el editor (15/11/2026)
 
 
 def compose():
@@ -423,7 +427,33 @@ def slice_tiles():
     return sprites, own
 
 
+# Ciclo de color de los niveles: el amarillo es el del punto de los niveles de Mario's Madness
+# (warpzone/dot, 7 fotogramas a 6 fps: naranja, amarillo, amarillo claro y vuelta), el de la paleta de
+# SMW; el rojo hace lo mismo con rojos. Se pinta sobre el relleno de los niveles de SMW
+# (og_mario/level_tiles tile0002 y tile0003), que conservan su contorno negro.
+LEVEL_CYCLES = {
+    'yellow': ('tile0002', [(248, 208, 0), (248, 248, 72), (248, 248, 184), (248, 248, 184), (248, 248, 72),
+                            (248, 208, 0), (248, 176, 0)]),
+    'red': ('tile0003', [(232, 32, 0), (248, 72, 32), (248, 120, 88), (248, 120, 88), (248, 72, 32),
+                         (232, 32, 0), (216, 0, 0)]),
+}
+
+
+def level_dot_frames():
+    frames = []
+    for anim, (tile, colors) in LEVEL_CYCLES.items():
+        base = np.array(sparrow_frame('overworld/og_mario/level_tiles', tile))
+        fill = base[..., 3].astype(bool) & (base[..., :3].sum(axis=2) > 120)  # todo menos el contorno negro
+        for i, color in enumerate(colors):
+            frame = base.copy()
+            frame[fill, :3] = color
+            frames.append(('%s%04d' % (anim, i), Image.fromarray(frame, 'RGBA')))
+    return frames
+
+
 def sparrow_frame(key, name):
+    if key == 'overworld/level_dot':  # se genera aqui (la vista previa puede ir antes de escribirlo)
+        return dict(level_dot_frames())[name + '0000']
     base = os.path.join(IMAGES, *key.split('/'))
     if not os.path.exists(base + '.xml'):
         base = os.path.join(OWN_DIR, key.split('/')[-1])
@@ -511,9 +541,26 @@ def world_json(world):
     return '\n'.join(lines) + '\n'
 
 
+def edited_by_hand():
+    """True si world1.json no es tal cual lo escribio este script (se guardo desde el editor del juego,
+    que lo escribe con otro formato, o se toco a mano): entonces regenerarlo machacaria esos cambios."""
+    if not os.path.exists(OUT):
+        return False
+    with open(OUT, encoding='utf-8') as f:
+        text = f.read()
+    try:
+        return world_json(json.loads(text)) != text
+    except ValueError:
+        return True
+
+
 def main(args):
     dry = '--dry-run' in args
     files = [a for a in args if not a.startswith('--')]
+    if not dry and '--force' not in args and edited_by_hand():
+        raise SystemExit('world1.json se ha editado (en el editor o a mano) desde que lo genero este script: '
+                         'regenerarlo borraria esos cambios. Usa --dry-run para ver la vista previa, o --force '
+                         'para sobrescribirlo de todas formas.')
 
     compose()
     nodes, paths = graph()
@@ -538,6 +585,7 @@ def main(args):
 
     write_atlas('tiles', sorted(own.items()))
     write_atlas('ladder', [('idle0000', ladder_frame())])
+    write_atlas('level_dot', level_dot_frames(), per_row=7, folder=os.path.join(IMAGES, 'overworld'))
     write_atlas('world1_sea', sea_frames(), per_row=2, folder=BG_DIR)
     copy_fish()
     copy_audio()
@@ -559,6 +607,8 @@ def main(args):
             for ext in ('png', 'xml'):
                 shutil.copyfile(os.path.join(BG_DIR, 'world1_sea.' + ext),
                                 os.path.join(build, 'images', 'overworld', 'backgrounds', 'world1_sea.' + ext))
+                shutil.copyfile(os.path.join(IMAGES, 'overworld', 'level_dot.' + ext),
+                                os.path.join(build, 'images', 'overworld', 'level_dot.' + ext))
             print('-> ' + build)
 
 

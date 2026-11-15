@@ -1,11 +1,8 @@
 {
-	"title": "CHAOS",
-	"subtitle": "Fleetway Super Sonic",
-	"style": "circle",
-	"font": "SonicCD.ttf",
-	"titleSize": 64,
-	"color": "#F2B705",
-	"accent": "#6B1500",
-	"textColor": "#FFF3B0",
-	"subtitleColor": "#FFFFFF"
+	"style": "slide",
+	"circleImage": "chaos/StartScreen/circle",
+	"textImage": "chaos/StartScreen/text",
+	"background": "#000000",
+	"delay": 0,
+	"hold": 0.5
 }

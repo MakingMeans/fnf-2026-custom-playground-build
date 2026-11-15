@@ -123,7 +123,32 @@ class FleetwayStage extends SonicStage
 		buildCameras();
 		buildBackground();
 		buildTimeline();
+		// pantalla de inicio propia (la de endless en amarillo), antes de la intro: sin el rotulo comun
+		play.songCard = false;
+		firstPlay = !PlayState.seenCutscene;
 		setStartCallback(introCutscene);
+	}
+
+	/** Primera vez que se juega (no un reintento): sale la pantalla de inicio, como en endless. */
+	var firstPlay:Bool;
+
+	/**
+	 * Pantalla de inicio de chaos, al estilo de las de Vs Sonic.exe (StartScreen.lua de MAJIN): fondo
+	 * negro, el circulo amarillo entra por la derecha y CHAOS ACT 1 por la izquierda, y a los 1,5 s se
+	 * funde. Las imagenes las hace tools/ports/sonic_exe.py; el estilo, data/chaos/songcard.json.
+	 * Devuelve cuanto tiene que esperar la intro (hasta que empieza el fundido).
+	 */
+	function startScreen():Float
+	{
+		if (!firstPlay) return 0;
+		var card:objects.SongCard = null;
+		card = new objects.SongCard('chaos', 'Chaos', function()
+		{
+			remove(card, true);
+			card.destroy();
+		});
+		add(card);
+		return 1.5;
 	}
 
 	// ------------------------------------------------------------------ fondo
@@ -360,7 +385,7 @@ class FleetwayStage extends SonicStage
 		camHUD.alpha = 0;
 		camGame.zoom = 1;
 
-		new FlxTimer().start(0.4, function(_)
+		new FlxTimer().start(0.4 + startScreen(), function(_)
 		{
 			play.cameraSpeed = 1;
 			FlxTween.tween(camGame, {zoom: 1.2}, 1.2, {ease: FlxEase.circInOut});

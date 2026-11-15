@@ -56,11 +56,18 @@ mapa y nodo. Si borras o renombras su `.json`, Story Mode lleva al menú de sema
 | **C** | Modo CAMINO: clic en un nodo y luego en otro para unirlos. Si no están alineados, el camino sale **en L** (con SHIFT en el segundo clic, primero en vertical) |
 | **T** | Modo PINTAR TILES: pinta con el tile elegido en la paleta (arrastra para pintar seguido) |
 | **L** | Modo ENLAZAR: clic en el nodo que desbloquea y luego en cada nodo (o camino) que abre; SHIFT+clic = con su salida secreta (ver abajo). L otra vez vuelve a SELECCIONAR |
+| **CTRL+clic** en el mapa (modo T) | **Cuentagotas**: el tile pintado de debajo pasa a ser el del pincel, con su tileset (la paleta cambia sola) y su capa (por delante o por detrás de BF) |
 | **P** | Mostrar / ocultar la paleta de tiles |
+| **F2** / **SHIFT+F2** | Bloquear / ocultar la capa **GRAFO** (nodos, caminos, puntos de curva y flechas) |
+| **F3** / **SHIFT+F3** | Bloquear / ocultar la capa **DIBUJO** (tiles pintados y decorados) |
 | Clic derecho | Borra lo que haya bajo el ratón (en modo L solo cancela; sobre un punto de curva, borra ese punto) |
 | Arrastrar un punto de curva | Lo mueve (modos V y C) |
 | **E** | Ir al siguiente aviso: selecciona su nodo y centra la cámara en él |
 | SUPR | Borra la selección actual (o el grupo entero, en un solo paso de deshacer) |
+| **Barra Mover / Copiar / Borrar** | Sale encima de lo elegido (en modo V): *Mover* lo engancha al ratón, *Copiar* lo copia y pasa a pegar, *Borrar* lo borra |
+| **CTRL+C** / **CTRL+X** / **CTRL+V** | Copiar / cortar / pegar lo elegido o el grupo (tiles, decorados y nodos con los caminos entre ellos). Al pegar, la copia sigue al ratón ajustada a la rejilla y **cada clic deja una**; ESC o clic derecho terminan. Lo copiado se puede pegar en otro mundo |
+| **M** | Mover lo elegido con el ratón: sigue al cursor; clic lo suelta, ESC o clic derecho lo devuelven a su sitio. Mueve de verdad (los nodos conservan su ID y su progreso) |
+| **CTRL+flechas** | Mover lo elegido una casilla de la rejilla (con SHIFT, un píxel). Varios toques seguidos se deshacen de una vez |
 | **CTRL+D** | Duplica la selección o el grupo un poco más abajo a la derecha. Los nodos copiados llevan IDs nuevos, y los caminos y desbloqueos entre ellos apuntan a las copias |
 | ALT (mantener) | Coloca sin ajustar a la rejilla |
 | Rueda del ratón | Zoom |
@@ -73,6 +80,15 @@ mapa y nodo. Si borras o renombras su `.json`, Story Mode lleva al menú de sema
 | **CTRL+SHIFT+T** | Probar **desde el nodo elegido**, aunque con tu partida todavía esté cerrado (también el botón *Probar desde aquí* de la pestaña Nodo y *Probar desde el nodo* de la pestaña Mundo) |
 | **F1** | Ayuda en pantalla |
 | **ESC** | Soltar el grupo; si no hay, salir del modo actual (vuelve a SELECCIONAR). En SELECCIONAR, volver al menú de editores; con cambios sin guardar avisa y hay que pulsarlo otra vez |
+
+**Capas** (pestaña *Capas*, o F2 / F3): el mapa tiene dos capas, **GRAFO** (nodos, caminos, puntos
+de curva y flechas) y **DIBUJO** (tiles pintados y decorados). Una capa **bloqueada** no se toca con
+el ratón: no se elige, ni se arrastra, ni se crea, ni se borra nada de ella (tampoco con el rectángulo
+ni con el clic derecho; SUPR y CTRL+D avisan). Una capa **oculta** no se ve y tampoco se toca. Así se
+puede pintar sin mover ni borrar un nodo o un camino sin querer (bloquea el GRAFO), y mover nodos sin
+llevarse un tile (bloquea el DIBUJO). Al ocultar el GRAFO sigue viéndose el rectángulo de lo que se ve
+en el juego. Las capas no se guardan con el mundo y arriba se indica si alguna está bloqueada u
+oculta.
 
 El **rectángulo blanco discontinuo** ("LO QUE SE VE EN EL JUEGO") marca hasta dónde puede llegar
 la cámara del juego con el zoom del mundo. Lo que quede fuera no se ve nunca: ahí van las salidas
@@ -341,8 +357,16 @@ Dos botones en la pestaña **Mundo** para esto:
   - IDs repetidos, caminos repetidos o hacia nodos que no existen, nodo inicial bloqueado o que
     es una salida.
 
-  También salta solo al guardar. En pantalla caben 4 avisos; la lista completa sale por consola.
-  En la build debug, además, cada mundo que se carga escribe sus avisos en la consola.
+  También salta solo al guardar. **Los avisos nunca impiden guardar**: si los hay, el mensaje
+  dice *GUARDADO. Avisos para revisar* en naranja (el mundo ya está guardado). En pantalla caben
+  4 avisos; la lista completa sale por consola. En la build debug, además, cada mundo que se carga
+  escribe sus avisos en la consola.
+
+  **Pendientes** (no son avisos): un warp o una salida hacia un mundo que **todavía no existe**
+  (p. ej. la estrella del mundo 1 hacia `world2`). Es normal mientras ese mundo está por hacer, y
+  en el juego dicen "este mundo todavía no existe". No llevan contorno rojo; salen aparte, como
+  *Pendiente (no es un fallo)*, al guardar y al comprobar el mundo. Un warp **sin** mundo destino
+  sí es un aviso.
 - **Desbloquear todos**: deja todos los nodos accesibles de una pasada. La reparación rápida.
 
 Al escribir en **Desbloquea al completarlo**, la barra de abajo avisa en rojo si algún ID no
@@ -622,6 +646,15 @@ de la build al repo. También existe **Guardar como...** para elegir la ruta a m
   igual (así va el mundo 1: como en SMW, los niveles son amarillos y los que tienen salida
   secreta, rojos, y no cambian al superarlos; lo superado se nota en los caminos abiertos). Abajo,
   el nombre lleva **SUPERADO** y a la derecha se lee `Superados: X/Y` del mundo actual.
+- Los niveles del mundo 1 usan `overworld/level_dot` (animaciones `yellow` y `red`, 6 fps): brillan
+  cambiando un poco de color, con el ciclo del punto de los niveles de Mario's Madness (el de la
+  paleta de SMW). Lo genera `tools/build_world1.py` a partir de `og_mario/level_tiles`.
+- **Freeplay**: las canciones de los niveles de los mapas de la partida (los mundos a los que se
+  llega desde `world1`) no salen en Freeplay hasta que su nivel está abierto en el mapa
+  (`OverworldData.lockedSongs()`). Las que no son de ningún nivel (el tutorial, las de los mundos de
+  prueba) salen siempre. Freeplay suena como el de Mario's Madness (`sounds/freeplay/scroll` al
+  cambiar de canción) y al elegir una hace su salida (y la del Psych 0.7.2h del usuario): destello,
+  `sounds/freeplay/start`, solo queda la elegida, zoom y fundido a negro en 3 s antes de cargarla.
 - BACK (ESC): abre el menú principal (freeplay, opciones, mods, créditos, editores) en cualquier
   mapa, también dentro de un submundo. Story Mode te devuelve al mismo mapa y nodo.
 - **Nodo `exit`**: al llegar andando a él, BF sale del submundo (sin *Mundo destino*) o pasa al
@@ -661,10 +694,25 @@ copiar el JSON a `export/.../assets/shared/overworlds/`) para verlo en el juego.
 
 ## Mundo 1 (`world1`)
 
-El primer mundo real, según el boceto del usuario. Se abre con `tests\test-world1.bat`. Lo genera
-entero (grafo y arte) `tools/build_world1.py` (necesita Pillow y numpy): si se edita en el editor, no
-volver a ejecutar ese script, porque sobrescribiría esos cambios. Con un nombre de archivo como
-argumento guarda una vista previa del mapa completo, y con `--dry-run` solo hace la vista previa.
+El primer mundo real, según el boceto del usuario. Se juega con `tests\test-world1.bat` y se edita
+con `tests\edit-world1.bat`. Lo genera entero (grafo y arte) `tools/build_world1.py` (necesita
+Pillow y numpy). Con un nombre de archivo como argumento guarda una vista previa del mapa completo, y
+con `--dry-run` solo hace la vista previa.
+
+**Dos formas de cambiarlo** (no mezclarlas sin querer):
+
+1. **En el editor** (`tests\edit-world1.bat`): mover nodos (V), crear nodos (N), caminos (C),
+   desbloqueos (L), decorados (B) y tiles (T, con la paleta de `overworld/world1/tiles` o la de
+   SMW). En la pestaña *Nodo* van la canción, el nombre, el aspecto y lo que desbloquea; en
+   *Camino*, la carretera y si BF anda, nada o trepa. **CTRL+S** guarda en la build (para probar sin
+   compilar) y en el repo (`assets/shared/overworlds/world1.json`); **CTRL+T** lo prueba.
+2. **Con el script** (`python tools/build_world1.py`): para cambiar la forma de la isla, de la meseta
+   o del islote, o la decoración entera. Posiciones de los nodos en `graph()`, formas en `ISLAND`,
+   `ISLET` y `PLATEAU`, y decoración en `decorate()`. Regenera todo el JSON.
+
+En cuanto el mundo se guarda desde el editor, el script **ya no lo sobrescribe**: lo detecta porque el
+editor escribe el JSON con otro formato, y se para avisando. Con `--force` lo regenera igualmente,
+pero se pierde lo hecho en el editor.
 
 Está diseñado como la isla del mundo 1 de Mario's Madness (`assets/images/warpzone/1/bg1.png` de su
 mod; el usuario lo eligió el 14/11/2026 entre cuatro variantes: esa, una al estilo de Yoshi's Island,
@@ -718,7 +766,7 @@ Se lanzan desde `export/debug/windows/bin` (el juego busca `assets\` en su carpe
 | `-overworld <mundo> -shot` | Abre ese mapa, a los 3 s guarda una captura en `world_shot.png` junto al exe y se cierra. No guarda la posición de BF y no se pausa aunque la ventana arranque sin foco. Con `-shotat <s>` la captura es a esos segundos, y con `-walk <left/right/up/down>` BF echa a andar por código a los 0,5 s (para ver cómo nada o trepa). |
 | `-check-worlds` | Revisa todos los mundos de la build (también la partida entera), escribe el resultado en `check_worlds.txt` junto al exe y se cierra. |
 | `-song <canción> -test` | Juega una canción entera en botplay con capturas; ver `docs/SONG_PORTS.md` y `tools/run_songtest.ps1`. |
-| `-overworld-editor test_graph -selftest` | Prueba los botones de unir mundos, el aspecto desde la paleta, deshacer (con progreso, tiles y submundos), pintar, grupos, el rectángulo, los avisos nuevos y los de la partida entera. Escribe `SELFTEST OK/FAIL` por consola (49 comprobaciones) y borra sus mundos `zz_*`. |
+| `-overworld-editor test_graph -selftest` | Prueba los botones de unir mundos, el aspecto desde la paleta, deshacer (con progreso, tiles y submundos), pintar, grupos, el rectángulo, las capas, el cuentagotas, copiar / cortar / pegar / mover, los avisos nuevos, los pendientes y los de la partida entera. Escribe `SELFTEST OK/FAIL` por consola (70 comprobaciones; al acabar deja elegido un nodo, con su barra de acciones, para poder capturar la ventana) y borra sus mundos `zz_*`. |
 | `-playtest` | Monta 5 mundos de demostración con las funciones del editor y los juega por código: una canción de verdad, castillo, tuberías y una estrella (con capturas a mitad del viaje), salida lateral, menú, R, un mapa sin nodos abiertos, probar desde un nodo cerrado, salidas secretas (sin fallos, por precisión y el modo canción), un nodo de N superados, un atajo con condición, la cámara del revelado, el iris y el otro sprite de jugador (111 comprobaciones). Deja `playtest_result.txt` y capturas en `playtest_shots\` (también del editor), borra sus mundos `zz_demo*` y se cierra. En cada captura comprueba que ningún sprite use una imagen ya liberada. |
 
 Ninguna toca la partida del usuario ni simula teclas. `tools/run_playtest.ps1` lanza la prueba

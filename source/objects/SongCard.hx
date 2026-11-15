@@ -10,9 +10,13 @@ import flixel.util.FlxSpriteUtil;
  * Cada cancion elige su estilo en data/<cancion>/songcard.json:
  *   title      texto grande (por defecto, el nombre de la cancion)
  *   subtitle   texto pequeno de debajo (por defecto, nada)
- *   style      "banner" (franja desde la izquierda), "circle" (circulo desde la derecha y titulo desde
- *              la izquierda, como las pantallas de inicio de Vs Sonic.exe) o "panel" (tarjeta
- *              redondeada que baja desde arriba)
+ *   style      "banner" (franja desde la izquierda), "circle" (circulo dibujado desde la derecha y
+ *              titulo desde la izquierda), "panel" (tarjeta redondeada que baja desde arriba) o
+ *              "slide" (las pantallas de inicio de Vs Sonic.exe con sus imagenes: ver abajo)
+ *   slide:     circleImage y textImage, imagenes a pantalla completa (1280x720) que entran por la
+ *              derecha y por la izquierda en 1 s, se quedan `hold` s (0.5) y se funden en 1 s, como
+ *              StartScreen.lua de MAJIN; background, color del fondo (por defecto, ninguno: con la
+ *              cancion empezando detras se veria negro)
  *   font       fuente de assets/fonts (por defecto vcr.ttf)
  *   color      color principal (la franja, el circulo o el fondo de la tarjeta)
  *   accent     color de los bordes y detalles
@@ -78,6 +82,7 @@ class SongCard extends FlxSpriteGroup
 			switch (style)
 			{
 				case 'circle': buildCircle(title, subtitle, font, main, accent, textColor, subColor, size);
+				case 'slide': buildSlide(text('circleImage', ''), text('textImage', ''), text('background', ''));
 				case 'panel': buildPanel(title, subtitle, font, main, accent, textColor, subColor, size);
 				default: buildBanner(title, subtitle, font, main, accent, textColor, subColor, size);
 			}
@@ -189,6 +194,36 @@ class SongCard extends FlxSpriteGroup
 		var out:Float = delay + 0.55 + hold;
 		FlxTween.tween(circle, {x: FlxG.width, alpha: 0}, 0.5, {ease: FlxEase.quintIn, startDelay: out});
 		FlxTween.tween(words, {x: -words.width - 40, alpha: 0}, 0.5, {ease: FlxEase.quintIn, startDelay: out, onComplete: function(_) finish()});
+	}
+
+	// ------------------------------------------------------------------ pantalla de inicio (Vs Sonic.exe)
+	function buildSlide(circleKey:String, textKey:String, background:String)
+	{
+		var parts:Array<FlxSprite> = [];
+		if (background.length > 0)
+		{
+			var bgColor:Null<FlxColor> = FlxColor.fromString(background);
+			if (bgColor != null) parts.push(new FlxSprite().makeGraphic(FlxG.width, FlxG.height, bgColor));
+		}
+		var circle:FlxSprite = new FlxSprite(FlxG.width, 0);
+		if (circleKey.length > 0) circle.loadGraphic(Paths.image(circleKey));
+		else circle.visible = false;
+		var title:FlxSprite = new FlxSprite(-FlxG.width, 0);
+		if (textKey.length > 0) title.loadGraphic(Paths.image(textKey));
+		else title.visible = false;
+		parts.push(circle);
+		parts.push(title);
+		for (part in parts)
+		{
+			part.antialiasing = ClientPrefs.data.antialiasing;
+			add(part);
+		}
+
+		var holdTime:Float = hold;
+		FlxTween.tween(title, {x: 0}, 1, {ease: FlxEase.quintOut, startDelay: delay});
+		FlxTween.tween(circle, {x: 0}, 1, {ease: FlxEase.quintOut, startDelay: delay});
+		for (i in 0...parts.length)
+			FlxTween.tween(parts[i], {alpha: 0}, 1, {startDelay: delay + 1 + holdTime, onComplete: i == parts.length - 1 ? function(_) finish() : null});
 	}
 
 	// ------------------------------------------------------------------ tarjeta (Doki Doki)

@@ -52,6 +52,14 @@ class FreeplayState extends MusicBeatState
 
 	var player:MusicPlayer;
 
+	// sonidos del Freeplay de Mario's Madness (los copia tools/ports/mario_madness.py)
+	static inline final SFX_SCROLL:String = 'freeplay/scroll';
+	static inline final SFX_START:String = 'freeplay/start';
+
+	/** Al elegir cancion: destello, zoom y fundido a negro antes de cargarla (como Mario's Madness). */
+	var starting:Bool = false;
+	var blackOverlay:FlxSprite;
+
 	override function create()
 	{
 		// las canciones de Freeplay nunca son del overworld: si quedaba la marca de una cancion del
@@ -80,6 +88,8 @@ class FreeplayState extends MusicBeatState
 			return;
 		}
 
+		// las canciones de los niveles del overworld solo salen cuando su nivel ya esta abierto en el mapa
+		var lockedSongs:Map<String, Bool> = backend.OverworldData.lockedSongs();
 		for (i in 0...WeekData.weeksList.length)
 		{
 			if(weekIsLocked(WeekData.weeksList[i])) continue;
@@ -97,6 +107,7 @@ class FreeplayState extends MusicBeatState
 			WeekData.setDirectoryFromWeek(leWeek);
 			for (song in leWeek.songs)
 			{
+				if (lockedSongs.exists(Paths.formatToSongPath(song[0]))) continue;
 				var colors:Array<Int> = song[2];
 				if(colors == null || colors.length < 3)
 				{
@@ -189,7 +200,12 @@ class FreeplayState extends MusicBeatState
 		
 		player = new MusicPlayer(this);
 		add(player);
-		
+
+		blackOverlay = new FlxSprite().makeGraphic(FlxG.width, FlxG.height, FlxColor.BLACK);
+		blackOverlay.scrollFactor.set();
+		blackOverlay.alpha = 0;
+		add(blackOverlay);
+
 		changeSelection();
 		updateTexts();
 		super.create();
@@ -223,6 +239,12 @@ class FreeplayState extends MusicBeatState
 	{
 		if(WeekData.weeksList.length < 1)
 			return;
+
+		if (starting) // eligiendo cancion: solo se ve el efecto de salida
+		{
+			super.update(elapsed);
+			return;
+		}
 
 		if (FlxG.sound.music.volume < 0.7)
 			FlxG.sound.music.volume += 0.5 * elapsed;
@@ -287,7 +309,7 @@ class FreeplayState extends MusicBeatState
 
 				if(FlxG.mouse.wheel != 0)
 				{
-					FlxG.sound.play(Paths.sound('scrollMenu'), 0.2);
+					FlxG.sound.play(Paths.sound(SFX_SCROLL), 0.2);
 					changeSelection(-shiftMult * FlxG.mouse.wheel, false);
 				}
 			}
@@ -440,21 +462,24 @@ class FreeplayState extends MusicBeatState
 				return;
 			}
 
-			@:privateAccess
-			if(PlayState._lastLoadedModDirectory != Mods.currentModDirectory)
+			playStartEffect(function()
 			{
-				trace('CHANGED MOD DIRECTORY, RELOADING STUFF');
-				Paths.freeGraphicsFromMemory();
-			}
-			LoadingState.prepareToSong();
-			LoadingState.loadAndSwitchState(new PlayState());
-			#if !SHOW_LOADING_SCREEN FlxG.sound.music.stop(); #end
-			stopMusicPlay = true;
+				@:privateAccess
+				if(PlayState._lastLoadedModDirectory != Mods.currentModDirectory)
+				{
+					trace('CHANGED MOD DIRECTORY, RELOADING STUFF');
+					Paths.freeGraphicsFromMemory();
+				}
+				LoadingState.prepareToSong();
+				LoadingState.loadAndSwitchState(new PlayState());
+				#if !SHOW_LOADING_SCREEN FlxG.sound.music.stop(); #end
+				stopMusicPlay = true;
 
-			destroyFreeplayVocals();
-			#if (MODS_ALLOWED && DISCORD_ALLOWED)
-			DiscordClient.loadModRPC();
-			#end
+				destroyFreeplayVocals();
+				#if (MODS_ALLOWED && DISCORD_ALLOWED)
+				DiscordClient.loadModRPC();
+				#end
+			});
 		}
 		else if(controls.RESET && !player.playingMusic)
 		{
@@ -467,6 +492,43 @@ class FreeplayState extends MusicBeatState
 		super.update(elapsed);
 	}
 	
+	/**
+	 * Salida al elegir cancion, la del Freeplay de Mario's Madness (y la del Psych 0.7.2h del usuario):
+	 * destello blanco y su sonido, se para la musica, solo se queda la cancion elegida (se desliza a la
+	 * izquierda) con su icono, la camara se acerca y todo se funde a negro; a los 3 s, `then`.
+	 */
+	function playStartEffect(then:Void->Void)
+	{
+		starting = true;
+		FlxG.camera.flash(FlxColor.WHITE, 0.3);
+		FlxG.sound.play(Paths.sound(SFX_START));
+		if (FlxG.sound.music != null)
+		{
+			FlxG.sound.music.stop();
+			FlxG.sound.music.volume = 0;
+		}
+		FlxTween.tween(FlxG.camera, {zoom: 1.1}, 2.6);
+
+		for (i in 0...iconArray.length)
+			iconArray[i].alpha = (i == curSelected) ? 1 : 0;
+		for (item in grpSongs.members)
+		{
+			item.alpha = 0;
+			if (item.targetY == curSelected)
+			{
+				item.alpha = 1;
+				FlxTween.tween(item, {x: 300}, 0.25, {ease: quadInOut});
+			}
+		}
+
+		new FlxTimer().start(0.4, function(_) FlxTween.tween(blackOverlay, {alpha: 1}, 2.6));
+		new FlxTimer().start(3, function(_) then());
+	}
+
+	/** quadIn hasta la mitad y quadOut despues (la curva del deslizamiento de la cancion elegida). */
+	static function quadInOut(t:Float):Float
+		return t < 0.5 ? FlxEase.quadIn(t * 2) * 0.5 : 0.5 + FlxEase.quadOut((t - 0.5) * 2) * 0.5;
+
 	function getVocalFromCharacter(char:String)
 	{
 		try
@@ -521,7 +583,7 @@ class FreeplayState extends MusicBeatState
 
 		curSelected = FlxMath.wrap(curSelected + change, 0, songs.length-1);
 		_updateSongLastDifficulty();
-		if(playSound) FlxG.sound.play(Paths.sound('scrollMenu'), 0.4);
+		if(playSound) FlxG.sound.play(Paths.sound(SFX_SCROLL), 0.4);
 
 		var newColor:Int = songs[curSelected].color;
 		if(newColor != intendedColor)

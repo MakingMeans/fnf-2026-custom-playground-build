@@ -208,8 +208,32 @@ def port_scripts():
     if shadersEnabled ~= true then return end
     setShaderFloat("shaderImage", "iTime", os.clock())''', name)
         write_text(os.path.join(out, name), text)
+    write_text(os.path.join(out, 'intro-cover.lua'), INTRO_COVER)
     copy('shaders/chrom.frag', os.path.join(SHARED, 'shaders', 'yararara-chrom.frag'))
     copy('sounds/HIT.ogg', os.path.join(SHARED, 'sounds', 'yararara', 'hit.ogg'))
+
+
+# Script propio (no es del mod). La cancion empieza con el video de entrada (evento playVideo en el
+# segundo 0). Sin la cuenta atras a la vista, sus 5 pulsos de espera (2,4 s) dejaban ver el escenario
+# antes del video: se salta la espera y se tapa de negro hasta que sale el video, que trae su fondo.
+INTRO_COVER = '''-- Generado por tools/ports/yararara.py (no es del mod): el video de entrada es lo primero que se ve.
+function onCreate()
+	setProperty('skipCountdown', true) -- la cancion (y su video, en el segundo 0) empieza ya
+end
+
+function onCreatePost()
+	makeLuaSprite('introCover', nil, 0, 0)
+	makeGraphic('introCover', screenWidth, screenHeight, '000000')
+	setObjectCamera('introCover', 'other')
+	addLuaSprite('introCover', true)
+end
+
+function onEvent(name, value1, value2)
+	if name == 'playVideo' then
+		removeLuaSprite('introCover', true) -- el video ya pone su propio fondo negro
+	end
+end
+'''
 
 
 def port_audio_and_videos():

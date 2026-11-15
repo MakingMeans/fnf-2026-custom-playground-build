@@ -19,6 +19,7 @@ Destino de los archivos:
   assets/base_game/shared/sounds/<cancion>/, music/<cancion>/, music/mario_madness/
   assets/base_game/songs/<cancion>/   Inst.ogg y Voices.ogg
   assets/fonts/mariones.ttf, mario2.ttf  (del repo del mod: el juego compilado las lleva dentro)
+  assets/shared/sounds/freeplay/scroll.ogg, start.ogg   los sonidos de su Freeplay
 
 Conversion del chart (Psych 0.4.2 -> psych_v1):
   - Los eventos iban como notas en el carril -1: pasan a la lista "events".
@@ -62,6 +63,12 @@ COMMON_FILES.update({'shared/images/rating/%s.png' % name: 'images/mario_madness
                      for name in ('sick', 'good', 'bad', 'shit', 'combo')})
 COMMON_FILES.update({'images/numbers/num%d.png' % i: 'images/mario_madnessUI/num%d.png' % i for i in range(10)})
 FONT_FILES = ['mariones.ttf', 'mario2.ttf']
+# Sonidos del Freeplay de Mario's Madness (su CustomFreeplayState): cambiar de cancion y elegirla.
+# Van en assets/shared (son del menu, no de una cancion); los usa states/FreeplayState.hx
+MENU_SOUNDS = {
+    'sounds/scrollMenu.ogg': 'sounds/freeplay/scroll.ogg',
+    'sounds/FREEPLAY_START.ogg': 'sounds/freeplay/start.ogg',
+}
 
 SONG_DATA = {
     'last-course': {
@@ -327,6 +334,8 @@ def main():
     if not os.path.isdir(SRC):
         raise SystemExit('No existe la carpeta del mod: ' + SRC)
     port_files(COMMON_FILES)
+    for old, new in MENU_SOUNDS.items():
+        copy(old, os.path.join(ROOT, 'assets', 'shared', *new.split('/')))
     port_fonts()
     for stage, data in STAGES.items():
         write_json(os.path.join(SHARED, 'stages', stage + '.json'), data)

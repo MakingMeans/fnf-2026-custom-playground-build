@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="level_dot.png">
+	<SubTexture name="yellow0000" x="0" y="0" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="yellow0001" x="16" y="0" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="yellow0002" x="32" y="0" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="yellow0003" x="48" y="0" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="yellow0004" x="64" y="0" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="yellow0005" x="80" y="0" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="yellow0006" x="96" y="0" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="red0000" x="0" y="16" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="red0001" x="16" y="16" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="red0002" x="32" y="16" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="red0003" x="48" y="16" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="red0004" x="64" y="16" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="red0005" x="80" y="16" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="red0006" x="96" y="16" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+</TextureAtlas>

@@ -416,8 +416,4 @@
 	<SubTexture name="w1_0413" x="104" y="200" width="8" height="8" frameX="0" frameY="0" frameWidth="8" frameHeight="8"/>
 	<SubTexture name="w1_0414" x="112" y="200" width="8" height="8" frameX="0" frameY="0" frameWidth="8" frameHeight="8"/>
 	<SubTexture name="w1_0415" x="120" y="200" width="8" height="8" frameX="0" frameY="0" frameWidth="8" frameHeight="8"/>
-	<SubTexture name="w1_0416" x="0" y="208" width="8" height="8" frameX="0" frameY="0" frameWidth="8" frameHeight="8"/>
-	<SubTexture name="w1_0417" x="8" y="208" width="8" height="8" frameX="0" frameY="0" frameWidth="8" frameHeight="8"/>
-	<SubTexture name="w1_0418" x="16" y="208" width="8" height="8" frameX="0" frameY="0" frameWidth="8" frameHeight="8"/>
-	<SubTexture name="w1_0419" x="24" y="208" width="8" height="8" frameX="0" frameY="0" frameWidth="8" frameHeight="8"/>
 </TextureAtlas>

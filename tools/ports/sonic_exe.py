@@ -2,7 +2,7 @@
 
 Uso:  python tools/ports/sonic_exe.py [carpeta sanic]
       (por defecto C:/Users/david/Downloads/QsychEngine2.0/QsychEngine2.0/sanic)
-Necesita Pillow (para pasar las imagenes .webp a .png).
+Necesita Pillow (para pasar las imagenes .webp a .png) y numpy.
 
 El mod es un Psych 1.0.4 modificado y compilado. Charts, personajes, escenarios y scripts van DENTRO
 de "Vs Sonic.exe" como recursos de Haxe: este script los saca de la tabla de recursos de hxcpp
@@ -16,6 +16,7 @@ Haxe: source/states/stages/SonicStage.hx, FleetwayStage.hx (chaos) y MajinStage.
 Los scripts Lua que solo usan funciones normales de Psych se copian como scripts de la cancion.
 Es idempotente: se puede volver a ejecutar.
 """
+import colorsys
 import io
 import json
 import math
@@ -26,7 +27,8 @@ import struct
 import sys
 import urllib.parse
 
-from PIL import Image
+import numpy as np
+from PIL import Image, ImageFilter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SRC = sys.argv[1] if len(sys.argv) > 1 else 'C:/Users/david/Downloads/QsychEngine2.0/QsychEngine2.0/sanic'
@@ -547,6 +549,98 @@ def port_common(mod):
         write(os.path.join(ROOT, 'assets', 'fonts', 'SonicCD.ttf'), f.read())
 
 
+# ---------------------------------------------------------------- pantalla de inicio de chaos
+# El mod no trae pantalla de inicio para chaos (la de endless es un circulo lila y ENDLESS ACT con el
+# infinito). El usuario quiso la de endless en amarillo: el circulo es el de endless con el tono girado
+# al oro, y el texto, CHAOS ACT 1 con letras de otras pantallas del mod (todas usan la misma letra).
+START_SHADOW = 7  # la sombra negra de cada letra del titulo se sale por la derecha y por abajo
+
+
+def start_screen(mod, name, part):
+    """Una pantalla de inicio del mod a pantalla completa (1280x720, con su margen) como array RGBA."""
+    data = mod.image('contents/images/StartScreens/%s/%s' % (name, part))
+    return np.array(Image.open(io.BytesIO(data)).convert('RGBA'))
+
+
+def start_title(a):
+    """Filas del titulo (las letras blancas) y la caja en x de cada letra."""
+    white = (a[..., 0] > 235) & (a[..., 1] > 235) & (a[..., 2] > 235) & (a[..., 3] > 200)
+    rows = set(np.nonzero(white.sum(axis=1) > 3)[0].tolist())
+    y0 = y1 = min(rows)
+    while y1 + 1 in rows:
+        y1 += 1
+    cols = white[y0:y1 + 1].any(axis=0)
+    letters, start = [], None
+    for x, c in enumerate(cols):
+        if c and start is None:
+            start = x
+        elif not c and start is not None:
+            letters.append((start, x))
+            start = None
+    return y0, y1 + 1, letters
+
+
+def start_letter(a, index):
+    """Una letra del titulo con su sombra: el trozo, la fila de su base dentro de el y su ancho."""
+    y0, y1, letters = start_title(a)
+    x0, x1 = letters[index]
+    right = x1 + START_SHADOW
+    if index + 1 < len(letters):
+        right = min(right, letters[index + 1][0] - 1)
+    return a[y0 - 3:y1 + START_SHADOW, x0 - 2:right].copy(), y1 - (y0 - 3), x1 - x0
+
+
+def paste_rgba(dst, piece, x, y):
+    """Pega `piece` encima de `dst` en (x, y), mezclando bien tambien sobre lo transparente."""
+    h, w = piece.shape[:2]
+    region = dst[y:y + h, x:x + w]
+    src_a = piece[..., 3:4].astype(np.float32) / 255
+    dst_a = region[..., 3:4].astype(np.float32) / 255
+    out_a = src_a + dst_a * (1 - src_a)
+    rgb = piece[..., :3] * src_a + region[..., :3] * dst_a * (1 - src_a)
+    region[..., :3] = np.where(out_a > 0, rgb / np.maximum(out_a, 1e-6), 0).astype(np.uint8)
+    region[..., 3] = (out_a[..., 0] * 255).astype(np.uint8)
+
+
+def golden(a):
+    """El circulo de endless en amarillo: relleno lila -> amarillo y borde azul -> naranja."""
+    out = a.copy()
+    for y, x in zip(*np.nonzero(a[..., 3])):
+        h, s, v = colorsys.rgb_to_hsv(*(a[y, x, :3] / 255.0))
+        rgb = colorsys.hsv_to_rgb(0.14 if h > 0.66 else 0.09, min(1.0, s * 1.9), min(1.0, v * 1.05))
+        out[y, x, :3] = [int(c * 255) for c in rgb]
+    return out
+
+
+def port_chaos_start_screen(mod):
+    """CHAOS ACT 1 sobre la pantalla de HEDGE (tambien de cinco letras; su ACT 1 se queda): C y S de
+    CYCLES, H y A de HAZE y O de TOO SLOW, alineadas por la base, con el halo blanco de las originales."""
+    text = start_screen(mod, 'hedge', 'text')
+    y0, y1, letters = start_title(text)
+    text[y0 - 12:y1 + START_SHADOW + 12, letters[0][0] - 12:letters[-1][1] + START_SHADOW + 12] = 0
+    title = np.zeros_like(text)
+    x, gap = letters[0][0], letters[1][0] - letters[0][1]
+    for name, index in [('cycles', 0), ('haze', 0), ('haze', 1), ('too-slow', 1), ('cycles', 5)]:
+        piece, base, width = start_letter(start_screen(mod, name, 'text'), index)
+        paste_rgba(title, piece, x - 2, y1 - base)
+        x += width + gap
+    white = (title[..., 0] > 235) & (title[..., 3] > 200)
+    halo = np.array(Image.fromarray((white * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(5)))
+    glow = np.zeros_like(text)
+    glow[..., :3] = (255, 255, 236)
+    glow[..., 3] = (halo.astype(np.float32) * 0.55).astype(np.uint8)
+    paste_rgba(text, glow, 0, 0)
+    paste_rgba(text, title, 0, 0)
+    write('images/chaos/StartScreen/text.png', png_bytes(text))
+    write('images/chaos/StartScreen/circle.png', png_bytes(golden(start_screen(mod, 'endless-us', 'circle'))))
+
+
+def png_bytes(a):
+    out = io.BytesIO()
+    Image.fromarray(a).save(out, 'PNG', optimize=True)
+    return out.getvalue()
+
+
 def port_chaos(mod):
     notes, events = port_chart(mod, 'contents/FLEETWAY/data/chaos/chaos.json', 'chaos', CHAOS_CHARACTERS, 'fleetw',
                                'sonic_exe/NOTENORMAL_assets', {
@@ -567,6 +661,7 @@ def port_chaos(mod):
         write('sounds/chaos/%s.ogg' % name, mod.read('contents/FLEETWAY/sounds/%s.ogg' % name))
     for name in ('gameOver', 'gameOverEnd'):
         write('music/chaos/%s.ogg' % name, mod.read('contents/FLEETWAY/music/%s.ogg' % name))
+    port_chaos_start_screen(mod)
     port_audio(mod, 'FLEETWAY', 'chaos', ['Inst.ogg', 'Voices.ogg', 'Voices-Opponent.ogg'])
     print('chaos: %d notas, %d eventos' % (notes, events))
 

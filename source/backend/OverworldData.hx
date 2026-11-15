@@ -68,6 +68,9 @@ typedef OverworldProblem =
 {
 	var node:Null<String>;
 	var text:String;
+	/** No es un fallo: un warp o una salida hacia un mundo que todavia no se ha hecho (en el juego
+	 * dicen "este mundo todavia no existe"). No marca el nodo ni pone en rojo el guardado. */
+	@:optional var pending:Bool;
 }
 
 typedef OverworldImageInfo =
@@ -463,6 +466,39 @@ class OverworldData
 		if (node.type == 'warp' && partnerOpen(world, node)) return true;
 
 		return false;
+	}
+
+	/**
+	 * Canciones que Freeplay aun no ensena: las de los niveles de los mapas de la partida (los mundos
+	 * a los que se llega jugando desde el principio, segun simulateGame) mientras ninguno de sus nodos
+	 * este abierto. Las que no son de ningun nivel de esos mapas (el tutorial, las de los mundos de
+	 * prueba...) salen siempre. Claves: el nombre de la cancion con Paths.formatToSongPath.
+	 */
+	public static function lockedSongs():Map<String, Bool>
+	{
+		var worlds:Array<String> = exists(DEFAULT_WORLD) ? [DEFAULT_WORLD] : [];
+		for (key in simulateGame().keys())
+		{
+			var world:String = key.split('::')[0];
+			if (!worlds.contains(world)) worlds.push(world);
+		}
+
+		var locked:Map<String, Bool> = new Map<String, Bool>();
+		var open:Map<String, Bool> = new Map<String, Bool>();
+		for (world in worlds)
+		{
+			var file:OverworldFile = loadCached(world);
+			if (file == null) continue;
+			for (node in file.nodes)
+			{
+				if (node.type != 'level' || node.song == null || node.song.length < 1) continue;
+				var song:String = Paths.formatToSongPath(node.song);
+				if (isUnlocked(world, file, node)) open.set(song, true);
+				else locked.set(song, true);
+			}
+		}
+		for (song in open.keys()) locked.remove(song);
+		return locked;
 	}
 
 	/**
@@ -1325,9 +1361,13 @@ class OverworldData
 		return reached;
 	}
 
-	/** Los avisos en texto legible (lista vacia = todo correcto). Ver checkWorldProblems(). */
+	/** Los avisos en texto legible (lista vacia = todo correcto), sin los pendientes. Ver checkWorldProblems(). */
 	public static function checkWorld(file:OverworldFile, ?name:String):Array<String>
-		return [for (problem in checkWorldProblems(file, name)) problem.text];
+		return [for (problem in checkWorldProblems(file, name)) if (problem.pending != true) problem.text];
+
+	/** Los pendientes: warps y salidas hacia mundos que todavia no existen (no son fallos). */
+	public static function pendingWorlds(file:OverworldFile, ?name:String):Array<String>
+		return [for (problem in checkWorldProblems(file, name)) if (problem.pending == true) problem.text];
 
 	/**
 	 * Revisa el mundo y devuelve sus avisos, cada uno con el nodo al que se refiere (null si es
@@ -1356,6 +1396,10 @@ class OverworldData
 		// aviso que se marca en un nodo pero no le quita el de "inalcanzable" (es de un camino suyo)
 		inline function note(id:String, text:String)
 			problems.push({node: id, text: text});
+
+		// destino por hacer: se apunta aparte (ver OverworldProblem.pending)
+		inline function pending(id:String, text:String)
+			problems.push({node: id, text: text, pending: true});
 
 		var counts:Map<String, Int> = new Map<String, Int>();
 		for (node in file.nodes)
@@ -1438,7 +1482,8 @@ class OverworldData
 			{
 				var dest:OverworldFile = (node.world != null && node.world.length > 0) ? loadCached(node.world) : null;
 				var partner:OverworldNodeFile = (dest != null && name != null) ? warpPartner(name, node) : null;
-				if (dest == null) warn(node.id, '"${node.id}": el warp no tiene mundo destino o ese mundo no existe.');
+				if (node.world == null || node.world.length < 1) warn(node.id, '"${node.id}": el warp no tiene mundo destino.');
+				else if (dest == null) pending(node.id, '"${node.id}": lleva a "${node.world}", un mundo que todavia no existe.');
 				else if (name != null && partner == null)
 					warn(node.id, '"${node.id}": "${node.world}" no tiene ningun warp que vuelva aqui, asi que BF aparecera alli en su nodo inicial.');
 				// los dos extremos esperando al otro: ninguno se abre nunca
@@ -1480,7 +1525,7 @@ class OverworldData
 			{
 				var dest:OverworldFile = loadCached(node.world);
 				var back:OverworldNodeFile = (dest != null && name != null) ? Lambda.find(dest.nodes, n -> n.type == 'exit' && n.world == name) : null;
-				if (dest == null) warn(node.id, '"${node.id}": la salida lleva a "${node.world}", que no existe.');
+				if (dest == null) pending(node.id, '"${node.id}": la salida lleva a "${node.world}", un mundo que todavia no existe.');
 				else if (name != null && back == null)
 					warn(node.id, '"${node.id}": "${node.world}" no tiene ninguna salida de vuelta hacia aqui, asi que BF aparecera alli en su nodo inicial.');
 			}

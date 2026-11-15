@@ -26,16 +26,19 @@ Ninguna canción tiene ya la cuenta atrás "3, 2, 1, go": ni se ve ni suena. Se 
 5 pulsos de entrada y los avisos `onCountdownTick` a escenarios y scripts) y en su lugar sale un
 **rótulo con el nombre de la canción** (`source/objects/SongCard.hx`), con el estilo de cada una en
 `data/<canción>/songcard.json`: `title`, `subtitle`, `style` (`banner`: franja desde la izquierda;
-`circle`: círculo desde la derecha y título desde la izquierda, como las pantallas de inicio de Vs
-Sonic.exe; `panel`: tarjeta redondeada que baja desde arriba), `font`, `color`, `accent`,
-`textColor`, `subtitleColor`, `titleSize`, `delay`, `hold` y `at` (segundo de canción en que sale).
-Sin ese archivo sale la franja por defecto con el nombre de la canción. Va en una cámara propia
-creada al aparecer, por encima de todo, también de un vídeo que ya esté sonando.
+`circle`: círculo dibujado desde la derecha y título desde la izquierda; `panel`: tarjeta redondeada
+que baja desde arriba; `slide`: las pantallas de inicio de Vs Sonic.exe con imágenes a pantalla
+completa, `circleImage` por la derecha y `textImage` por la izquierda, con `background` opcional),
+`font`, `color`, `accent`, `textColor`, `subtitleColor`, `titleSize`, `delay`, `hold` y `at` (segundo
+de canción en que sale). Sin ese archivo sale la franja por defecto con el nombre de la canción. Va en
+una cámara propia creada al aparecer, por encima de todo, también de un vídeo que ya esté sonando.
+Un escenario también puede crear el rótulo por su cuenta (`new objects.SongCard(...)`) en otro
+momento: así lo hace chaos.
 
 | Canción | Rótulo |
 |---|---|
 | yararara | franja roja de Kasane Teto, en el segundo 1 (sobre el vídeo de entrada) |
-| chaos | círculo dorado de Fleetway con la fuente de Sonic CD, al acabar la intro |
+| chaos | pantalla de inicio como la de endless pero en amarillo (`slide`, fondo negro), antes de la intro y solo la primera vez: la crea `FleetwayStage`, y la intro de la estatua empieza al fundirse. Las imágenes (`chaos/StartScreen/`) las hace `tools/ports/sonic_exe.py`: el círculo de endless con el tono girado al oro y CHAOS ACT 1 con letras de otras pantallas del mod (C y S de CYCLES, H y A de HAZE, O de TOO SLOW) en el sitio del título de HEDGE |
 | world-of-chaos | tarjeta rosa de Doki Doki con `doki.ttf` |
 | tutorial (y los niveles de prueba) | franja oscura con raya rosa |
 | last-course, bad-day, endless-us | ninguno: ya traen el suyo (evento "Show Song" y pantalla de inicio); sus escenarios ponen `PlayState.songCard = false` |
@@ -44,6 +47,7 @@ Reglas que siguen todas:
 
 | Qué | Dónde | Por qué |
 |---|---|---|
+| Créditos | `docs/CREDITS.md` | Canción, mod, personas y piezas que se usan, para unos créditos |
 | Chart | `assets/base_game/shared/data/<canción>/<canción>-hard.json` | El juego solo tiene la dificultad Hard |
 | Scripts de la canción **y sus eventos propios** | `assets/base_game/shared/data/<canción>/*.lua` | En `custom_events/` serían globales: dos canciones con un evento del mismo nombre ("Flash", "Set Cam Zoom"...) se pisarían |
 | Personajes | `assets/base_game/shared/characters/<canción>-*.json` + `images/characters/<canción>/` | Nombres únicos: nada de "1", "BF-GF"... |
@@ -93,6 +97,9 @@ de Psych 1.0, así que funcionan tal cual; solo cambian nombres y rutas.
 - Escenario `yararara` (`stages/yararara.lua`): panel del principio, puente rojo desde el paso 224 y,
   en el "HITTING Mode", el escenario partido en dos carriles con zombis que llegan por los dos lados.
 - Vídeos `yararara/1` (entrada, a pantalla completa), `yararara/2` y `yararara/3` (bajo las flechas).
+  El de entrada lo lanza un evento en el segundo 0: sin la cuenta atrás a la vista, sus 2,4 s de espera
+  dejaban ver el escenario antes del vídeo. `intro-cover.lua` (script propio que escribe
+  `yararara.py`) pone `skipCountdown` y tapa de negro hasta que sale el vídeo.
 - Shader `yararara-chrom` (aberración cromática en la cámara del juego).
 
 Diferencias con el mod, todas a propósito:

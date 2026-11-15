@@ -170,8 +170,10 @@ class Main extends Sprite
 				var lines:Array<String> = [];
 				for (world in backend.OverworldData.listWorlds())
 				{
-					var problems:Array<String> = backend.OverworldData.checkWorld(backend.OverworldData.load(world), world);
+					var file = backend.OverworldData.load(world);
+					var problems:Array<String> = backend.OverworldData.checkWorld(file, world);
 					lines.push('$world: ' + (problems.length == 0 ? 'sin avisos' : '\n  - ' + problems.join('\n  - ')));
+					for (note in backend.OverworldData.pendingWorlds(file, world)) lines.push('  (pendiente) $note');
 				}
 				sys.io.File.saveContent('check_worlds.txt', lines.join('\n') + '\n');
 				Sys.exit(0);
