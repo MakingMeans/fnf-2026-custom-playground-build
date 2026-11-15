@@ -20,9 +20,7 @@ import states.stages.objects.SonicSplashes;
  *  - HealthStuff.lua: cada nota (no sostenida) del rival quita vida mientras quede el doble de ese
  *    dano; "Change Health Damage" lo cambia (por defecto 0.007).
  *  - customHealthBar.lua (SonicHUD), "Normal Lyrics" (SonicLyrics) y noteSplashGlobal.lua
- *    (SonicSplashes). Cada cancion elige su marco de la barra con hudFrame/hudFrameOffset.
- *  - La cuenta atras no suena (los sonidos del mod son silencio).
- * Nada de campos con valor inicial: create() se llama desde el constructor de BaseStage.
+ *    (SonicSplashes). Cada cancion elige su marco de la barra con hudFrame/hudFrameOffset. * Nada de campos con valor inicial: create() se llama desde el constructor de BaseStage.
  */
 @:access(states.PlayState)
 @:access(backend.MusicBeatState)
@@ -72,9 +70,6 @@ class SonicStage extends BaseStage
 		hasCameraSettings = false;
 		hudFrame = null;
 		hudFrameOffset = FlxPoint.get(-190, -75);
-		// en el mod los sonidos de la cuenta atras (intro3, intro2, intro1, introGo) son silencio:
-		// los cuatro son el mismo ogg de medio segundo. Las imagenes si se ven.
-		play.countdownSounds = false;
 		loadCameraSettings();
 	}
 

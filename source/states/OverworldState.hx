@@ -68,7 +68,7 @@ class OverworldState extends MusicBeatState
 	{
 		// tambien los submundos: si no, un submundo ya superado volveria a marcar su nodo al momento
 		for (world in OverworldData.worldTree(curWorld, parentWorlds())) OverworldData.resetProgress(world);
-		FlxG.sound.play(Paths.sound('cancelMenu'));
+		sfx(SFX_BACK);
 		// switchState y no resetState: el primer mapa lo crea Main con los argumentos de arranque,
 		// y resetState los volveria a aplicar (-from, -warp-from o la posicion guardada)
 		MusicBeatState.switchState(new OverworldState());
@@ -76,6 +76,16 @@ class OverworldState extends MusicBeatState
 
 	/** Momento del primer R: el progreso solo se borra si se vuelve a pulsar enseguida. */
 	var resetAskedAt:Float = -100;
+
+	// Sonidos del mapa: los del mapa de Mario's Madness (los copia tools/build_world1.py)
+	static inline final SFX_MOVE:String = 'overworld/move';     // BF llega a un nodo
+	static inline final SFX_UNLOCK:String = 'overworld/unlock'; // se abre un camino
+	static inline final SFX_ENTER:String = 'overworld/enter';   // entrar a un nivel o a un castillo
+	static inline final SFX_WRONG:String = 'overworld/wrong';   // no se puede: cerrado o sin destino
+	static inline final SFX_BACK:String = 'overworld/back';     // salir del mapa
+
+	static inline function sfx(key:String, ?volume:Float = 1)
+		FlxG.sound.play(Paths.sound(key), volume);
 
 	function savePosition()
 	{
@@ -183,9 +193,14 @@ class OverworldState extends MusicBeatState
 	 */
 	public static var songSecret:Bool = false;
 
-	/** Vuelve al mapa (usado por PlayState, pausa y game over): el mapa se abre con el iris. */
+	/**
+	 * Vuelve al mapa (usado por PlayState, pausa y game over): el mapa se abre con el iris y pone su
+	 * propia musica. Quien llama NO debe poner la del menu despues (sonaba unos segundos, mientras
+	 * se cargaba el mapa).
+	 */
 	public static function backToOverworld()
 	{
+		if (FlxG.sound.music != null) FlxG.sound.music.stop();
 		fromOverworld = false;
 		irisOpenNext = true;
 		FlxTransitionableState.skipNextTransOut = true;
@@ -205,6 +220,7 @@ class OverworldState extends MusicBeatState
 	var camFollow:FlxObject;
 
 	var spritesBack:FlxTypedGroup<FlxSprite>;
+	var roadsGroup:FlxTypedGroup<FlxSprite>;
 	var dotsGroup:FlxTypedGroup<FlxSprite>;
 	var nodesGroup:FlxTypedGroup<FlxSprite>;
 	var marksGroup:FlxTypedGroup<FlxSprite>;
@@ -227,6 +243,12 @@ class OverworldState extends MusicBeatState
 	var walking:Bool = false;
 	var walkQueue:Array<Array<Float>> = [];
 	var walkTarget:OverworldNodeFile = null;
+	/** Como recorre BF el camino por el que va: 'walk', 'swim' o 'climb' (campo `move` del camino). */
+	var walkMove:String = 'walk';
+	/** El nodo del que salio BF en su ultimo paseo (para volver de una salida que aun no lleva a nada). */
+	var walkFrom:String = null;
+	/** Camino recien abierto por el que BF ira solo cuando acabe de revelarse (ver buildPaths). */
+	var autoWalkPath:OverworldPathFile = null;
 
 	var busy:Bool = false;
 
@@ -469,6 +491,7 @@ class OverworldState extends MusicBeatState
 		}
 
 		spritesBack = new FlxTypedGroup<FlxSprite>();
+		roadsGroup = new FlxTypedGroup<FlxSprite>();
 		dotsGroup = new FlxTypedGroup<FlxSprite>();
 		nodesGroup = new FlxTypedGroup<FlxSprite>();
 		spritesFront = new FlxTypedGroup<FlxSprite>();
@@ -476,6 +499,7 @@ class OverworldState extends MusicBeatState
 		marksGroup = new FlxTypedGroup<FlxSprite>();
 
 		add(spritesBack);
+		add(roadsGroup);
 		add(dotsGroup);
 		add(nodesGroup);
 		add(marksGroup);
@@ -517,14 +541,8 @@ class OverworldState extends MusicBeatState
 			if (node.type == 'exit' && (node.image == null || node.image.length < 1)) spr.visible = false;
 			nodesGroup.add(spr);
 			nodeSprites.set(node.id, spr);
-
-			// un nivel superado sin animacion de completado propia lleva un check encima
-			if (completed && !hasDoneAnim && OverworldData.canBeCompleted(node))
-			{
-				var mark:FlxSprite = buildDoneMark();
-				mark.setPosition(Math.round(spr.x + spr.width - mark.width * 0.5 - 1), Math.round(spr.y - mark.height * 0.5 + 1));
-				marksGroup.add(mark);
-			}
+			// un nivel superado sin animDone se queda igual, como en SMW (el usuario no quiere
+			// marcas encima): lo dicen los caminos abiertos y el HUD (SUPERADO)
 		}
 
 		// jugador
@@ -576,6 +594,9 @@ class OverworldState extends MusicBeatState
 		{
 			walkQueue = arrival[2];
 			walkTarget = arrival[1];
+			var arrivalTarget:OverworldNodeFile = arrival[1];
+			var arrivalPath:OverworldPathFile = pathBetween(curNodeId, arrivalTarget == null ? null : arrivalTarget.id);
+			walkMove = arrivalPath != null ? arrivalPath.move : 'walk';
 			walking = true;
 		}
 
@@ -735,7 +756,50 @@ class OverworldState extends MusicBeatState
 			else buildPathDots(pth);
 		}
 
-		if (newPaths.length > 0) prepareReveal(newPaths, revealNodes);
+		if (newPaths.length > 0)
+		{
+			prepareReveal(newPaths, revealNodes);
+			autoWalkPath = pickAutoWalk(newPaths);
+		}
+	}
+
+	/**
+	 * Al superar un nivel, BF va solo por el camino que se acaba de abrir desde el (como en Mario's
+	 * Madness). Si se abren varios, el de su salida normal antes que el de la secreta.
+	 */
+	function pickAutoWalk(newPaths:Array<OverworldPathFile>):OverworldPathFile
+	{
+		var here:OverworldNodeFile = OverworldData.findNode(worldFile, curNodeId);
+		if (here == null) return null;
+
+		var best:OverworldPathFile = null;
+		var bestRank:Int = 99;
+		for (pth in newPaths)
+		{
+			if (pth.a != here.id && pth.b != here.id) continue;
+			var other:String = pth.a == here.id ? pth.b : pth.a;
+			var otherNode:OverworldNodeFile = OverworldData.findNode(worldFile, other);
+			if (otherNode == null || otherNode.type == 'exit') continue; // una salida se coge a mano
+			var rank:Int = here.unlocks.contains(other) ? 0 : (here.secretUnlocks.contains(other) ? 1 : 2);
+			if (rank < bestRank)
+			{
+				bestRank = rank;
+				best = pth;
+			}
+		}
+		return best;
+	}
+
+	/** El paseo automatico tras superar un nivel (la prueba jugable lo apaga salvo en su paso propio). */
+	public static var autoWalk:Bool = true;
+
+	/** Lanza el paseo automatico pendiente (al acabar de revelarse los caminos nuevos). */
+	function startAutoWalk()
+	{
+		var pth:OverworldPathFile = autoWalkPath;
+		autoWalkPath = null;
+		if (pth == null || busy || !autoWalk) return;
+		walkAlong(pth, OverworldData.findNode(worldFile, curNodeId));
 	}
 
 	/**
@@ -792,15 +856,29 @@ class OverworldState extends MusicBeatState
 			&& OverworldData.isPathUnlocked(curWorld, worldFile, pth, ignoreCompleted);
 	}
 
-	/** Crea los puntitos de un camino, de `a` hacia `b`, y los devuelve en ese orden. */
+	/**
+	 * Crea los puntitos de un camino, de `a` hacia `b`, y los devuelve en ese orden. Un camino con
+	 * `road` se dibuja como carretera: sus trozos van en roadsGroup y se revelan igual.
+	 */
 	function buildPathDots(pth:OverworldPathFile, ?hidden:Bool = false):Array<FlxSprite>
 	{
 		var result:Array<FlxSprite> = [];
-		if (pth.dots == null || pth.dots.length < 1) return result;
 
 		var nodeA:OverworldNodeFile = OverworldData.findNode(worldFile, pth.a);
 		var nodeB:OverworldNodeFile = OverworldData.findNode(worldFile, pth.b);
 		if (nodeA == null || nodeB == null) return result;
+
+		if (pth.road)
+		{
+			for (piece in buildRoadPieces(pth, nodeA, nodeB, isLandAt))
+			{
+				piece.visible = !hidden;
+				roadsGroup.add(piece);
+				result.push(piece);
+			}
+			return result;
+		}
+		if (pth.dots == null || pth.dots.length < 1) return result;
 
 		for (point in getDotPositions(pth, nodeA, nodeB))
 		{
@@ -889,9 +967,10 @@ class OverworldState extends MusicBeatState
 
 			if (shown)
 			{
+				// como en Mario's Madness: un "boom" al abrirse cada tanda de caminos
+				if (revealStep == 0) sfx(SFX_UNLOCK);
 				revealStep++;
 				revealTimer += REVEAL_DOT_TIME;
-				FlxG.sound.play(Paths.sound('scrollMenu'), 0.3);
 				continue;
 			}
 
@@ -903,15 +982,24 @@ class OverworldState extends MusicBeatState
 			{
 				revealing = false;
 				endRevealFocus();
+				startAutoWalk();
 			}
 		}
 	}
 
+	/** Cuantos trozos se han revelado: cada pocos sale una nubecita de humo, como en Mario's Madness. */
+	var revealPuffs:Int = 0;
+
 	function popDot(dot:FlxSprite)
 	{
 		dot.visible = true;
-		dot.scale.set(0.2, 0.2);
-		FlxTween.tween(dot.scale, {x: 1, y: 1}, 0.2, {ease: FlxEase.backOut});
+		// la carretera crece trozo a trozo; los puntitos salen con un saltito
+		if (!Std.isOfType(dot, RoadPiece))
+		{
+			dot.scale.set(0.2, 0.2);
+			FlxTween.tween(dot.scale, {x: 1, y: 1}, 0.2, {ease: FlxEase.backOut});
+		}
+		if (revealPuffs++ % 2 == 0) puff(dot.x + dot.width * 0.5, dot.y + dot.height * 0.5);
 
 		// un puntito que no se veria con la camara sobre BF: la camara va a el (y despues vuelve).
 		// Se mide desde BF y no desde la camara, para que dos caminos de la misma oleada no se la
@@ -929,8 +1017,19 @@ class OverworldState extends MusicBeatState
 		}
 	}
 
+	/** Una nubecita de humo que se deshace (overworld/smoke_overworld, del mapa de Mario's Madness). */
+	function puff(x:Float, y:Float)
+	{
+		if (!OverworldData.imageExists('overworld/smoke_overworld')) return;
+		var smoke:FlxSprite = buildSprite('overworld/smoke_overworld', 'idle', 12, false);
+		smoke.setPosition(x - smoke.width * 0.5, y - smoke.height * 0.5);
+		smoke.animation.finishCallback = function(_) smoke.kill();
+		marksGroup.add(smoke);
+	}
+
 	#if debug
 	var shotTimer:Float = 0;
+	var shotWalked:Bool = false;
 	#end
 
 	/** Punto que mira la camara mientras se revela un camino que se sale de la pantalla. */
@@ -948,6 +1047,7 @@ class OverworldState extends MusicBeatState
 		revealWaves = [];
 		revealing = false;
 		endRevealFocus();
+		startAutoWalk();
 	}
 
 	/** Al acabar el revelado, la camara se queda un momento mirando y vuelve a BF. */
@@ -955,44 +1055,6 @@ class OverworldState extends MusicBeatState
 	{
 		if (revealFocus == null) return;
 		new FlxTimer().start(0.5, function(_:FlxTimer) revealFocus = null);
-	}
-
-	// ------------------------------------------------------------- marca de superado
-	/** Check verde (G) de 2 px de grosor; el contorno negro se calcula solo. */
-	static final DONE_MARK:Array<String> = [
-		'......GG',
-		'.....GG.',
-		'GG..GG..',
-		'.GGGG...',
-		'..GG....'
-	];
-
-	static function buildDoneMark():FlxSprite
-	{
-		var rows:Array<String> = DONE_MARK;
-		inline function isGreen(x:Int, y:Int):Bool
-			return y >= 0 && y < rows.length && x >= 0 && x < rows[y].length && rows[y].charAt(x) == 'G';
-
-		var width:Int = rows[0].length + 2;
-		var height:Int = rows.length + 2;
-
-		var mark:FlxSprite = new FlxSprite();
-		mark.makeGraphic(width, height, FlxColor.TRANSPARENT, true);
-		mark.antialiasing = false;
-
-		for (y in 0...height)
-		{
-			for (x in 0...width)
-			{
-				var gx:Int = x - 1;
-				var gy:Int = y - 1;
-				if (isGreen(gx, gy)) mark.pixels.setPixel32(x, y, 0xFF4CD94C);
-				else if (isGreen(gx - 1, gy) || isGreen(gx + 1, gy) || isGreen(gx, gy - 1) || isGreen(gx, gy + 1))
-					mark.pixels.setPixel32(x, y, FlxColor.BLACK);
-			}
-		}
-		mark.dirty = true;
-		return mark;
 	}
 
 	/** Posiciones de los puntitos repartidos a lo largo de la polilinea del camino. */
@@ -1048,6 +1110,117 @@ class OverworldState extends MusicBeatState
 		var dx:Float = b[0] - a[0];
 		var dy:Float = b[1] - a[1];
 		return Math.sqrt(dx * dx + dy * dy);
+	}
+
+	// ------------------------------------------------------------- carreteras (caminos de SMW)
+	/** El color de las carreteras de los mapas de Mario's Madness (beis liso, sin contorno). */
+	public static inline final ROAD_COLOR:FlxColor = 0xFFF8E8B0;
+	/** Media anchura de la carretera (8 px de ancho) y radio de la plataforma de cada nodo. */
+	static inline final ROAD_RADIUS:Float = 4;
+	static inline final ROAD_PAD_RADIUS:Float = 7;
+	/** Largo de cada trozo: al revelarse, la carretera crece de trozo en trozo. */
+	static inline final ROAD_PIECE:Float = 8;
+
+	/** En el agua la carretera es una fila de puntitos blancos (por ahi se va nadando). */
+	public static inline final ROAD_WATER_COLOR:FlxColor = 0xFFF0F0F0;
+	static inline final ROAD_WATER_SPACING:Int = 6;
+
+	/**
+	 * Una carretera de `a` hacia `b` en trozos de ROAD_PIECE px, en ese orden: franja beis de 8 px con
+	 * los extremos redondos y una plataforma en cada nodo, como los caminos de Mario's Madness (y de
+	 * SMW). Los trozos se solapan sin costuras porque son del mismo color liso. Con `isLand`, lo que
+	 * cae en el agua sale como puntitos blancos y sin plataforma (sin el, todo es carretera: el editor).
+	 */
+	public static function buildRoadPieces(pth:OverworldPathFile, nodeA:OverworldNodeFile, nodeB:OverworldNodeFile, ?isLand:Float->Float->Bool):Array<FlxSprite>
+	{
+		var line:Array<Array<Float>> = buildLine(pth, nodeA, nodeB);
+		var total:Float = 0;
+		for (i in 0...line.length - 1) total += distance(line[i], line[i + 1]);
+
+		// puntos de la linea cada 1 px, para pintar circulos seguidos
+		var samples:Array<Array<Float>> = [];
+		for (i in 0...line.length - 1)
+		{
+			var length:Float = distance(line[i], line[i + 1]);
+			var steps:Int = Std.int(Math.max(1, Math.ceil(length)));
+			for (s in 0...steps)
+			{
+				var t:Float = s / steps;
+				samples.push([line[i][0] + (line[i + 1][0] - line[i][0]) * t, line[i][1] + (line[i + 1][1] - line[i][1]) * t]);
+			}
+		}
+		samples.push(line[line.length - 1]);
+
+		// cada muestra: en tierra, un circulo de la franja; en el agua, un puntito cada ROAD_WATER_SPACING px
+		var land:Array<Bool> = [for (s in samples) isLand == null || isLand(s[0], s[1])];
+		var first:Array<Float> = line[0];
+		var last:Array<Float> = line[line.length - 1];
+
+		var pieces:Array<FlxSprite> = [];
+		var count:Int = Std.int(Math.max(1, Math.ceil(total / ROAD_PIECE)));
+		var perPiece:Int = Std.int(Math.ceil(samples.length / count));
+		var start:Int = 0;
+		var waterRun:Int = 0;
+		while (start < samples.length)
+		{
+			var end:Int = Std.int(Math.min(samples.length - 1, start + perPiece));
+			var circles:Array<RoadCircle> = [];
+			for (i in start...end + 1)
+			{
+				if (land[i]) circles.push({x: samples[i][0], y: samples[i][1], r: ROAD_RADIUS, color: ROAD_COLOR});
+				// la muestra que comparten dos trozos se cuenta una vez
+				else if ((i > start || start == 0) && waterRun++ % ROAD_WATER_SPACING == 0)
+					circles.push({x: samples[i][0], y: samples[i][1], r: 1.2, color: ROAD_WATER_COLOR});
+			}
+			if (start == 0 && land[0]) circles.push({x: first[0], y: first[1], r: ROAD_PAD_RADIUS, color: ROAD_COLOR});
+			if (end == samples.length - 1 && land[samples.length - 1]) circles.push({x: last[0], y: last[1], r: ROAD_PAD_RADIUS, color: ROAD_COLOR});
+			if (circles.length > 0) pieces.push(drawRoadPiece(circles));
+			if (end >= samples.length - 1) break;
+			start = end;
+		}
+		return pieces;
+	}
+
+	/** Pinta circulos pixelados en un sprite del tamano justo. */
+	static function drawRoadPiece(circles:Array<RoadCircle>):FlxSprite
+	{
+		var minX:Float = Math.POSITIVE_INFINITY;
+		var minY:Float = Math.POSITIVE_INFINITY;
+		var maxX:Float = Math.NEGATIVE_INFINITY;
+		var maxY:Float = Math.NEGATIVE_INFINITY;
+		for (c in circles)
+		{
+			minX = Math.min(minX, Math.floor(c.x - c.r));
+			minY = Math.min(minY, Math.floor(c.y - c.r));
+			maxX = Math.max(maxX, Math.ceil(c.x + c.r));
+			maxY = Math.max(maxY, Math.ceil(c.y + c.r));
+		}
+		var width:Int = Std.int(maxX - minX) + 1;
+		var height:Int = Std.int(maxY - minY) + 1;
+		var bitmap:openfl.display.BitmapData = new openfl.display.BitmapData(width, height, true, 0);
+		bitmap.lock();
+		for (c in circles)
+		{
+			// circulo pixelado: los pixeles cuyo centro cae dentro del radio
+			var cx:Float = c.x - minX;
+			var cy:Float = c.y - minY;
+			var r:Float = c.r;
+			var color:FlxColor = c.color;
+			for (py in Std.int(Math.floor(cy - r))...Std.int(Math.ceil(cy + r)) + 1)
+				for (px in Std.int(Math.floor(cx - r))...Std.int(Math.ceil(cx + r)) + 1)
+				{
+					var dx:Float = px + 0.5 - cx;
+					var dy:Float = py + 0.5 - cy;
+					if (dx * dx + dy * dy <= r * r && px >= 0 && py >= 0 && px < width && py < height)
+						bitmap.setPixel32(px, py, color);
+				}
+		}
+		bitmap.unlock();
+
+		var piece:RoadPiece = new RoadPiece(minX, minY);
+		piece.loadGraphic(flixel.graphics.FlxGraphic.fromBitmapData(bitmap, false, null, false));
+		piece.antialiasing = false;
+		return piece;
 	}
 
 	/** Crea un sprite a partir de una clave de imagen y (opcionalmente) un prefijo de animacion. */
@@ -1147,6 +1320,13 @@ class OverworldState extends MusicBeatState
 		addPlayerAnim('walk_right', anims, 'walk right');
 		addPlayerAnim('enter', anims, 'level start');
 		addPlayerAnim('warp', anims, 'warp');
+		// caminos para nadar (move: 'swim') y para trepar (move: 'climb')
+		addPlayerAnim('swim_down', anims, 'swim down');
+		addPlayerAnim('swim_up', anims, 'swim up');
+		addPlayerAnim('swim_left', anims, 'swim left');
+		addPlayerAnim('swim_right', anims, 'swim right');
+		addPlayerAnim('enter_swim', anims, 'enter level swim');
+		addPlayerAnim('climb', anims, 'climb');
 
 		if (player.animation.getByName('walk_down') == null && anims.length > 0)
 			player.animation.addByPrefix('walk_down', anims[0], 8, true);
@@ -1254,12 +1434,28 @@ class OverworldState extends MusicBeatState
 		super.update(elapsed);
 
 		#if debug
-		// -shot: a los 3 s guarda una captura del mapa en world_shot.png y cierra (para revisar un
-		// mundo sin depender de capturar la ventana desde fuera)
+		// -shot: a los 3 s (o a los de -shotat) guarda una captura del mapa en world_shot.png y cierra
+		// (para revisar un mundo sin depender de capturar la ventana desde fuera). Con -walk <direccion>,
+		// a los 0,5 s BF echa a andar por codigo (para ver como nada o trepa sin simular teclas).
 		if (shotTimer >= 0 && Sys.args().contains('-shot'))
 		{
+			var args:Array<String> = Sys.args();
 			shotTimer += elapsed;
-			if (shotTimer > 3)
+			var walkArg:Int = args.indexOf('-walk');
+			if (!shotWalked && shotTimer >= 0.5 && walkArg > -1 && walkArg + 1 < args.length)
+			{
+				shotWalked = true;
+				switch (args[walkArg + 1])
+				{
+					case 'left': tryWalk(-1, 0);
+					case 'right': tryWalk(1, 0);
+					case 'up': tryWalk(0, -1);
+					default: tryWalk(0, 1);
+				}
+			}
+			var atArg:Int = args.indexOf('-shotat');
+			var at:Float = atArg > -1 && atArg + 1 < args.length ? Std.parseFloat(args[atArg + 1]) : 3;
+			if (shotTimer > (Math.isNaN(at) ? 3 : at))
 			{
 				shotTimer = -1;
 				var bmp:openfl.display.BitmapData = new openfl.display.BitmapData(FlxG.stage.stageWidth, FlxG.stage.stageHeight, false, 0xFF000000);
@@ -1285,7 +1481,7 @@ class OverworldState extends MusicBeatState
 
 		if (controls.BACK)
 		{
-			FlxG.sound.play(Paths.sound('cancelMenu'));
+			sfx(SFX_BACK);
 			goBack();
 			return;
 		}
@@ -1306,7 +1502,7 @@ class OverworldState extends MusicBeatState
 				return;
 			}
 			resetAskedAt = now;
-			FlxG.sound.play(Paths.sound('scrollMenu'));
+			sfx(SFX_WRONG);
 			showError('Pulsa R otra vez para borrar el progreso de este mundo y sus submundos');
 			return;
 		}
@@ -1356,7 +1552,7 @@ class OverworldState extends MusicBeatState
 		{
 			if (!OverworldData.exists(exit.world))
 			{
-				failExit('Esta salida lleva a "${exit.world}", que no existe');
+				failExit('Por aqui se ira a otro mundo ("${exit.world}"), que todavia no existe');
 				return;
 			}
 
@@ -1415,9 +1611,15 @@ class OverworldState extends MusicBeatState
 	function failExit(message:String)
 	{
 		busy = false;
-		FlxG.sound.play(Paths.sound('cancelMenu'));
+		sfx(SFX_WRONG);
 		showError(message);
 		updateNameText();
+
+		// una salida que aun no lleva a ningun sitio (suele estar fuera de la pantalla): BF vuelve por
+		// donde ha venido en vez de quedarse alli
+		var here:OverworldNodeFile = OverworldData.findNode(worldFile, curNodeId);
+		var back:OverworldNodeFile = OverworldData.findNode(worldFile, walkFrom);
+		if (here != null && here.type == 'exit' && back != null) walkAlong(pathBetween(here.id, back.id), here);
 	}
 
 	/**
@@ -1467,6 +1669,7 @@ class OverworldState extends MusicBeatState
 		// visible: primero se busca entre los accesibles y solo si no hay ninguno suena el cancel.
 		var bestLine:Array<Array<Float>> = null;
 		var bestTarget:OverworldNodeFile = null;
+		var bestPath:OverworldPathFile = null;
 		var bestScore:Float = MIN_DIRECTION_SCORE;
 		var lockedAhead:Bool = false;
 		var needAhead:OverworldNodeFile = null;
@@ -1500,11 +1703,12 @@ class OverworldState extends MusicBeatState
 			bestScore = score;
 			bestLine = line;
 			bestTarget = other;
+			bestPath = pth;
 		}
 
 		if (bestLine == null)
 		{
-			if (lockedAhead) FlxG.sound.play(Paths.sound('cancelMenu'));
+			if (lockedAhead) sfx(SFX_WRONG);
 			// un nodo de "N superados": se dice cuantos faltan
 			if (needAhead != null)
 				showError('Hacen falta ${needAhead.needLevels} superados en este mundo (llevas ${OverworldData.completedCount(curWorld, worldFile)})');
@@ -1512,10 +1716,11 @@ class OverworldState extends MusicBeatState
 		}
 
 		bestLine.shift(); // el primer punto es donde ya esta el jugador
+		walkFrom = current.id;
 		walkQueue = bestLine;
 		walkTarget = bestTarget;
+		walkMove = bestPath.move;
 		walking = true;
-		FlxG.sound.play(Paths.sound('scrollMenu'), 0.5);
 	}
 
 	/** Minimo parecido (producto escalar) entre la direccion pulsada y la salida del camino. */
@@ -1584,6 +1789,7 @@ class OverworldState extends MusicBeatState
 				leaveWorld(arrived);
 				return;
 			}
+			sfx(SFX_MOVE);
 
 			savePosition();
 			updateNameText();
@@ -1597,7 +1803,85 @@ class OverworldState extends MusicBeatState
 		else newFacing = dy < 0 ? 'up' : 'down';
 
 		facing = newFacing;
-		playAnim('walk_$facing');
+		playAnim(moveAnim());
+	}
+
+	/**
+	 * La animacion de ir por el camino actual: trepa en uno de 'climb' y, en uno de 'swim', nada
+	 * donde no hay suelo debajo (y anda en lo que pisa de tierra), como BF en los mapas de Mario's
+	 * Madness. Si el sprite no trae esa animacion, anda.
+	 */
+	function moveAnim():String
+	{
+		if (walkMove == 'climb' && player.animation.getByName('climb') != null) return 'climb';
+		if (walkMove == 'swim' && player.animation.getByName('swim_$facing') != null && !isLandAt(playerX, playerY)) return 'swim_$facing';
+		return 'walk_$facing';
+	}
+
+	/**
+	 * Hay suelo en ese punto si algun decorado de detras (los tiles del terreno) tiene ahi un pixel
+	 * visible. Lo transparente es el fondo: el mar.
+	 */
+	function isLandAt(x:Float, y:Float):Bool
+	{
+		if (spritesBack == null) return true;
+		var point:FlxPoint = FlxPoint.get(x, y);
+		var land:Bool = false;
+		for (spr in spritesBack.members)
+		{
+			if (spr == null || !spr.visible || !spr.overlapsPoint(point)) continue;
+			if (spr.pixelsOverlapPoint(point, 0x80, camGame))
+			{
+				land = true;
+				break;
+			}
+		}
+		point.put();
+		return land;
+	}
+
+	/** BF echa a andar solo por un camino, desde `from` hasta su otro extremo. */
+	function walkAlong(pth:OverworldPathFile, from:OverworldNodeFile):Bool
+	{
+		if (pth == null || from == null || walking) return false;
+		var nodeA:OverworldNodeFile = OverworldData.findNode(worldFile, pth.a);
+		var nodeB:OverworldNodeFile = OverworldData.findNode(worldFile, pth.b);
+		if (nodeA == null || nodeB == null) return false;
+
+		var line:Array<Array<Float>> = buildLine(pth, nodeA, nodeB);
+		if (pth.b == from.id) line.reverse();
+		line.shift(); // el primer punto es donde ya esta el jugador
+		walkFrom = from.id;
+		walkQueue = line;
+		walkTarget = (pth.a == from.id) ? nodeB : nodeA;
+		walkMove = pth.move;
+		walking = true;
+		return true;
+	}
+
+	/** El camino que une dos nodos, si lo hay. */
+	function pathBetween(a:String, b:String):OverworldPathFile
+	{
+		if (a == null || b == null) return null;
+		for (pth in worldFile.paths)
+			if ((pth.a == a && pth.b == b) || (pth.a == b && pth.b == a)) return pth;
+		return null;
+	}
+
+	/** BF esta en el agua: en un nodo al que se llega nadando y que no tiene suelo debajo. */
+	function inWater(node:OverworldNodeFile):Bool
+	{
+		if (node == null) return false;
+		for (pth in worldFile.paths)
+			if ((pth.a == node.id || pth.b == node.id) && pth.move == 'swim') return !isLandAt(node.x, node.y);
+		return false;
+	}
+
+	/** La animacion de entrar a un nivel (o a una tuberia): nadando si el nodo esta en el agua. */
+	function enterAnim():String
+	{
+		var node:OverworldNodeFile = OverworldData.findNode(worldFile, curNodeId);
+		return (inWater(node) && player.animation.getByName('enter_swim') != null) ? 'enter_swim' : 'enter';
 	}
 
 	function playAnim(name:String)
@@ -1607,11 +1891,15 @@ class OverworldState extends MusicBeatState
 		player.animation.resume();
 	}
 
-	/** Parado en un nodo, BF mira a camara y camina en el sitio, como Mario en el mapa de SMW. */
+	/**
+	 * Parado en un nodo, BF mira a camara y camina en el sitio, como Mario en el mapa de SMW (o nada en
+	 * el sitio, si el nodo esta en el agua).
+	 */
 	function idleAnim()
 	{
 		facing = 'down';
-		playAnim('walk_down');
+		var node:OverworldNodeFile = OverworldData.findNode(worldFile, curNodeId);
+		playAnim((inWater(node) && player.animation.getByName('swim_down') != null) ? 'swim_down' : 'walk_down');
 	}
 
 	function updatePlayerPosition()
@@ -1676,13 +1964,13 @@ class OverworldState extends MusicBeatState
 			case 'world':
 				if (node.world == null || node.world.length < 1 || !OverworldData.exists(node.world))
 				{
-					FlxG.sound.play(Paths.sound('cancelMenu'));
+					sfx(SFX_WRONG);
 					showError('El mundo "${node.world}" no existe');
 					return;
 				}
 
 				busy = true;
-				FlxG.sound.play(Paths.sound('confirmMenu'));
+				sfx(SFX_ENTER);
 
 				// Si el destino ya esta en la cadena (un nodo que vuelve a un mapa de mas arriba),
 				// se vuelve a el recortando la pila: apilarlo otra vez la corrompia (el castillo
@@ -1708,7 +1996,7 @@ class OverworldState extends MusicBeatState
 			case 'level':
 				if (node.song == null || node.song.length < 1)
 				{
-					FlxG.sound.play(Paths.sound('cancelMenu'));
+					sfx(SFX_WRONG);
 					showError('Este nodo no tiene cancion asignada');
 					return;
 				}
@@ -1718,7 +2006,7 @@ class OverworldState extends MusicBeatState
 				warpTo(node);
 
 			default:
-				FlxG.sound.play(Paths.sound('cancelMenu'));
+				sfx(SFX_WRONG);
 		}
 	}
 
@@ -1732,8 +2020,8 @@ class OverworldState extends MusicBeatState
 	{
 		if (node.world == null || node.world.length < 1 || !OverworldData.exists(node.world))
 		{
-			FlxG.sound.play(Paths.sound('cancelMenu'));
-			showError('Este warp no lleva a ningun mundo');
+			sfx(SFX_WRONG);
+			showError(node.world != null && node.world.length > 0 ? 'Este mundo todavia no existe' : 'Este warp no lleva a ningun mundo');
 			return;
 		}
 
@@ -1770,7 +2058,7 @@ class OverworldState extends MusicBeatState
 	{
 		var key:String = star ? STAR_SOUND : PIPE_SOUND;
 		if (Paths.fileExists('sounds/$key.${Paths.SOUND_EXT}', openfl.utils.AssetType.SOUND)) FlxG.sound.play(Paths.sound(key));
-		else if (orConfirm) FlxG.sound.play(Paths.sound('confirmMenu'));
+		else if (orConfirm) sfx(SFX_ENTER);
 	}
 
 	/** Estrella (como en Mario's Madness): BF gira con el sonido de la pluma, sale volando hacia arriba y la pantalla se funde. */
@@ -1932,7 +2220,7 @@ class OverworldState extends MusicBeatState
 		}
 		catch (e:haxe.Exception)
 		{
-			FlxG.sound.play(Paths.sound('cancelMenu'));
+			sfx(SFX_WRONG);
 			showError('No se pudo cargar "$songName":\n${e.message}');
 			return;
 		}
@@ -1944,8 +2232,10 @@ class OverworldState extends MusicBeatState
 		lastLevelNode = node.id;
 		curNodeId = node.id;
 
-		FlxG.sound.play(Paths.sound('confirmMenu'));
-		playAnim('enter');
+		sfx(SFX_ENTER);
+		playAnim(enterAnim());
+		// la musica del mapa se apaga mientras se cierra el iris, como en Mario's Madness
+		if (FlxG.sound.music != null && FlxG.sound.music.playing) FlxG.sound.music.fadeOut(0.7, 0);
 
 		new FlxTimer().start(0.3, function(_:FlxTimer) irisClose(function()
 		{
@@ -2067,4 +2357,16 @@ class OverworldState extends MusicBeatState
 		if (errorTimer != null) errorTimer.cancel();
 		errorTimer = new FlxTimer().start(4, function(_:FlxTimer) if (errorTxt != null) errorTxt.visible = false);
 	}
+}
+
+/** Un trozo de carretera (camino con `road`): se revela sin el saltito de los puntitos. */
+class RoadPiece extends FlxSprite {}
+
+/** Un circulo de una carretera: centro, radio y color. */
+typedef RoadCircle =
+{
+	var x:Float;
+	var y:Float;
+	var r:Float;
+	var color:FlxColor;
 }

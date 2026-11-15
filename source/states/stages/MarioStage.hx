@@ -65,6 +65,7 @@ class MarioStage extends BaseStage
 
 	override function create()
 	{
+		play.songCard = false; // tienen su propio rotulo (evento Show Song)
 		eventTweens = [];
 		eventTimers = [];
 		extraTween = [];
@@ -245,19 +246,6 @@ class MarioStage extends BaseStage
 
 	override function goodNoteHit(note:Note) cameraRoll(note.noteData, true);
 	override function opponentNoteHit(note:Note) cameraRoll(note.noteData, false);
-
-	override function countdownTick(count:Countdown, num:Int)
-	{
-		// en el mod la cuenta atrás iba en camOther: se ve aunque el HUD esté oculto
-		var spr:FlxSprite = switch (count)
-		{
-			case TWO: play.countdownReady;
-			case ONE: play.countdownSet;
-			case GO: play.countdownGo;
-			default: null;
-		}
-		if (spr != null) spr.cameras = [camOther];
-	}
 
 	override function beatHit()
 	{

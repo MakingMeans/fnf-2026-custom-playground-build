@@ -153,12 +153,15 @@ class WoCPauseSubState extends MusicBeatSubstate
 				PlayState.instance.canResync = false;
 				Mods.loadTopMod();
 				if (states.OverworldState.fromOverworld)
-					states.OverworldState.backToOverworld();
-				else if (PlayState.isStoryMode)
-					MusicBeatState.switchState(new StoryMenuState());
+					states.OverworldState.backToOverworld(); // el mapa pone su musica
 				else
-					MusicBeatState.switchState(new FreeplayState());
-				FlxG.sound.playMusic(Paths.music('freakyMenu'));
+				{
+					if (PlayState.isStoryMode)
+						MusicBeatState.switchState(new StoryMenuState());
+					else
+						MusicBeatState.switchState(new FreeplayState());
+					FlxG.sound.playMusic(Paths.music('freakyMenu'));
+				}
 				PlayState.changedDifficulty = false;
 				PlayState.chartingMode = false;
 				FlxG.camera.followLerp = 0;

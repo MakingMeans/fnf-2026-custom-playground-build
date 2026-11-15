@@ -691,7 +691,16 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 					for (row in 0...4)
 						plotLine(linesSprite.pixels, point[0] - 2 - ox, point[1] - 2 + row - oy, point[0] + 1 - ox, point[1] - 2 + row - oy, color);
 
-			// vista previa de los puntitos del camino
+			// vista previa de la carretera o de los puntitos del camino
+			if (pth.road)
+			{
+				for (piece in OverworldState.buildRoadPieces(pth, nodeA, nodeB))
+				{
+					piece.alpha = 0.8;
+					dotsGroup.add(piece);
+				}
+				continue;
+			}
 			for (point in OverworldState.getDotPositions(pth, nodeA, nodeB))
 			{
 				var dot:FlxSprite = OverworldState.buildSprite(pth.dots, pth.dotAnim, 6);
@@ -1585,6 +1594,25 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		lPathsCheck = new PsychUICheckBox(x, y, 'Unir en L los nodos no alineados (SHIFT: vertical primero)', 330, function() lPaths = lPathsCheck.checked);
 		lPathsCheck.checked = lPaths;
 		tab.add(lPathsCheck);
+
+		// carretera de SMW (como los mapas de Mario's Madness) y como lo recorre BF
+		y += 34;
+		pathRoadCheck = new PsychUICheckBox(x, y, 'Carretera (camino ancho de SMW, sin puntitos)', 330, function()
+		{
+			if (selectedPath == null) return;
+			selectedPath.road = pathRoadCheck.checked;
+			reloadMap(true);
+		});
+		tab.add(pathRoadCheck);
+
+		y += 44;
+		label(tab, x, y - 17, 'BF lo recorre:');
+		pathMoveDropDown = new PsychUIDropDownMenu(x, y, PATH_MOVE_LABELS, function(sel:Int, value:String)
+		{
+			if (selectedPath == null) return;
+			selectedPath.move = PATH_MOVES[sel];
+		}, 220);
+		tab.add(pathMoveDropDown);
 
 		y += 34;
 		var tip:FlxText = new FlxText(x, y, 340,
@@ -2493,6 +2521,9 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			pathSpacingStepper.value = selectedPath.dotSpacing;
 			pathByDropDown.selectedLabel = selectedPath.unlockedBy;
 			pathSecretCheck.checked = selectedPath.secret;
+			pathRoadCheck.checked = selectedPath.road;
+			var move:Int = PATH_MOVES.indexOf(selectedPath.move);
+			pathMoveDropDown.selectedLabel = PATH_MOVE_LABELS[move > -1 ? move : 0];
 		}
 		else pathInfoTxt.text = 'Ningun camino seleccionado';
 	}
@@ -3816,6 +3847,11 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 	var nodeSecretInput:PsychUIInputText;
 	var pathByDropDown:PsychUIDropDownMenu;
 	var pathSecretCheck:PsychUICheckBox;
+	var pathRoadCheck:PsychUICheckBox;
+	var pathMoveDropDown:PsychUIDropDownMenu;
+	/** Valores del campo `move` de un camino y su texto en el desplegable. */
+	static final PATH_MOVES:Array<String> = ['walk', 'swim', 'climb'];
+	static final PATH_MOVE_LABELS:Array<String> = ['andando', 'nadando (en el agua)', 'trepando (escalera)'];
 	var lPathsCheck:PsychUICheckBox;
 
 	/**

@@ -68,6 +68,7 @@ class OverworldPlaytest extends FlxBasic
 	public static function start()
 	{
 		running = true;
+		OverworldState.autoWalk = false; // los pasos dan por hecho que BF se queda en el nivel superado
 		OverworldData.simStartWorld = 'zz_demo'; // la partida simulada (avisos) empieza en la demo
 		FlxG.autoPause = false; // sin foco, flixel pausaria el juego y la prueba se quedaria parada
 		for (world in WORLDS) OverworldData.resetProgress(world);
@@ -521,7 +522,7 @@ class OverworldPlaytest extends FlxBasic
 			if (Std.downcast(FlxG.state, MainMenuState) == null || FlxG.state.subState != null) return false;
 			check(OverworldState.menuFromMap, 'el menu sabe que se abrio desde el mapa');
 			OverworldState.menuFromMap = false;
-			MusicBeatState.switchState(new OverworldState()); // lo mismo que hace su BACK
+			MusicBeatState.switchState(new OverworldState()); // lo mismo que hace su "Story Mode"
 			return true;
 		}, true, true);
 		expectAt('zz_demo', 'P');
@@ -538,6 +539,23 @@ class OverworldPlaytest extends FlxBasic
 		expectAt('zz_demo', 'L1');
 		expectPath('L1', 'L2', false);
 		shot('09_tras_R');
+
+		// --- al superar un nivel, BF va solo hasta lo que acaba de abrir (como en Mario's Madness)
+		add('encender el paseo automatico', function()
+		{
+			OverworldState.autoWalk = true;
+			return true;
+		});
+		beat();
+		add('BF va solo al nivel recien abierto', function()
+		{
+			// ready(): el mapa nuevo (no el de antes de la cancion), sin revelar y con BF parado
+			if (!ready()) return false;
+			check(OverworldState.curNodeId == 'L2', 'tras superar L1, BF ha ido solo a L2 (esta en ${OverworldState.curNodeId})');
+			OverworldState.autoWalk = false;
+			OverworldData.resetProgress('zz_demo');
+			return true;
+		}, false, true);
 
 		// --- un mapa sin ningun nodo abierto no deja a BF atrapado: vuelve al mapa de fuera
 		add('entrar a un mapa sin nodos abiertos', function()

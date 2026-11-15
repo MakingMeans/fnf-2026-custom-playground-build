@@ -59,6 +59,8 @@ typedef OverworldPathFile =
 	var dotSpacing:Float;
 	var unlockedBy:String;          // id del nodo que lo abre al completarse ('' = abierto con sus extremos)
 	var secret:Bool;                // lo abre la salida secreta de `unlockedBy`, no superarlo sin mas
+	var road:Bool;                  // se dibuja como carretera de SMW (ancha, con plataforma en sus nodos) en vez de puntitos
+	var move:String;                // como lo recorre BF: 'walk' | 'swim' (nada donde no hay suelo) | 'climb' (trepa)
 }
 
 /** Un aviso de checkWorldProblems(): el texto y el nodo al que se refiere (null = todo el mundo). */
@@ -98,8 +100,9 @@ typedef OverworldFile =
 
 class OverworldData
 {
-	// El mundo que abre TitleState y con el que arranca el editor si no le pasas otro.
-	public static final DEFAULT_WORLD:String = 'test_graph';
+	// El mundo que abre el "Story Mode" del menu principal y con el que arranca el editor si no le
+	// pasas otro. Es el primer mundo real (los mundos test_* siguen para las pruebas).
+	public static final DEFAULT_WORLD:String = 'world1';
 	public static final DEFAULT_BG:String = 'overworld/backgrounds/sea';
 	public static final DEFAULT_SONG:String = 'tutorial';
 	public static final DEFAULT_WEEK:String = 'tutorial';
@@ -277,7 +280,9 @@ class OverworldData
 			dotAnim: 'idle',
 			dotSpacing: 16,
 			unlockedBy: '',
-			secret: false
+			secret: false,
+			road: false,
+			move: 'walk'
 		};
 	}
 
@@ -1759,6 +1764,8 @@ class OverworldData
 		for (anim in info.anims)
 			if (anim.toLowerCase().indexOf('walk') > -1) return 'player';
 
+		// lo de una carpeta "backgrounds" es fondo aunque sea pequeno (un mar en mosaico de 32x32)
+		if (key.indexOf('backgrounds/') > -1) return 'bg';
 		if (info.frameWidth >= 120 && info.frameHeight >= 90) return 'bg';
 		return 'node';
 	}

@@ -255,8 +255,6 @@ class PlayState extends MusicBeatState
 	private var luaDebugGroup:FlxTypedGroup<psychlua.DebugLuaText>;
 	#end
 	public var introSoundsSuffix:String = '';
-	/** false: la cuenta atras (3, 2, 1, go) se ve pero no suena (lo pone el escenario, p. ej. Vs Sonic.exe). */
-	public var countdownSounds:Bool = true;
 
 	// Less laggy controls
 	private var keysArray:Array<String>;
@@ -933,23 +931,12 @@ class PlayState extends MusicBeatState
 	public var countdownGo:FlxSprite;
 	public static var startOnTime:Float = 0;
 
-	function cacheCountdown()
-	{
-		var introAssets:Map<String, Array<String>> = new Map<String, Array<String>>();
-		var introImagesArray:Array<String> = switch(stageUI) {
-			case "pixel": ['pixelUI/ready-pixel', 'pixelUI/set-pixel', 'pixelUI/date-pixel'];
-			case "normal": ["ready", "set" ,"go"];
-			default: ['${uiPrefix}UI/ready${uiPostfix}', '${uiPrefix}UI/set${uiPostfix}', '${uiPrefix}UI/go${uiPostfix}'];
-		}
-		introAssets.set(stageUI, introImagesArray);
-		var introAlts:Array<String> = introAssets.get(stageUI);
-		for (asset in introAlts) Paths.image(asset);
-
-		Paths.sound('intro3' + introSoundsSuffix);
-		Paths.sound('intro2' + introSoundsSuffix);
-		Paths.sound('intro1' + introSoundsSuffix);
-		Paths.sound('introGo' + introSoundsSuffix);
-	}
+	/**
+	 * La cuenta atras (3, 2, 1, go) ya no se ve ni suena en ninguna cancion: se conserva su tiempo (los
+	 * 5 pulsos de entrada y los avisos onCountdownTick a escenarios y scripts) y en su lugar sale el
+	 * rotulo de la cancion (SongCard). Por eso aqui ya no hay nada que precargar.
+	 */
+	function cacheCountdown() {}
 
 	public function startCountdown()
 	{
@@ -981,6 +968,7 @@ class PlayState extends MusicBeatState
 			Conductor.songPosition = -Conductor.crochet * 5 + Conductor.offset;
 			setOnScripts('startedCountdown', true);
 			callOnScripts('onCountdownStarted');
+			if (songCard && startOnTime <= 0) showSongCard();
 
 			var swagCounter:Int = 0;
 			if (startOnTime > 0) {
@@ -999,37 +987,13 @@ class PlayState extends MusicBeatState
 			{
 				characterBopper(tmr.loopsLeft);
 
-				var introAssets:Map<String, Array<String>> = new Map<String, Array<String>>();
-				var introImagesArray:Array<String> = switch(stageUI) {
-					case "pixel": ['pixelUI/ready-pixel', 'pixelUI/set-pixel', 'pixelUI/date-pixel'];
-					case "normal": ["ready", "set" ,"go"];
-					default: ['${uiPrefix}UI/ready${uiPostfix}', '${uiPrefix}UI/set${uiPostfix}', '${uiPrefix}UI/go${uiPostfix}'];
-				}
-				introAssets.set(stageUI, introImagesArray);
-
-				var introAlts:Array<String> = introAssets.get(stageUI);
-				var antialias:Bool = (ClientPrefs.data.antialiasing && !isPixelStage);
-				var tick:Countdown = THREE;
-
-				switch (swagCounter)
+				var tick:Countdown = switch (swagCounter)
 				{
-					case 0:
-						if (countdownSounds) FlxG.sound.play(Paths.sound('intro3' + introSoundsSuffix), 0.6);
-						tick = THREE;
-					case 1:
-						countdownReady = createCountdownSprite(introAlts[0], antialias);
-						if (countdownSounds) FlxG.sound.play(Paths.sound('intro2' + introSoundsSuffix), 0.6);
-						tick = TWO;
-					case 2:
-						countdownSet = createCountdownSprite(introAlts[1], antialias);
-						if (countdownSounds) FlxG.sound.play(Paths.sound('intro1' + introSoundsSuffix), 0.6);
-						tick = ONE;
-					case 3:
-						countdownGo = createCountdownSprite(introAlts[2], antialias);
-						if (countdownSounds) FlxG.sound.play(Paths.sound('introGo' + introSoundsSuffix), 0.6);
-						tick = GO;
-					case 4:
-						tick = START;
+					case 0: THREE;
+					case 1: TWO;
+					case 2: ONE;
+					case 3: GO;
+					default: START;
 				}
 
 				if(!skipArrowStartTween)
@@ -1053,30 +1017,6 @@ class PlayState extends MusicBeatState
 			}, 5);
 		}
 		return true;
-	}
-
-	inline private function createCountdownSprite(image:String, antialias:Bool):FlxSprite
-	{
-		var spr:FlxSprite = new FlxSprite().loadGraphic(Paths.image(image));
-		spr.cameras = [camHUD];
-		spr.scrollFactor.set();
-		spr.updateHitbox();
-
-		if (PlayState.isPixelStage)
-			spr.setGraphicSize(Std.int(spr.width * daPixelZoom));
-
-		spr.screenCenter();
-		spr.antialiasing = antialias;
-		insert(members.indexOf(noteGroup), spr);
-		FlxTween.tween(spr, {/*y: spr.y + 100,*/ alpha: 0}, Conductor.crochet / 1000, {
-			ease: FlxEase.cubeInOut,
-			onComplete: function(twn:FlxTween)
-			{
-				remove(spr);
-				spr.destroy();
-			}
-		});
-		return spr;
 	}
 
 	public function addBehindGF(obj:FlxBasic)
@@ -1910,6 +1850,23 @@ class PlayState extends MusicBeatState
 	/** Menu de pausa propio de un escenario (p. ej. World of Chaos); null = el de Psych. */
 	public var pauseMenuFactory:Void->FlxSubState = null;
 
+	/**
+	 * Al empezar sale el rotulo de la cancion (objects.SongCard, estilo en data/<cancion>/songcard.json)
+	 * en lugar de la cuenta atras. Los escenarios de canciones con rotulo propio lo ponen a false.
+	 */
+	public var songCard:Bool = true;
+
+	function showSongCard()
+	{
+		var card:objects.SongCard = null;
+		card = new objects.SongCard(songName, SONG.song, function()
+		{
+			remove(card, true);
+			card.destroy();
+		});
+		add(card);
+	}
+
 	function openPauseMenu()
 	{
 		FlxG.camera.followLerp = 0;
@@ -2504,8 +2461,7 @@ class PlayState extends MusicBeatState
 				if(!ClientPrefs.getGameplaySetting('practice') && !ClientPrefs.getGameplaySetting('botplay'))
 					states.OverworldState.completeCurrentNode(songMisses, ratingPercent); // fallos y precision: salida secreta
 
-				states.OverworldState.backToOverworld();
-				FlxG.sound.playMusic(Paths.music('freakyMenu'));
+				states.OverworldState.backToOverworld(); // el mapa pone su musica
 				changedDifficulty = false;
 			}
 			else

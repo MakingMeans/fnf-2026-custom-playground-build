@@ -20,6 +20,26 @@ python tools/ports/world_of_chaos.py [carpeta clubpe]          (World of Chaos; 
 Si el mod tenía la lógica de la canción en su código (no en scripts), se reescribe en Haxe como una
 clase de escenario en `source/states/stages/` registrada en el `switch (curStage)` de `PlayState`.
 
+## Al empezar: rótulo de la canción (sin cuenta atrás)
+
+Ninguna canción tiene ya la cuenta atrás "3, 2, 1, go": ni se ve ni suena. Se conserva su tiempo (los
+5 pulsos de entrada y los avisos `onCountdownTick` a escenarios y scripts) y en su lugar sale un
+**rótulo con el nombre de la canción** (`source/objects/SongCard.hx`), con el estilo de cada una en
+`data/<canción>/songcard.json`: `title`, `subtitle`, `style` (`banner`: franja desde la izquierda;
+`circle`: círculo desde la derecha y título desde la izquierda, como las pantallas de inicio de Vs
+Sonic.exe; `panel`: tarjeta redondeada que baja desde arriba), `font`, `color`, `accent`,
+`textColor`, `subtitleColor`, `titleSize`, `delay`, `hold` y `at` (segundo de canción en que sale).
+Sin ese archivo sale la franja por defecto con el nombre de la canción. Va en una cámara propia
+creada al aparecer, por encima de todo, también de un vídeo que ya esté sonando.
+
+| Canción | Rótulo |
+|---|---|
+| yararara | franja roja de Kasane Teto, en el segundo 1 (sobre el vídeo de entrada) |
+| chaos | círculo dorado de Fleetway con la fuente de Sonic CD, al acabar la intro |
+| world-of-chaos | tarjeta rosa de Doki Doki con `doki.ttf` |
+| tutorial (y los niveles de prueba) | franja oscura con raya rosa |
+| last-course, bad-day, endless-us | ninguno: ya traen el suyo (evento "Show Song" y pantalla de inicio); sus escenarios ponen `PlayState.songCard = false` |
+
 Reglas que siguen todas:
 
 | Qué | Dónde | Por qué |
@@ -98,7 +118,7 @@ https://github.com/Dewott2501/Mario-Madness), así que aquí está reescrita en 
 | `source/shaders/RippleShader.hx` | La distorsión del veneno de Bad Day (copia del mod). |
 | `source/substates/GameOverCustom.hx` | Base para game over propios de un escenario (`GameOverSubstate.custom`). |
 
-Las dos usan las flechas, chispazos, cuenta atrás y calificaciones de Mario's Madness
+Las dos usan las flechas, chispazos y calificaciones de Mario's Madness
 (`images/mario_madness/` y `"stageUI": "mario_madness"` → `images/mario_madnessUI/`), y 0.023 de vida
 por acierto / 0.0475 por fallo, como el mod.
 
@@ -158,8 +178,6 @@ sitio distinto. Además, `Character` pide el símbolo con su nombre exacto (flxa
 prefijo: la intro de Fleetway, símbolo `1`, podía coger `1idle`). La estatua de Sonic de la intro de
 chaos es otro atlas: `FleetwayStage` le suma al offset la esquina del recuadro de `intro` × escala.
 
-En el mod los sonidos de la cuenta atrás son silencio (los cuatro son el mismo ogg): en estas
-canciones la cuenta atrás se ve pero no suena (`PlayState.countdownSounds`, lo pone `SonicStage`).
 
 Lo que hacía el motor del mod, y sus scripts globales, está en Haxe:
 

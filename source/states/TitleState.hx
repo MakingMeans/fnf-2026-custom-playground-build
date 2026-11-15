@@ -387,15 +387,8 @@ class TitleState extends MusicBeatState
 
 				new FlxTimer().start(1, function(tmr:FlxTimer)
 				{
-					// El overworld sustituye al menu principal si existe el mundo inicial.
-					// Si no, se entra al menu clasico de siempre.
-					if(backend.OverworldData.exists(backend.OverworldData.DEFAULT_WORLD))
-					{
-						states.OverworldState.reset();
-						states.OverworldState.restorePosition(); // seguir donde se dejo a BF
-						MusicBeatState.switchState(new states.OverworldState());
-					}
-					else MusicBeatState.switchState(new MainMenuState());
+					// intro -> menu principal; el overworld se abre desde su "Story Mode"
+					MusicBeatState.switchState(new MainMenuState());
 					closedState = true;
 				});
 				// FlxG.sound.play(Paths.music('titleShoot'), 0.7);

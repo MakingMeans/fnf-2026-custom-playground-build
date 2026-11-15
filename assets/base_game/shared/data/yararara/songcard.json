@@ -1,0 +1,13 @@
+{
+	"title": "YARARARA",
+	"subtitle": "Kasane Teto",
+	"style": "banner",
+	"font": "vcr.ttf",
+	"titleSize": 60,
+	"color": "#C8213A",
+	"accent": "#1E1418",
+	"textColor": "#FFFFFF",
+	"subtitleColor": "#FFD6DC",
+	"at": 1.0,
+	"hold": 3.0
+}

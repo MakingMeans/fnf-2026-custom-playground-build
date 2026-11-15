@@ -261,13 +261,7 @@ class MainMenuState extends MusicBeatState
 				FlxG.mouse.visible = false;
 				FlxG.sound.play(Paths.sound('cancelMenu'));
 
-				// abierto con ESC desde el overworld: se vuelve al mismo mapa y nodo
-				if (OverworldState.menuFromMap)
-				{
-					OverworldState.menuFromMap = false;
-					MusicBeatState.switchState(new OverworldState());
-				}
-				else MusicBeatState.switchState(new TitleState());
+				MusicBeatState.switchState(new TitleState());
 			}
 
 			if (controls.ACCEPT || (FlxG.mouse.justPressed && allowMouse))
@@ -301,7 +295,16 @@ class MainMenuState extends MusicBeatState
 					switch (option)
 					{
 						case 'story_mode':
-							MusicBeatState.switchState(new StoryMenuState());
+							// el modo historia es el overworld (el menu de semanas, si no hay mundo)
+							if (backend.OverworldData.exists(backend.OverworldData.DEFAULT_WORLD))
+							{
+								// recien abierto el juego, BF sale del inicio del primer mundo; si se
+								// salio del mapa con ESC, vuelve al mismo mapa y nodo
+								if (!OverworldState.menuFromMap) OverworldState.reset();
+								OverworldState.menuFromMap = false;
+								MusicBeatState.switchState(new OverworldState());
+							}
+							else MusicBeatState.switchState(new StoryMenuState());
 						case 'freeplay':
 							MusicBeatState.switchState(new FreeplayState());
 

@@ -1,6 +1,6 @@
 # Overworld (mapa estilo Super Mario World)
 
-Sustituye al menú principal: al pulsar ENTER en el título entras a un mapa por el que BF camina
+Es el modo historia: título → menú principal → **Story Mode** abre un mapa por el que BF camina
 de nodo en nodo, igual que Mario en Super Mario World. Cada nodo puede ser un **nivel** (una
 canción del juego) o una **entrada a otro mundo** (una semana / sub-mapa).
 
@@ -41,9 +41,10 @@ principal → **7** → *Overworld Editor*.
 Los `.bat` usan la build de `export\debug\`; si no existe, la de `export\release\`. Si no hay
 ninguna, ejecuta `run.bat` una vez para compilar.
 
-El mundo que abre el título (y con el que arranca el editor si no le pasas otro) es el que dice
-`OverworldData.DEFAULT_WORLD`; ahora mismo es **`test_graph`**. Si borras o renombras su `.json`,
-el título vuelve a llevar directamente al menú clásico de siempre.
+El mundo que abre **Story Mode** (y con el que arranca el editor si no le pasas otro) es el que
+dice `OverworldData.DEFAULT_WORLD`; ahora mismo es **`world1`**. Recién abierto el juego, BF sale del
+nodo inicial de ese mundo; si sales del mapa con ESC y vuelves a Story Mode, sigues en el mismo
+mapa y nodo. Si borras o renombras su `.json`, Story Mode lleva al menú de semanas de siempre.
 
 ## 2. Controles del editor
 
@@ -239,7 +240,15 @@ Arrastrar un nodo con el ratón (en modo V) lo mueve; también puedes teclear X/
 4. Repite para `n1`-`n2` y `n2`-`n3`.
 
 En la pestaña **Camino** puedes cambiar el sprite de los puntitos (`overworld/dot`, `overworld/dotgb`)
-y la separación entre ellos.
+y la separación entre ellos, y además:
+
+- **Carretera**: el camino se dibuja como los de Mario's Madness y SMW, una franja beis de 8 px con
+  una plataforma redonda en cada nodo (sin puntitos). Al abrirse crece trozo a trozo. Lo que pasa por
+  el agua (donde no hay decorado debajo) sale como puntitos blancos. En el editor se ve entera.
+- **BF lo recorre**: *andando*; *nadando* (nada en lo que cae en el agua y anda en lo que pisa tierra;
+  parado en un nodo en el agua, flota); o *trepando* (por una escalera: trepa en todo el camino, así
+  que pon sus nodos pegados al principio y al final de la escalera). Una escalera que aparezca al
+  abrirse el camino se hace con sus "puntitos": `overworld/world1/ladder` con separación 6.
 
 ### Paso 4a — pintar el mapa con tiles
 
@@ -354,7 +363,7 @@ en bucle), como Mario en el mapa de SMW.
 
 ### Paso 6 — que sea el mapa principal
 
-El juego entra al mundo que nombra `OverworldData.DEFAULT_WORLD` (ahora `test_graph`). Tienes
+El juego entra al mundo que nombra `OverworldData.DEFAULT_WORLD` (ahora `world1`). Tienes
 dos opciones:
 
 - **Que tu mundo sea el principal**: ponle ese nombre de archivo y guárdalo, o cambia la constante
@@ -365,8 +374,8 @@ dos opciones:
 
 ### Salidas y transiciones: nodos `exit`
 
-**ESC no saca de un mapa**: abre el menú principal, y al salir del menú vuelves al mismo mapa y
-nodo. Para irse de un mapa hay que **llegar andando a un nodo de tipo `exit`**. Lo que pasa al
+**ESC no saca de un mapa**: abre el menú principal, y al volver a Story Mode vuelves al mismo mapa
+y nodo. Para irse de un mapa hay que **llegar andando a un nodo de tipo `exit`**. Lo que pasa al
 alcanzarlo depende de su **Mundo destino**:
 
 - **Sin destino** (salida de submundo): vuelve al mapa de fuera, encima del nodo `world` por el
@@ -419,9 +428,8 @@ Cómo viaja BF depende del **sprite** del warp (visuales sacados del mapa de Mar
 | Una estrella (`overworld/star`, o cualquier imagen con "star" en el nombre) | Gira con el sonido de la pluma de SMW (`sounds/overworld/smw_feather_get`), sale volando hacia arriba y la pantalla se funde a negro a saltos | La pantalla se aclara a saltos y BF baja girando hasta posarse en la estrella |
 | Cualquier otro (tubería...) | Da un saltito y se mete en la tubería; después se cierra el iris | Con el iris ya abierto, sale de la tubería de un salto |
 
-El mapa de Mario's Madness no tiene sonido de tubería: la tubería suena con el de confirmar del
-menú. Si pones un sonido en `assets/shared/sounds/overworld/pipe.ogg`, se usa ese al entrar y al
-salir de una tubería.
+La tubería suena con `assets/shared/sounds/overworld/pipe.ogg` (el `enter_the_pipe` de Mario's
+Madness) al entrar y al salir; sin ese archivo, con el de entrar a un nivel.
 
 No es un submundo: ESC sigue
 abriendo el menú, y un warp es un salto "global" que olvida de qué castillos venías (si vuelves a
@@ -457,8 +465,8 @@ y se aparece encima de su tubería.
 
 ## Mundo de pruebas: `test_graph`
 
-Un mundo pequeño para comprobar que el grafo funciona. Es el **mundo por defecto**: es el que
-abre el título, `play.bat` y `run-world.bat` sin nombre. Atajos en la carpeta `tests\`:
+Un mundo pequeño para comprobar que el grafo funciona. Fue el mundo por defecto hasta que llegó
+el mundo 1. Atajos en la carpeta `tests\`:
 `test-world.bat` para jugarlo y `test-editor.bat` para abrirlo en el editor.
 
 ```
@@ -503,8 +511,8 @@ recorrer el mapa: `FNF2026Playground.exe -overworld test_hub -warp-from test_gra
 | salida | desbloqueada, sin sprite, en x = -112 | — (al llegar, vuelves al castillo) |
 | tubo | bloqueado, sprite `overworld/pipe` | — (al llegar, vuelves al castillo) |
 
-T4 no tiene *Anim. completado* a propósito: al superarlo sale el check verde en vez de cambiar
-de color, para poder ver los dos tipos de marca.
+T4 no tiene *Anim. completado* a propósito: al superarlo se queda igual (como los niveles de
+SMW), para poder ver los dos casos.
 
 Usa las canciones `tutorial1` … `tutorial5` de la semana `test_levels` (oculta en el modo
 historia, visible en Freeplay). Son copias del chart del tutorial que conservan
@@ -582,7 +590,9 @@ de la build al repo. También existe **Guardar como...** para elegir la ruta a m
     { "a": "n0", "b": "n1", "points": [[192, 160]],
       "dots": "overworld/dot", "dotAnim": "idle", "dotSpacing": 16,
       "unlockedBy": "",               // id del nodo que lo abre al completarse ("" = con sus nodos)
-      "secret": false }               // true: lo abre la salida secreta de unlockedBy
+      "secret": false,                // true: lo abre la salida secreta de unlockedBy
+      "road": false,                  // true: carretera de SMW en vez de puntitos (en el agua, puntitos blancos)
+      "move": "walk" }                // como lo recorre BF: "walk" | "swim" | "climb"
   ]
 }
 ```
@@ -590,22 +600,34 @@ de la build al repo. También existe **Guardar como...** para elegir la ruta a m
 ## 6. Cómo se juega el mapa
 
 - Flechas / WASD: BF camina al nodo contiguo en esa dirección, siguiendo el camino.
-- Un nodo bloqueado no deja pasar (suena el *cancel*). Se desbloquea cuando completas un nodo que
+- Un nodo bloqueado no deja pasar (suena el *wrong*). Se desbloquea cuando completas un nodo que
   lo lista en `unlocks`.
+- **Sonidos y música** (los del mapa de Mario's Madness, en `sounds/overworld/`): `move` al llegar a
+  un nodo, `unlock` al abrirse un camino, `enter` al entrar a un nivel o castillo (el `gotolevel` de
+  su mapa antiguo; al entrar, además, la música del mapa se apaga en 0,7 s), `wrong` cuando
+  no se puede, `back` al salir con ESC, `pipe` y `smw_feather_get` en tuberías y estrellas. El
+  mundo 1 suena con la música del mundo 1 de Mario's Madness (`music/overworld/world1`). Al volver
+  de una canción (al acabarla, desde la pausa o desde el game over) no suena la música del menú:
+  el mapa pone directamente la suya.
 - ACCEPT: entra al nivel (o al mundo). Al terminar la canción vuelves al mapa y el nodo queda
   marcado como completado. Si sales por pausa o game over, vuelves al mapa sin completarlo. En
   *practice* o *botplay* tampoco cuenta.
 - **Caminos nuevos**: la primera vez que superas un nivel, los caminos que abre aparecen puntito
   a puntito desde ese nivel, como en SMW. Si abre varios (una bifurcación), crecen a la vez; si
   un camino continúa desde otro recién abierto, sale después. ACCEPT o BACK se saltan la
-  animación. Repetir un nivel ya superado no la vuelve a mostrar.
-- **Niveles superados**: el nodo cambia a su *Anim. completado*. Si no tiene ninguna, se le pone
-  encima un **check verde**. Abajo, el nombre lleva **SUPERADO** y a la derecha se lee
-  `Superados: X/Y` del mundo actual.
-- BACK (ESC): abre el menú clásico (freeplay, opciones, mods, créditos, editores) en cualquier
-  mapa, también dentro de un submundo. BACK en ese menú te devuelve al mismo mapa y nodo.
+  animación. Repetir un nivel ya superado no la vuelve a mostrar. Al abrirse suena un "boom" y
+  salen nubecitas de humo, y al acabar **BF va solo al nodo recién abierto** (como en Mario's
+  Madness); si se abren varios, al de la salida normal antes que al de la secreta.
+- **Niveles superados**: el nodo cambia a su *Anim. completado*; si no tiene ninguna, se queda
+  igual (así va el mundo 1: como en SMW, los niveles son amarillos y los que tienen salida
+  secreta, rojos, y no cambian al superarlos; lo superado se nota en los caminos abiertos). Abajo,
+  el nombre lleva **SUPERADO** y a la derecha se lee `Superados: X/Y` del mundo actual.
+- BACK (ESC): abre el menú principal (freeplay, opciones, mods, créditos, editores) en cualquier
+  mapa, también dentro de un submundo. Story Mode te devuelve al mismo mapa y nodo.
 - **Nodo `exit`**: al llegar andando a él, BF sale del submundo (sin *Mundo destino*) o pasa al
-  mundo que tenga de destino, entrando andando por la salida de vuelta.
+  mundo que tenga de destino, entrando andando por la salida de vuelta. Si ese mundo aún no
+  existe (o la salida no lleva a ningún sitio), sale un aviso y BF vuelve andando al nodo de
+  antes. Una estrella o tubería hacia un mundo que no existe avisa de que "todavía no existe".
 - **Transiciones**: al entrar a un nivel, a un castillo, a una tubería o a otro mapa, la pantalla se
   cierra en un **círculo sobre BF** y el mapa siguiente se abre igual (también al volver de una
   canción), como en Super Mario World.
@@ -640,41 +662,52 @@ copiar el JSON a `export/.../assets/shared/overworlds/`) para verlo en el juego.
 ## Mundo 1 (`world1`)
 
 El primer mundo real, según el boceto del usuario. Se abre con `tests\test-world1.bat`. Lo genera
-entero (grafo y arte) `tools/build_world1.py` (necesita Pillow): si se edita en el editor, no volver
-a ejecutar ese script, porque sobrescribiría esos cambios. Con un nombre de archivo como argumento
-guarda una vista previa del mapa completo, y con `--dry-run` solo hace la vista previa.
+entero (grafo y arte) `tools/build_world1.py` (necesita Pillow y numpy): si se edita en el editor, no
+volver a ejecutar ese script, porque sobrescribiría esos cambios. Con un nombre de archivo como
+argumento guarda una vista previa del mapa completo, y con `--dry-run` solo hace la vista previa.
 
-El mapa mide 768x496 (3x2 fondos de mar) y, como en el boceto, la isla y la meseta llegan al borde
-derecho y el puente al de arriba:
+Está diseñado como la isla del mundo 1 de Mario's Madness (`assets/images/warpzone/1/bg1.png` de su
+mod; el usuario lo eligió el 14/11/2026 entre cuatro variantes: esa, una al estilo de Yoshi's Island,
+otra con meseta escalonada y bosque, y la anterior). El mundo cabe en una pantalla (416x224) y la
+cámara no se mueve; los niveles están a 40-90 px unos de otros:
 
-- **Isla baja**: Inicio con la tubería encima, yararara, Bad Day en la esquina y Chaos en el cruce.
-- **Meseta**: se sube desde Chaos por una **escalera tallada** en el acantilado hasta Last Course;
-  sigue el castillo (World of Chaos, que se ve derrumbado al superarlo) y el camino hacia el este.
-- **Puente** de madera al norte, con Endless encima; sigue hacia el norte fuera del mapa.
+- **Isla**: una caja con el borde festoneado y un frente de acantilado liso. Inicio con la tubería
+  encima, yararara, Bad Day y Chaos en el cruce.
+- **Meseta**: un bloque elevado encima de la isla. Desde Chaos se **trepa por una escalera**
+  (aparece al abrirse el camino) hasta Last Course; sigue el castillo (World of Chaos, que se ve
+  derrumbado al superarlo) y, al final, una **estrella** que llevará al mundo 2.
+- **Islote de Endless**: desde Chaos se va a la izquierda y se **cruza a nado** hacia el norte; desde
+  el islote se sigue nadando hacia el norte, fuera de la pantalla, hacia otro mundo.
+- Carreteras beis (puntitos blancos en el agua), columnas con ojos asomando por detrás de los bordes,
+  rocas en cuña, matorrales, piedrecitas, rocas blancas en el mar y peces saltando (su animación).
+  Música: la del mundo 1 de Mario's Madness.
 
-El script dibuja el mapa en un lienzo con las celdas de la hoja de SMW (las piezas de la isla
-piloto) y dibujos propios, y lo trocea en tiles de 8x8. Los que existen en `og_mario/overworld_tiles`
-usan ese atlas; los que no (puente, escalera, la roca del acantilado y una esquina) van a un atlas
-propio, `overworld/world1/tiles`, que también sale en la paleta del editor. Son unos 3400 tiles: en
-el juego, los decorados quietos se juntan en una sola imagen al cargar el mapa
-(`OverworldState.bakeStillSprites`), y en el editor siguen sueltos para poder editarlos.
+El terreno se dibuja por código con la paleta de SMW (la misma de Mario's Madness): cada capa (isla,
+islote, meseta) es una forma con su costa festoneada, su acantilado liso (sin grietas) y la espuma
+donde da al mar. Las columnas, rocas, matorrales, piedras y rocas del mar se recortan del propio mapa
+de Mario's Madness (las columnas se alargan repitiendo una fila del cuerpo). Todo se trocea en tiles
+de 8x8 (`overworld/world1/tiles`, también en la paleta del editor). El mar es `overworld/backgrounds/world1_sea`, en fotogramas de 32x32: el juego redondea el
+tamaño del mapa a fotogramas enteros del fondo, y con fotogramas pequeños el mapa mide lo que el
+dibujo. En el juego, los decorados quietos se juntan en una sola imagen al cargar el mapa
+(`OverworldState.bakeStillSprites`); en el editor siguen sueltos para poder editarlos.
 
 | Nodo | Qué es |
 |---|---|
 | `inicio` | Punto de aparición (no es nivel), con la tubería encima (aún sin destino) |
 | `yararara` | Primer nivel (abierto) |
 | `bad-day` | Lo abre yararara |
-| `chaos` | El cruce de 3 caminos. Al superarlo abre los escalones a la meseta; su **salida secreta** (las 7 esmeraldas) abre el puente al norte |
+| `chaos` | El cruce de 3 caminos. Al superarlo abre la escalera a la meseta; su **salida secreta** (las 7 esmeraldas) abre el camino a nado al norte |
 | `last-course` | En la meseta |
 | `castillo` | World of Chaos |
-| `endless` | Al norte, pasando el puente |
-| `camino-norte`, `camino-este` | Final de los caminos que seguirán a otros mundos |
+| `estrella` | Al final, después del castillo: estrella (warp) al mundo 2, `world2` (aún no existe) |
+| `endless` | En el islote del norte, a nado |
+| `salida-norte` | Salida invisible fuera de la pantalla, a nado desde Endless: llevará a `world-secret` (aún no existe; BF vuelve) |
 
 Las canciones se van añadiendo a medida que se portan (ver `docs/SONG_PORTS.md`); hasta entonces
 el editor avisa de los niveles sin canción. Ya tienen todos la suya: `yararara`, `bad-day`, `chaos`,
 `last-course`, `endless` (`endless-us`) y el castillo (`world-of-chaos`). La salida secreta de
-`chaos` usa el modo `cancion`: la da reunir las 7 esmeraldas, no los fallos. El mundo 1 todavía no es
-el mundo por defecto.
+`chaos` usa el modo `cancion`: la da reunir las 7 esmeraldas, no los fallos. Es el mundo por defecto
+(el que abre Story Mode).
 
 ## Pruebas automáticas (solo build debug)
 
@@ -682,7 +715,7 @@ Se lanzan desde `export/debug/windows/bin` (el juego busca `assets\` en su carpe
 
 | Argumentos | Qué hace |
 |---|---|
-| `-overworld <mundo> -shot` | Abre ese mapa, a los 3 s guarda una captura en `world_shot.png` junto al exe y se cierra. No guarda la posición de BF y no se pausa aunque la ventana arranque sin foco. |
+| `-overworld <mundo> -shot` | Abre ese mapa, a los 3 s guarda una captura en `world_shot.png` junto al exe y se cierra. No guarda la posición de BF y no se pausa aunque la ventana arranque sin foco. Con `-shotat <s>` la captura es a esos segundos, y con `-walk <left/right/up/down>` BF echa a andar por código a los 0,5 s (para ver cómo nada o trepa). |
 | `-check-worlds` | Revisa todos los mundos de la build (también la partida entera), escribe el resultado en `check_worlds.txt` junto al exe y se cierra. |
 | `-song <canción> -test` | Juega una canción entera en botplay con capturas; ver `docs/SONG_PORTS.md` y `tools/run_songtest.ps1`. |
 | `-overworld-editor test_graph -selftest` | Prueba los botones de unir mundos, el aspecto desde la paleta, deshacer (con progreso, tiles y submundos), pintar, grupos, el rectángulo, los avisos nuevos y los de la partida entera. Escribe `SELFTEST OK/FAIL` por consola (49 comprobaciones) y borra sus mundos `zz_*`. |

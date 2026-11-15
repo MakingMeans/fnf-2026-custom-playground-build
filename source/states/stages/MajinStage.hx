@@ -41,6 +41,7 @@ class MajinStage extends SonicStage
 		super.create();
 		hudFrame = 'endless-us/hud/hud_majin';
 		hudFrameOffset.set(-190, -70);
+		play.songCard = false; // tiene su propia pantalla de inicio (StartScreen)
 		GameOverSubstate.custom = new MajinGameOver();
 		// startCountdown() (antes de createPost) ya marca seenCutscene: se mira aqui
 		firstPlay = !PlayState.seenCutscene;

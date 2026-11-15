@@ -218,13 +218,15 @@ class GameOverSubstate extends MusicBeatSubstate
 
 		Mods.loadTopMod();
 		if (states.OverworldState.fromOverworld)
-			states.OverworldState.backToOverworld();
-		else if (PlayState.isStoryMode)
-			MusicBeatState.switchState(new StoryMenuState());
+			states.OverworldState.backToOverworld(); // el mapa pone su musica
 		else
-			MusicBeatState.switchState(new FreeplayState());
-
-		FlxG.sound.playMusic(Paths.music('freakyMenu'));
+		{
+			if (PlayState.isStoryMode)
+				MusicBeatState.switchState(new StoryMenuState());
+			else
+				MusicBeatState.switchState(new FreeplayState());
+			FlxG.sound.playMusic(Paths.music('freakyMenu'));
+		}
 		PlayState.instance.callOnScripts('onGameOverConfirm', [false]);
 	}
 
