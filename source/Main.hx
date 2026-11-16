@@ -251,6 +251,8 @@ class Main extends Sprite
 
 					states.OverworldState.arrivingFrom = arriveFrom;
 					states.OverworldState.arrivingByWarp = warpFrom;
+					// como en el juego: la llegada por un warp empieza al abrirse el iris (no durante la carga)
+					if (warpFrom != null) states.OverworldState.irisOpenNext = true;
 					return new states.OverworldState(restored ? null : worldToPlay);
 				};
 			}

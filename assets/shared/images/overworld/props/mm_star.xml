@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="mm_star.png">
+	<SubTexture name="star_pillar_tall0000" x="0" y="0" width="53" height="132"/>
+	<SubTexture name="star_pillar_mid0000" x="54" y="0" width="53" height="100"/>
+	<SubTexture name="cloud_bank0000" x="108" y="0" width="222" height="80"/>
+	<SubTexture name="star_pillar_short0000" x="331" y="0" width="53" height="68"/>
+	<SubTexture name="moon_crescent0000" x="385" y="0" width="27" height="28"/>
+	<SubTexture name="twinkle_big0000" x="413" y="0" width="8" height="8"/>
+	<SubTexture name="twinkle_small0000" x="422" y="0" width="4" height="4"/>
+</TextureAtlas>

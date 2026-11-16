@@ -104,8 +104,18 @@ aquí en adelante, `Q/`).
   - Sprites de BF en el mapa, punto de los caminos, castillo, estrella, tubería, humo y anillo
     (`assets/images/warpzone/`).
   - La música del mapa del mundo 1 (`music/warpzone/1.ogg`).
-  - Los sonidos del mapa: `wz_move`, `smw_boom`, `gotolevel`, `wrong`, `cancelMenu`,
-    `enter_the_pipe` y `smw_feather_get`.
+  - El mundo de las estrellas (`star_world`, el de viajar rápido entre mundos) se basa en su Star Road
+    (mundo 3): las columnas con estrellas (`warpzone/3/bg2.png`, enteras), la luna y los colores del
+    cielo, de las nubes y del arcoíris (`warpzone/3/bg1.png`, `path.png`) y su música
+    (`music/warpzone/3.ogg`).
+  - La biblioteca de decorados del editor (`images/overworld/props/mm_*`) recorta piezas de sus mapas:
+    bosque (`warpzone/2`), Star Road (`warpzone/3`), fortaleza (`warpzone/4`), castillo y lava
+    (`warpzone/5`) y tuberías (`warpzone/6`).
+  - La animación de BF metiéndose en la tubería imita la suya (`bfAnims/overworldreturnpipe`): el borde
+    de delante de la tubería le tapa las piernas.
+  - Los sonidos del mapa: `wz_move`, `smw_boom`, `gotolevel`, `wrong`, `cancelMenu` y
+    `smw_feather_get`. (El de la tuberia, `sounds/overworld/pipe.ogg`, lo aporto el usuario: origen sin
+    anotar.)
   - Los sonidos del Freeplay: `scrollMenu` y `FREEPLAY_START`.
   - El código de su mapa (`WarpState.hx`) solo se estudió; el nuestro es propio.
 - **Autoría del mapa**: ningún texto la atribuye.
@@ -181,6 +191,8 @@ aquí en adelante, `Q/`).
   Mario World, de Nintendo.
 - La hoja `smw_overworld_tiles.png` la recortó **Zanzio** ("Ripped by Zanzio. Credit would be
   nice", escrito en la propia hoja).
+- Los decorados enteros de la biblioteca del editor `images/overworld/props/smw_*` (colinas, árboles,
+  rocas...) salen de esa hoja, en sus seis paletas.
 - Como referencia de diseño (no está en el juego) se usó el mapa completo de SMW de Rick N. Bruns
   (vgmaps.com / snesmaps.com).
 

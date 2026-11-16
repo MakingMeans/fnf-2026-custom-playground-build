@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="props.png">
+	<SubTexture name="moon0000" x="0" y="0" width="27" height="28"/>
+	<SubTexture name="star_pillars0000" x="28" y="0" width="215" height="192"/>
+</TextureAtlas>

@@ -59,12 +59,15 @@ mapa y nodo. Si borras o renombras su `.json`, Story Mode lleva al menú de sema
 | **CTRL+clic** en el mapa (modo T) | **Cuentagotas**: el tile pintado de debajo pasa a ser el del pincel, con su tileset (la paleta cambia sola) y su capa (por delante o por detrás de BF) |
 | **P** | Mostrar / ocultar la paleta de tiles |
 | **F2** / **SHIFT+F2** | Bloquear / ocultar la capa **GRAFO** (nodos, caminos, puntos de curva y flechas) |
-| **F3** / **SHIFT+F3** | Bloquear / ocultar la capa **DIBUJO** (tiles pintados y decorados) |
+| **F3** / **SHIFT+F3** | Bloquear / ocultar la capa **TILES** (los tiles sueltos pintados con la paleta: el terreno) |
+| **F4** / **SHIFT+F4** | Bloquear / ocultar la capa **DECORADOS** (decorados con su imagen y piezas) |
+| **CTRL+G** / **CTRL+SHIFT+G** | Unir lo elegido en una **pieza** / separarla (ver abajo) |
+| **ALT+clic** | Elige un solo trozo de una pieza (con ALT, el clic derecho borra solo ese trozo) |
 | Clic derecho | Borra lo que haya bajo el ratón (en modo L solo cancela; sobre un punto de curva, borra ese punto) |
 | Arrastrar un punto de curva | Lo mueve (modos V y C) |
 | **E** | Ir al siguiente aviso: selecciona su nodo y centra la cámara en él |
 | SUPR | Borra la selección actual (o el grupo entero, en un solo paso de deshacer) |
-| **Barra Mover / Copiar / Borrar** | Sale encima de lo elegido (en modo V): *Mover* lo engancha al ratón, *Copiar* lo copia y pasa a pegar, *Borrar* lo borra |
+| **Barra Mover / Copiar / Borrar** | Sale encima de lo elegido (en modo V): *Mover* lo engancha al ratón, *Copiar* lo copia y pasa a pegar, *Borrar* lo borra. Con 2 o más decorados elegidos añade *Unir pieza*, y con una pieza elegida, *Separar* |
 | **CTRL+C** / **CTRL+X** / **CTRL+V** | Copiar / cortar / pegar lo elegido o el grupo (tiles, decorados y nodos con los caminos entre ellos). Al pegar, la copia sigue al ratón ajustada a la rejilla y **cada clic deja una**; ESC o clic derecho terminan. Lo copiado se puede pegar en otro mundo |
 | **M** | Mover lo elegido con el ratón: sigue al cursor; clic lo suelta, ESC o clic derecho lo devuelven a su sitio. Mueve de verdad (los nodos conservan su ID y su progreso) |
 | **CTRL+flechas** | Mover lo elegido una casilla de la rejilla (con SHIFT, un píxel). Varios toques seguidos se deshacen de una vez |
@@ -81,14 +84,37 @@ mapa y nodo. Si borras o renombras su `.json`, Story Mode lleva al menú de sema
 | **F1** | Ayuda en pantalla |
 | **ESC** | Soltar el grupo; si no hay, salir del modo actual (vuelve a SELECCIONAR). En SELECCIONAR, volver al menú de editores; con cambios sin guardar avisa y hay que pulsarlo otra vez |
 
-**Capas** (pestaña *Capas*, o F2 / F3): el mapa tiene dos capas, **GRAFO** (nodos, caminos, puntos
-de curva y flechas) y **DIBUJO** (tiles pintados y decorados). Una capa **bloqueada** no se toca con
-el ratón: no se elige, ni se arrastra, ni se crea, ni se borra nada de ella (tampoco con el rectángulo
-ni con el clic derecho; SUPR y CTRL+D avisan). Una capa **oculta** no se ve y tampoco se toca. Así se
-puede pintar sin mover ni borrar un nodo o un camino sin querer (bloquea el GRAFO), y mover nodos sin
-llevarse un tile (bloquea el DIBUJO). Al ocultar el GRAFO sigue viéndose el rectángulo de lo que se ve
-en el juego. Las capas no se guardan con el mundo y arriba se indica si alguna está bloqueada u
-oculta.
+**Capas** (pestaña *Capas*, o F2 / F3 / F4): el mapa tiene tres capas.
+- **GRAFO**: nodos, caminos, puntos de curva y flechas.
+- **TILES**: los tiles sueltos pintados con la paleta (el terreno).
+- **DECORADOS**: los decorados con su propia imagen (columnas, rocas, castillos...) y las piezas,
+  aunque estén hechas de tiles.
+
+Una capa **bloqueada** no se toca con el ratón: no se elige, ni se arrastra, ni se crea, ni se borra
+nada de ella (tampoco con el rectángulo ni con el clic derecho; SUPR y CTRL+D avisan). Si hay algo de
+una capa bloqueada encima, el clic coge lo que haya debajo. Una capa **oculta** no se ve y tampoco se
+toca. Usos típicos:
+- pintar sin mover ni borrar un nodo o un camino sin querer: bloquea el **GRAFO**;
+- mover decorados sin arrancar la hierba: bloquea los **TILES**. Además, así el rectángulo de
+  selección se puede empezar encima del terreno (normalmente solo empieza en un sitio vacío);
+- mover nodos sin llevarse nada del dibujo: bloquea **TILES** y **DECORADOS**.
+
+Al ocultar el GRAFO sigue viéndose el rectángulo de lo que se ve en el juego. Las capas no se
+guardan con el mundo y arriba se indica si alguna está bloqueada u oculta.
+
+**Piezas**: varios decorados o tiles que van juntos, como una montaña pintada con tiles de SMW.
+Elige sus trozos (SHIFT+clic o un rectángulo) y pulsa **CTRL+G** (o *Unir pieza* en la barra, o
+*Unir en pieza* en la pestaña Deco). Desde entonces:
+- un clic en cualquier trozo elige la pieza **entera**; arrastrarla, *Mover*, *Copiar*, *Borrar*,
+  CTRL+flechas y CTRL+D la tratan como una sola cosa;
+- el rectángulo que toca parte de una pieza la coge entera (con ALT, solo lo de dentro);
+- el clic derecho fuera del modo T la borra entera (la goma del modo T borra solo el tile);
+- **ALT+clic** elige un solo trozo, para retocarlo o sacarlo;
+- repintar uno de sus tiles en el modo T lo deja dentro de la pieza;
+- al copiarla o pegarla, la copia es otra pieza (moverla no arrastra a la original).
+
+**CTRL+SHIFT+G** (o *Separar*) la deshace: sus trozos vuelven a ir sueltos. Una pieza se guarda en el
+JSON con el campo `piece` de cada decorado (`"piece": "pieza1"`); el juego no lo usa.
 
 El **rectángulo blanco discontinuo** ("LO QUE SE VE EN EL JUEGO") marca hasta dónde puede llegar
 la cámara del juego con el zoom del mundo. Lo que quede fuera no se ve nunca: ahí van las salidas
@@ -258,13 +284,20 @@ Arrastrar un nodo con el ratón (en modo V) lo mueve; también puedes teclear X/
 En la pestaña **Camino** puedes cambiar el sprite de los puntitos (`overworld/dot`, `overworld/dotgb`)
 y la separación entre ellos, y además:
 
-- **Carretera**: el camino se dibuja como los de Mario's Madness y SMW, una franja beis de 8 px con
-  una plataforma redonda en cada nodo (sin puntitos). Al abrirse crece trozo a trozo. Lo que pasa por
-  el agua (donde no hay decorado debajo) sale como puntitos blancos. En el editor se ve entera.
-- **BF lo recorre**: *andando*; *nadando* (nada en lo que cae en el agua y anda en lo que pisa tierra;
-  parado en un nodo en el agua, flota); o *trepando* (por una escalera: trepa en todo el camino, así
-  que pon sus nodos pegados al principio y al final de la escalera). Una escalera que aparezca al
-  abrirse el camino se hace con sus "puntitos": `overworld/world1/ladder` con separación 6.
+- **Carretera**: el camino se dibuja como los de Mario's Madness y SMW, y **se pone solo según lo que
+  tiene debajo** (el color de los tiles sueltos del terreno, `OverworldTerrain`):
+  - sobre suelo (hierba, arena...): franja beis de 8 px, recortada a la hierba (no se sale por el
+    borde), con una plataforma redonda en cada nodo;
+  - sobre un acantilado (el marrón "color piel" de los riscos): una **escalera**, y BF trepa;
+  - sobre el agua o el aire: puntitos blancos si el camino es *nadando*, y un **puente** si es
+    *andando*.
+  Al abrirse crece trozo a trozo. En el editor se ve igual que en el juego. Un mapa sin tiles sueltos
+  (solo decorados con su imagen) hace como antes: franja donde hay algo pintado y puntitos donde no.
+- **BF lo recorre**: *andando* (anda, y trepa solo donde hay escalera); *nadando* (nada en el agua y
+  anda en tierra; parado en un nodo en el agua, flota); o *trepando siempre* (trepa en todo el camino,
+  para caminos de puntitos).
+- **Dibujo de la carretera**: *de SMW* (lo de arriba) o *arcoíris* (la Star Road de Mario's Madness:
+  franjas roja, amarilla, verde y cian con su sombra, por encima de todo).
 
 ### Paso 4a — pintar el mapa con tiles
 
@@ -286,6 +319,14 @@ Pintar encima de otro **tile pintado** lo sustituye; un decorado puesto a mano (
 del mapa, así que va fluido aunque tengas miles de tiles.
 
 Marca **Pintar por delante de BF** para los tiles que deban taparlo (copas de árbol, puentes...).
+
+**Decorados enteros** (la biblioteca): en el desplegable *Tileset* también salen los atlas de la carpeta
+`overworld/props/` (y `overworld/world1/props`). Con uno de ellos la paleta muestra **objetos completos**
+(colinas, árboles, rocas, columnas, castillos...): elige uno y cada clic en el mapa (modo T) lo pone
+entero, centrado en el ratón y ajustado a la rejilla; mientras, se ve en semitransparente donde caería.
+Van a la capa DECORADOS: luego un clic (V) los elige enteros para moverlos, copiarlos o borrarlos. El
+cuentagotas (CTRL+clic) también coge un decorado entero y cambia a su paleta. Los atlas los genera
+`tools/build_props.py` a partir de la hoja de SMW (sus 6 paletas) y de los mapas de Mario's Madness.
 
 Cada tile pintado es un decorado normal: en modo **V** puedes seleccionarlo y cambiarle escala,
 alpha o capa.
@@ -616,7 +657,8 @@ de la build al repo. También existe **Guardar como...** para elegir la ruta a m
       "unlockedBy": "",               // id del nodo que lo abre al completarse ("" = con sus nodos)
       "secret": false,                // true: lo abre la salida secreta de unlockedBy
       "road": false,                  // true: carretera de SMW en vez de puntitos (en el agua, puntitos blancos)
-      "move": "walk" }                // como lo recorre BF: "walk" | "swim" | "climb"
+      "move": "walk",                 // como lo recorre BF: "walk" | "swim" | "climb"
+      "style": "" }                   // dibujo de la carretera: "" (SMW) | "rainbow" (arcoiris)
   ]
 }
 ```
@@ -704,8 +746,10 @@ con `--dry-run` solo hace la vista previa.
 1. **En el editor** (`tests\edit-world1.bat`): mover nodos (V), crear nodos (N), caminos (C),
    desbloqueos (L), decorados (B) y tiles (T, con la paleta de `overworld/world1/tiles` o la de
    SMW). En la pestaña *Nodo* van la canción, el nombre, el aspecto y lo que desbloquea; en
-   *Camino*, la carretera y si BF anda, nada o trepa. **CTRL+S** guarda en la build (para probar sin
-   compilar) y en el repo (`assets/shared/overworlds/world1.json`); **CTRL+T** lo prueba.
+   *Camino*, la carretera y si BF anda, nada o trepa. Cada columna, roca o matorral es un decorado
+   entero: elígelo con un clic y usa la barra *Mover / Copiar / Borrar* (bloquea los TILES con F3
+   para no coger la hierba de debajo). **CTRL+S** guarda en la build (para probar sin compilar) y en
+   el repo (`assets/shared/overworlds/world1.json`); **CTRL+T** lo prueba.
 2. **Con el script** (`python tools/build_world1.py`): para cambiar la forma de la isla, de la meseta
    o del islote, o la decoración entera. Posiciones de los nodos en `graph()`, formas en `ISLAND`,
    `ISLET` y `PLATEAU`, y decoración en `decorate()`. Regenera todo el JSON.
@@ -732,21 +776,26 @@ cámara no se mueve; los niveles están a 40-90 px unos de otros:
 
 El terreno se dibuja por código con la paleta de SMW (la misma de Mario's Madness): cada capa (isla,
 islote, meseta) es una forma con su costa festoneada, su acantilado liso (sin grietas) y la espuma
-donde da al mar. Las columnas, rocas, matorrales, piedras y rocas del mar se recortan del propio mapa
-de Mario's Madness (las columnas se alargan repitiendo una fila del cuerpo). Todo se trocea en tiles
-de 8x8 (`overworld/world1/tiles`, también en la paleta del editor). El mar es `overworld/backgrounds/world1_sea`, en fotogramas de 32x32: el juego redondea el
+donde da al mar. Se trocea en tiles de 8x8 (`overworld/world1/tiles`, también en la paleta del
+editor). Las columnas, rocas, matorrales, piedrecitas, matas y rocas del mar se recortan del propio
+mapa de Mario's Madness (las columnas se alargan repitiendo una fila del cuerpo) y van **enteros**,
+cada uno como un decorado del atlas `overworld/world1/props` (`bush`, `rock`, `pebble`, `tuft`,
+`sea_rock`, `pillar<alto>px`), encima del terreno: en el editor un clic elige el matorral o la columna
+entera, y al moverlo o borrarlo debajo queda hierba limpia. Con la capa TILES bloqueada (F3) se
+pueden elegir y arrastrar sin tocar el terreno. El mar es `overworld/backgrounds/world1_sea`, en fotogramas de 32x32: el juego redondea el
 tamaño del mapa a fotogramas enteros del fondo, y con fotogramas pequeños el mapa mide lo que el
 dibujo. En el juego, los decorados quietos se juntan en una sola imagen al cargar el mapa
 (`OverworldState.bakeStillSprites`); en el editor siguen sueltos para poder editarlos.
 
 | Nodo | Qué es |
 |---|---|
-| `inicio` | Punto de aparición (no es nivel), con la tubería encima (aún sin destino) |
+| `inicio` | Punto de aparición (no es nivel), con la tubería encima |
+| `tuberia` | Tubería (warp) al **mundo de las estrellas** (`star_world`, el de viajar rápido entre mundos). Se ve desde el principio, pero su camino solo se abre al derrotar el castillo |
 | `yararara` | Primer nivel (abierto) |
 | `bad-day` | Lo abre yararara |
 | `chaos` | El cruce de 3 caminos. Al superarlo abre la escalera a la meseta; su **salida secreta** (las 7 esmeraldas) abre el camino a nado al norte |
 | `last-course` | En la meseta |
-| `castillo` | World of Chaos |
+| `castillo` | World of Chaos. Al superarlo abre la estrella y la tubería |
 | `estrella` | Al final, después del castillo: estrella (warp) al mundo 2, `world2` (aún no existe) |
 | `endless` | En el islote del norte, a nado |
 | `salida-norte` | Salida invisible fuera de la pantalla, a nado desde Endless: llevará a `world-secret` (aún no existe; BF vuelve) |
@@ -757,6 +806,44 @@ el editor avisa de los niveles sin canción. Ya tienen todos la suya: `yararara`
 `chaos` usa el modo `cancion`: la da reunir las 7 esmeraldas, no los fallos. Es el mundo por defecto
 (el que abre Story Mode).
 
+**Tuberías, castillos y estrellas** (las imágenes con `pipe`, `castle` o `star` en el nombre) no van
+centradas en su nodo como las demás: BF se pone encima, así que su cuerpo (sin la sombra negra) se centra
+bajo BF y suben 3 px (`OverworldState.placeNodeSprite`, igual en el editor). Así BF queda con los pies
+en el medio de lo que se ve y, en una tubería, justo sobre el agujero. El sonido de la tubería
+(`sounds/overworld/pipe.ogg`) lo puso el usuario: recortado a lo que suena y en OGG Vorbis (el juego
+no reproduce Opus).
+
+## Mundo de las estrellas (`star_world`)
+
+El mundo para viajar rápido entre mundos, como la Star Road de Mario's Madness (su mundo 3). Lo genera
+`tools/build_star_world.py` (igual que el mundo 1: no lo sobrescribe si se ha guardado desde el editor,
+salvo con `--force`).
+
+- Cielo de noche con estrellitas que titilan (`backgrounds/star_sky`, en mosaico), la luna y un suelo de
+  nubes (tiles). En el centro, las columnas moradas con estrellas del mod, enteras (`star_world/props`).
+- Encima de cada una de sus seis puntas hay una **estrella-warp**: `estrella-2` ... `estrella-7`, hacia
+  `world2` ... `world7`. Cada una se abre cuando su mundo exista y tenga un warp que vuelva aquí (su
+  pareja); hasta entonces es un *pendiente*, no un aviso, y su camino no se ve.
+- La **tubería** de la izquierda es la pareja de la del mundo 1, que se abre al derrotar su castillo.
+- Los caminos son **arcoíris** (`style: "rainbow"`): uno por las nubes, de la tubería a la derecha, con
+  cruces invisibles (nodos `empty` sin imagen) bajo cada estrella, y de cada cruce sube uno a su estrella
+  (la de arriba del todo se alcanza desde la del centro). Música: la de la Star Road del mod.
+
+Los destinos y nombres de las estrellas se pueden cambiar en el editor (pestaña Nodo).
+
+## Prototipos de mundos futuros
+
+`tools/build_prototypes.py <carpeta>` dibuja bocetos de diseño (solo imágenes, a escala 3) de seis
+ambientes, con el mismo método que el mundo 1 y los decorados de la biblioteca: **bosque** (mundo 2 de
+Mario's Madness), **subterráneo** (mundo 6: rocas de cueva y tuberías), **fortaleza** (mundo 4),
+**lava** (mundo 5), **nieve** (la paleta Star World de SMW) y **desierto** (paleta de SMW). Están en
+`art/world_prototypes/`. Cuando se elija uno, se convierte en un mundo de verdad con su propio
+generador.
+
+Ojo: la carretera automática reconoce los acantilados por el marrón de la paleta verde de SMW. En una
+paleta con los riscos de otro color (morados en la nieve, grises en la cueva) habrá que enseñarle
+esos colores (`OverworldTerrain.classify`).
+
 ## Pruebas automáticas (solo build debug)
 
 Se lanzan desde `export/debug/windows/bin` (el juego busca `assets\` en su carpeta):
@@ -766,7 +853,7 @@ Se lanzan desde `export/debug/windows/bin` (el juego busca `assets\` en su carpe
 | `-overworld <mundo> -shot` | Abre ese mapa, a los 3 s guarda una captura en `world_shot.png` junto al exe y se cierra. No guarda la posición de BF y no se pausa aunque la ventana arranque sin foco. Con `-shotat <s>` la captura es a esos segundos, y con `-walk <left/right/up/down>` BF echa a andar por código a los 0,5 s (para ver cómo nada o trepa). |
 | `-check-worlds` | Revisa todos los mundos de la build (también la partida entera), escribe el resultado en `check_worlds.txt` junto al exe y se cierra. |
 | `-song <canción> -test` | Juega una canción entera en botplay con capturas; ver `docs/SONG_PORTS.md` y `tools/run_songtest.ps1`. |
-| `-overworld-editor test_graph -selftest` | Prueba los botones de unir mundos, el aspecto desde la paleta, deshacer (con progreso, tiles y submundos), pintar, grupos, el rectángulo, las capas, el cuentagotas, copiar / cortar / pegar / mover, los avisos nuevos, los pendientes y los de la partida entera. Escribe `SELFTEST OK/FAIL` por consola (70 comprobaciones; al acabar deja elegido un nodo, con su barra de acciones, para poder capturar la ventana) y borra sus mundos `zz_*`. |
+| `-overworld-editor test_graph -selftest` | Prueba los botones de unir mundos, el aspecto desde la paleta, deshacer (con progreso, tiles y submundos), pintar, grupos, el rectángulo, las capas, el cuentagotas, copiar / cortar / pegar / mover, las piezas, los avisos nuevos, los pendientes y los de la partida entera. Escribe `SELFTEST OK/FAIL` por consola (83 comprobaciones; al acabar deja elegida una pieza, con su barra de acciones, para poder capturar la ventana) y borra sus mundos `zz_*`. |
 | `-playtest` | Monta 5 mundos de demostración con las funciones del editor y los juega por código: una canción de verdad, castillo, tuberías y una estrella (con capturas a mitad del viaje), salida lateral, menú, R, un mapa sin nodos abiertos, probar desde un nodo cerrado, salidas secretas (sin fallos, por precisión y el modo canción), un nodo de N superados, un atajo con condición, la cámara del revelado, el iris y el otro sprite de jugador (111 comprobaciones). Deja `playtest_result.txt` y capturas en `playtest_shots\` (también del editor), borra sus mundos `zz_demo*` y se cierra. En cada captura comprueba que ningún sprite use una imagen ya liberada. |
 
 Ninguna toca la partida del usuario ni simula teclas. `tools/run_playtest.ps1` lanza la prueba

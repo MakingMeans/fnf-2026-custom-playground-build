@@ -6,9 +6,10 @@ editor (o tocado a mano), no lo sobrescribe salvo con --force (se perderian esos
 
 Escribe:
   assets/shared/overworlds/world1.json        el mundo (nodos, caminos y el terreno como tiles)
-  assets/shared/images/overworld/world1/      tiles.* (el terreno troceado en 8x8), ladder.* (la
-                                              escalera del acantilado) y fish.* (los peces que saltan,
-                                              del mundo 1 de Mario's Madness)
+  assets/shared/images/overworld/world1/      tiles.* (el terreno troceado en 8x8), props.* (los
+                                              decorados enteros: columnas, rocas, matorrales...),
+                                              ladder.* (la escalera del acantilado) y fish.* (los peces
+                                              que saltan, del mundo 1 de Mario's Madness)
   assets/shared/images/overworld/backgrounds/world1_sea.*   el mar, en fotogramas de 32x32
   assets/shared/images/overworld/level_dot.*  los niveles amarillo y rojo, con su ciclo de color
   assets/shared/sounds/overworld/*, music/overworld/world1   los sonidos y la musica del mapa de MM
@@ -32,7 +33,8 @@ Boceto (de abajo arriba):
     of Chaos); tras el castillo, la estrella al mundo 2.
   - Desde Chaos, a la izquierda y nadando hacia el norte: Endless, en un islote (su salida secreta: las
     7 esmeraldas); desde alli se sigue nadando hacia el norte, fuera de la pantalla, a otro mundo.
-  - La tuberia, la estrella y la salida del norte no llevan a ningun sitio hasta que haya otros mundos.
+  - La tuberia (se abre al derrotar el castillo) lleva al mundo de las estrellas (star_world); la estrella
+    y la salida del norte no llevan a ningun sitio hasta que haya otros mundos.
 """
 import json
 import math
@@ -69,7 +71,7 @@ STAR_LOOK = {'image': 'overworld/star', 'anim': 'idle', 'animDone': '', 'fps': 8
 HIDDEN_LOOK = {'image': '', 'anim': '', 'animDone': '', 'fps': 0}  # una salida fuera de la pantalla no se ve
 
 # Posiciones (centro del nodo, en pixeles del mapa)
-LOW = 176        # fila de abajo: Inicio, yararara y Bad Day
+LOW = 168        # fila de abajo: Inicio, yararara y Bad Day (subida el 15/11/2026: estaba pegada al borde)
 CROSS = 132      # Chaos, al pie de la meseta
 TOP = 60         # fila de la meseta: Last Course, castillo y estrella
 X_STAIRS = 216   # Bad Day, Chaos, la escalera y Last Course
@@ -96,14 +98,16 @@ def path(a, b, points=None, road=True, move='walk', dots='overworld/dot', spacin
 def graph():
     nodes = [
         node('inicio', 64, LOW, 'Inicio', kind='empty', unlocked=True),
-        node('tuberia', 64, 136, 'Tuberia (sin destino)', kind='empty', look=PIPE_LOOK, unlocked=True),
+        # la tuberia lleva al mundo de las estrellas (el de viajar rapido entre mundos) y solo se abre al
+        # derrotar el castillo; hasta entonces se ve, pero sin camino (15/11/2026, a peticion del usuario)
+        node('tuberia', 64, 136, 'Mundo de las estrellas', kind='warp', look=PIPE_LOOK, world='star_world'),
         node('yararara', 136, LOW, 'YARARARA', song='yararara', unlocked=True, unlocks=['bad-day']),
         node('bad-day', X_STAIRS, LOW, 'Bad Day', song='bad-day', unlocks=['chaos']),
         # salida normal: la escalera a la meseta; salida secreta (7 esmeraldas, la decide la cancion): a
         # nado al norte. Por tener salida secreta es rojo, como en SMW
         node('chaos', X_STAIRS, CROSS, 'Chaos', song='chaos', look=SECRET_LOOK, unlocks=['last-course'], secret=['endless'], secret_mode='song'),
         node('last-course', X_STAIRS, TOP, 'Last Course', song='last-course', unlocks=['castillo']),
-        node('castillo', 296, TOP, 'World of Chaos', song='world-of-chaos', look=CASTLE_LOOK, unlocks=['estrella']),
+        node('castillo', 296, TOP, 'World of Chaos', song='world-of-chaos', look=CASTLE_LOOK, unlocks=['estrella', 'tuberia']),
         # la estrella del final lleva al mundo 2 (cuando exista, con una estrella que apunte de vuelta aqui)
         node('estrella', 376, TOP, 'Hacia el mundo 2', kind='warp', look=STAR_LOOK, world='world2'),
         node('endless', X_NORTH, 42, 'Endless', song='endless-us', unlocks=['salida-norte']),
@@ -115,8 +119,9 @@ def graph():
         path('inicio', 'yararara'),
         path('yararara', 'bad-day'),
         path('bad-day', 'chaos'),
-        # la escalera: sus "puntitos" son los peldanos, que aparecen al abrirse; BF trepa
-        path('chaos', 'last-course', road=False, move='climb', dots='overworld/world1/ladder', spacing=6),
+        # a la meseta: carretera normal; donde cruza el acantilado se pone sola una escalera y BF trepa
+        # (OverworldTerrain), y en la hierba de arriba y de abajo es franja beis
+        path('chaos', 'last-course'),
         path('last-course', 'castillo'),
         path('castillo', 'estrella'),
         path('chaos', 'endless', [[X_NORTH, CROSS]], move='swim'),  # a la izquierda y luego a nado al norte
@@ -133,7 +138,9 @@ GRASS_DARK = (64, 136, 32)
 BROWN = (216, 152, 96)
 BROWN_SHADE = (184, 120, 72)
 FOAM = (240, 240, 240)
-WAVE = (64, 208, 33)
+# las rayas del mar y de la espuma: blancas (el verde de SMW no le gustaba al usuario, 15/11/2026)
+SMW_WAVE = (64, 208, 33)
+WAVE = FOAM
 WATER_COLORS = {(64, 136, 247), (64, 136, 248), (63, 136, 247)}
 GRASS_COLORS = {(64, 208, 32), (64, 208, 33)}
 
@@ -263,21 +270,32 @@ def mm_piece(box, clear_grass=True):
     return arr
 
 
-def put(piece, x, y, flip=False):
-    """Pega un trozo en (x, y) del mapa (lo transparente no tapa)."""
-    if flip:
-        piece = piece[:, ::-1]
-    for yy in range(piece.shape[0]):
-        for xx in range(piece.shape[1]):
-            if piece[yy, xx, 3]:
-                setpx(x + xx, y + yy, tuple(int(v) for v in piece[yy, xx, :3]))
+def whiten_waves(img):
+    """Las rayas de las olas de SMW (verdes) en blanco."""
+    arr = np.array(img.convert('RGBA'))
+    wave = np.all(arr[..., :3] == SMW_WAVE, axis=2)
+    arr[wave, :3] = WAVE
+    return Image.fromarray(arr, 'RGBA')
+
+
+# Los decorados (columnas, rocas, matorrales...) no se pintan en el terreno: van como sprites enteros
+# encima de sus tiles (atlas world1/props). Asi en el editor cada uno se elige de un clic y se mueve,
+# copia o borra entero, y debajo queda hierba limpia (15/11/2026, a peticion del usuario).
+PROPS = []        # [(fotograma, x, y, flip)], en el orden en que se dibujan
+PROP_FRAMES = {}  # fotograma -> trozo RGBA sin voltear (el sprite lleva flipX)
+
+
+def put(name, piece, x, y, flip=False):
+    """Pone el decorado `name` (el trozo `piece`) con su esquina en (x, y) del mapa."""
+    PROP_FRAMES.setdefault(name, piece)
+    PROPS.append((name, x, y, flip))
 
 
 ROCK = mm_piece((64, 104, 83, 122))                         # roca en cuna, con su sombra
 BUSH = mm_piece((66, 95, 77, 105))
 PEBBLE = mm_piece((108, 96, 115, 103))
 TUFT = mm_piece((109, 113, 113, 117))
-SEA_ROCK = mm_piece((37, 72, 56, 89), clear_grass=False)    # roca blanca en el mar, con su espuma
+SEA_ROCK = np.array(whiten_waves(Image.fromarray(mm_piece((37, 72, 56, 89), clear_grass=False), 'RGBA')))  # roca del mar, con su espuma
 PILLAR = mm_piece((79, 59, 95, 97))  # columna con ojos: tapa (filas 0-20), cuerpo (21) y sombra (36-37)
 
 
@@ -286,34 +304,42 @@ def eyed_pillar(x, base, height, flip=False):
     va debajo. Se alarga repitiendo una fila del cuerpo de la de Mario's Madness."""
     cap, body, shadow = PILLAR[0:21], PILLAR[21:22], PILLAR[36:38]
     n = max(0, height - 21)
-    put(np.concatenate([cap] + [body] * n + [shadow], axis=0), x, base - (21 + n) + 1, flip)
+    put('pillar%dpx' % (21 + n), np.concatenate([cap] + [body] * n + [shadow], axis=0), x, base - (21 + n) + 1, flip)
 
 
 def decorate():
-    # columnas con ojos asomando por detras de los bordes (como las de Mario's Madness)
+    # columnas con ojos asomando por detras de los bordes (como las de Mario's Madness). Tres las movio el
+    # usuario en el editor (15/11/2026): se respetan sus sitios
     eyed_pillar(34, 116, 34)
     eyed_pillar(50, 116, 24)
-    eyed_pillar(150, 116, 28, flip=True)
-    eyed_pillar(380, 40, 30)
-    eyed_pillar(194, 40, 26)
+    eyed_pillar(144, 115, 28, flip=True)
+    eyed_pillar(376, 45, 30)
+    eyed_pillar(224, 49, 26)
     eyed_pillar(96, 40, 20)  # en el islote, a la izquierda del camino de Endless
+    # la zona de la derecha de la isla, que estaba vacia: un grupo de columnas bajas
+    eyed_pillar(352, 150, 22)
+    eyed_pillar(368, 156, 28, flip=True)
     # rocas en cuna, matorrales, piedrecitas y matas, lejos de caminos y nodos y enteros sobre la hierba
-    # (a 4 px o mas del borde: los que colgaban sobre el acantilado de abajo se subieron el 15/11/2026;
-    # bajo la carretera de la fila de abajo solo caben 8 px, asi que los de alli van encima de ella)
-    for x, y, flip in [(84, 140, False), (152, 146, True), (250, 146, False), (330, 160, True), (372, 120, False),
-                       (236, 66, True), (338, 66, False)]:
-        put(ROCK, x, y, flip)
-    for x, y in [(36, 128), (98, 161), (176, 149), (290, 140), (300, 180), (392, 172), (360, 180),
-                 (196, 112), (262, 72), (360, 42), (132, 34), (40, 150), (50, 156), (150, 112), (162, 116),
-                 (330, 108), (342, 112), (388, 112), (280, 180), (200, 40), (330, 38), (250, 44), (318, 180)]:
-        put(BUSH, x, y)
-    for x, y in [(110, 156), (180, 160), (270, 112), (350, 112), (300, 40), (230, 74)]:
-        put(PEBBLE, x, y)
-    for x, y in [(70, 122), (106, 185), (240, 120), (320, 120), (390, 150), (280, 50), (360, 60), (110, 50)]:
-        put(TUFT, x, y)
-    # rocas blancas en el mar, lejos de los peces
-    for x, y in [(8, 8), (220, 2), (300, 0), (4, 90)]:
-        put(SEA_ROCK, x, y)
+    # (a 4 px o mas del borde). Entre la fila de abajo y la de Chaos hay poco sitio: alli van bajitos
+    for x, y, flip in [(84, 141, False), (152, 141, True), (250, 146, False), (330, 160, True),
+                       (264, 40, True), (338, 66, False), (300, 126, False)]:
+        put('rock', ROCK, x, y, flip)
+    for x, y in [(36, 128), (98, 176), (176, 176), (290, 140), (392, 172), (360, 180),
+                 (196, 112), (262, 72), (360, 42), (132, 34), (40, 150), (48, 156), (136, 112), (144, 112),
+                 (330, 108), (342, 112), (388, 112), (200, 40), (330, 38), (250, 44),
+                 (264, 128), (272, 168), (304, 160),
+                 # la derecha: matorrales sueltos alrededor de las columnas y las rocas
+                 (318, 178), (350, 166), (378, 176), (282, 154), (240, 176)]:
+        put('bush', BUSH, x, y)
+    for x, y in [(102, 150), (190, 154), (270, 112), (350, 112), (300, 40), (240, 72), (320, 146), (256, 184)]:
+        put('pebble', PEBBLE, x, y)
+    for x, y in [(70, 122), (106, 180), (240, 120), (320, 120), (390, 150), (280, 50), (360, 60), (110, 50),
+                 (296, 176), (336, 132), (232, 160)]:
+        put('tuft', TUFT, x, y)
+    # rocas blancas en el mar: las 8 de los lados del paso a nado del islote las puso el usuario
+    for x, y in [(24, 16), (220, 2), (336, 0), (4, 90),
+                 (96, -8), (96, 8), (128, -8), (128, 8), (96, 72), (96, 88), (128, 72), (128, 88)]:
+        put('sea_rock', SEA_ROCK, x, y)
 
 
 # peces que saltan (bg2 del mundo 1 de Mario's Madness, en bucle: 12 fotogramas y una pausa). Miden
@@ -351,6 +377,34 @@ def write_atlas(name, frames, per_row=16, folder=OWN_DIR):
         f.write('\n'.join(xml) + '\n')
 
 
+def write_packed_atlas(name, frames, width=256, folder=OWN_DIR):
+    """Atlas Sparrow con fotogramas de distinto tamano, en filas con 1 px de separacion. frames =
+    [(nombre, imagen RGBA)]; cada uno queda como "<nombre>0000" (el decorado lo pide por su nombre)."""
+    x = y = row_h = 0
+    places = []
+    for frame_name, img in frames:
+        if x and x + img.width > width:
+            x, y, row_h = 0, y + row_h + 1, 0
+        places.append((frame_name, img, x, y))
+        x += img.width + 1
+        row_h = max(row_h, img.height)
+    atlas = Image.new('RGBA', (width, y + row_h), (0, 0, 0, 0))
+    xml = ['<?xml version="1.0" encoding="utf-8"?>', '<TextureAtlas imagePath="%s.png">' % name]
+    for frame_name, img, fx, fy in places:
+        atlas.paste(img, (fx, fy))
+        xml.append('\t<SubTexture name="%s0000" x="%d" y="%d" width="%d" height="%d"/>' % (frame_name, fx, fy, img.width, img.height))
+    xml.append('</TextureAtlas>')
+    os.makedirs(folder, exist_ok=True)
+    atlas.save(os.path.join(folder, name + '.png'))
+    with open(os.path.join(folder, name + '.xml'), 'w', encoding='utf-8', newline='\n') as f:
+        f.write('\n'.join(xml) + '\n')
+
+
+def prop_images():
+    """Los fotogramas de los decorados, como imagenes RGBA."""
+    return [(name, Image.fromarray(np.ascontiguousarray(piece), 'RGBA')) for name, piece in sorted(PROP_FRAMES.items())]
+
+
 def ladder_frame():
     """Un peldano de la escalera (16x6): dos largueros marrones y el travesano claro, estilo SMW."""
     img = Image.new('RGBA', (16, 6), (0, 0, 0, 0))
@@ -373,6 +427,7 @@ def sea_frames():
     frames = []
     for i, row in enumerate([0, 2, 4, 6]):
         tile = sheet.crop((0, row * 9, T, row * 9 + T)).convert('RGBA')
+        tile = whiten_waves(tile)
         frame = Image.new('RGBA', (32, 32))
         for y in range(0, 32, T):
             for x in range(0, 32, T):
@@ -397,8 +452,10 @@ MM_AUDIO = [
     ('sounds/gotolevel.ogg', 'sounds/overworld/enter.ogg'),
     ('sounds/wrong.ogg', 'sounds/overworld/wrong.ogg'),                  # no se puede (cerrado, sin destino)
     ('sounds/cancelMenu.ogg', 'sounds/overworld/back.ogg'),              # salir del mapa
-    ('sounds/owCuts/enter_the_pipe.ogg', 'sounds/overworld/pipe.ogg'),   # meterse por una tuberia
-    ('sounds/owCuts/smw_feather_get.ogg', 'sounds/overworld/smw_feather_get.ogg'),  # estrella
+    # No se copian aqui (se ajustaron a mano el 15/11/2026 y esto los pisaria), los dos a unos -20 dB de media
+    # como el resto de efectos del mapa, con el ffmpeg de Krita:
+    # - sounds/overworld/pipe.ogg: el que puso el usuario (Opus), recortado a lo que suena, -9,5 dB, OGG Vorbis;
+    # - sounds/overworld/smw_feather_get.ogg (estrella): el de owCuts del mod, +11 dB, en estereo.
     ('music/warpzone/1.ogg', 'music/overworld/world1.ogg'),              # musica del mundo 1
 ]
 
@@ -474,6 +531,10 @@ def preview(nodes, paths, out):
             img.paste(sea, (x, y))
     terrain = Image.fromarray(canvas, 'RGBA')
     img.alpha_composite(terrain)
+    images = dict(prop_images())
+    for name, x, y, flip in PROPS:  # los decorados, encima del terreno y debajo de las carreteras
+        prop = images[name].transpose(Image.FLIP_LEFT_RIGHT) if flip else images[name]
+        img.paste(prop, (x, y), prop)
     land = canvas[:, :, 3] > 0
     by_id = {n['id']: n for n in nodes}
     dot = sparrow_frame('overworld/dot', 'idle')
@@ -573,6 +634,8 @@ def main(args):
 
     sprites = [{'image': 'overworld/world1/tiles', 'anim': name, 'fps': 0, 'x': x, 'y': y, 'flipX': False, 'flipY': False,
                 'scale': 1, 'alpha': 1, 'front': False} for x, y, name in tiles]
+    sprites += [{'image': 'overworld/world1/props', 'anim': name, 'fps': 0, 'x': x, 'y': y, 'flipX': flip, 'flipY': False,
+                 'scale': 1, 'alpha': 1, 'front': False} for name, x, y, flip in PROPS]
     sprites += [{'image': 'overworld/world1/fish', 'anim': 'idle', 'fps': 8, 'x': x, 'y': y, 'flipX': i % 2 == 1, 'flipY': False,
                  'scale': 1, 'alpha': 1, 'front': False} for i, (x, y) in enumerate(FISH)]
     world = {
@@ -584,6 +647,7 @@ def main(args):
     }
 
     write_atlas('tiles', sorted(own.items()))
+    write_packed_atlas('props', prop_images())
     write_atlas('ladder', [('idle0000', ladder_frame())])
     write_atlas('level_dot', level_dot_frames(), per_row=7, folder=os.path.join(IMAGES, 'overworld'))
     write_atlas('world1_sea', sea_frames(), per_row=2, folder=BG_DIR)

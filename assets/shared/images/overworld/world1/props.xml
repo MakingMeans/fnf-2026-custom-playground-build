@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="props.png">
+	<SubTexture name="bush0000" x="0" y="0" width="11" height="10"/>
+	<SubTexture name="pebble0000" x="12" y="0" width="7" height="7"/>
+	<SubTexture name="pillar21px0000" x="20" y="0" width="16" height="23"/>
+	<SubTexture name="pillar22px0000" x="37" y="0" width="16" height="24"/>
+	<SubTexture name="pillar24px0000" x="54" y="0" width="16" height="26"/>
+	<SubTexture name="pillar26px0000" x="71" y="0" width="16" height="28"/>
+	<SubTexture name="pillar28px0000" x="88" y="0" width="16" height="30"/>
+	<SubTexture name="pillar30px0000" x="105" y="0" width="16" height="32"/>
+	<SubTexture name="pillar34px0000" x="122" y="0" width="16" height="36"/>
+	<SubTexture name="rock0000" x="139" y="0" width="19" height="18"/>
+	<SubTexture name="sea_rock0000" x="159" y="0" width="19" height="17"/>
+	<SubTexture name="tuft0000" x="179" y="0" width="4" height="4"/>
+</TextureAtlas>

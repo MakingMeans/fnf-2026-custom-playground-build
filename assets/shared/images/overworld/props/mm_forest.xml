@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="mm_forest.png">
+	<SubTexture name="lake_blue0000" x="0" y="0" width="75" height="106"/>
+	<SubTexture name="lake_lava0000" x="76" y="0" width="75" height="106"/>
+	<SubTexture name="trees_trio0000" x="152" y="0" width="40" height="32"/>
+	<SubTexture name="tree_big0000" x="193" y="0" width="32" height="24"/>
+	<SubTexture name="bush_pair0000" x="226" y="0" width="8" height="16"/>
+	<SubTexture name="fog_long0000" x="235" y="0" width="42" height="16"/>
+	<SubTexture name="tree_small0000" x="278" y="0" width="16" height="16"/>
+	<SubTexture name="fog_double0000" x="295" y="0" width="34" height="15"/>
+	<SubTexture name="bush_round0000" x="330" y="0" width="8" height="8"/>
+	<SubTexture name="fog_small0000" x="339" y="0" width="18" height="8"/>
+</TextureAtlas>

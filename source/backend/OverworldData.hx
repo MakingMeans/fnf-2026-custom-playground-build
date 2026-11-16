@@ -44,6 +44,9 @@ typedef OverworldSpriteFile =
 	var scale:Float;
 	var alpha:Float;
 	var front:Bool;         // true = se dibuja por encima de nodos y jugador
+	/** Pieza: los decorados con el mismo nombre (una montana hecha de tiles...) se eligen, mueven, copian y
+	 * borran juntos en el editor. Sin campo (o '') = suelto. El juego no lo usa. */
+	@:optional var piece:String;
 }
 
 /**
@@ -61,6 +64,7 @@ typedef OverworldPathFile =
 	var secret:Bool;                // lo abre la salida secreta de `unlockedBy`, no superarlo sin mas
 	var road:Bool;                  // se dibuja como carretera de SMW (ancha, con plataforma en sus nodos) en vez de puntitos
 	var move:String;                // como lo recorre BF: 'walk' | 'swim' (nada donde no hay suelo) | 'climb' (trepa)
+	var style:String;               // dibujo de la carretera: '' = la de SMW (franja, escalera, puntitos) | 'rainbow' = arcoiris (Star Road)
 }
 
 /** Un aviso de checkWorldProblems(): el texto y el nodo al que se refiere (null = todo el mundo). */
@@ -285,7 +289,8 @@ class OverworldData
 			unlockedBy: '',
 			secret: false,
 			road: false,
-			move: 'walk'
+			move: 'walk',
+			style: ''
 		};
 	}
 
@@ -1361,6 +1366,14 @@ class OverworldData
 		return reached;
 	}
 
+	/** Un tile pintado desde la paleta: un fotograma concreto ("tile0042", "w1_0007") y 0 FPS. */
+	public static function isPaintedTile(data:OverworldSpriteFile):Bool
+		return data.fps == 0 && data.anim != null && ~/[0-9]$/.match(data.anim);
+
+	/** Un tile suelto (de ninguna pieza): el terreno, la capa TILES del editor. */
+	public static function isLooseTile(data:OverworldSpriteFile):Bool
+		return (data.piece == null || data.piece.length < 1) && isPaintedTile(data);
+
 	/** Los avisos en texto legible (lista vacia = todo correcto), sin los pendientes. Ver checkWorldProblems(). */
 	public static function checkWorld(file:OverworldFile, ?name:String):Array<String>
 		return [for (problem in checkWorldProblems(file, name)) if (problem.pending != true) problem.text];
@@ -1397,9 +1410,13 @@ class OverworldData
 		inline function note(id:String, text:String)
 			problems.push({node: id, text: text});
 
-		// destino por hacer: se apunta aparte (ver OverworldProblem.pending)
+		// destino por hacer: se apunta aparte (ver OverworldProblem.pending). Tampoco se avisa de que no se
+		// llega a el: un warp hacia un mundo por hacer esta cerrado hasta que ese mundo tenga su pareja
 		inline function pending(id:String, text:String)
+		{
 			problems.push({node: id, text: text, pending: true});
+			if (id != null) flagged.set(id, true);
+		}
 
 		var counts:Map<String, Int> = new Map<String, Int>();
 		for (node in file.nodes)
@@ -1450,7 +1467,9 @@ class OverworldData
 			if (!linked.exists(node.id) && file.nodes.length > 1)
 				warn(node.id, '"${node.id}": sin caminos, BF no puede llegar ni salir.');
 
-			if (!hasOpener(file, node, name))
+			// un warp hacia un mundo por hacer se abrira cuando ese mundo tenga su pareja: es un pendiente
+			var waitsForWorld:Bool = node.type == 'warp' && node.world != null && node.world.length > 0 && loadCached(node.world) == null;
+			if (!waitsForWorld && !hasOpener(file, node, name))
 				warn(node.id, '"${node.id}": bloqueado y nadie lo desbloquea.');
 
 			// "se abre con N superados": tiene que haber al menos N cosas que superar (sin contarse el)

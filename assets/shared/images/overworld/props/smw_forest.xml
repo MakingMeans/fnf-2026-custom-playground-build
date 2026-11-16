@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="smw_forest.png">
+	<SubTexture name="round_clearing0000" x="0" y="0" width="48" height="48"/>
+	<SubTexture name="round_mound0000" x="49" y="0" width="48" height="48"/>
+	<SubTexture name="hill_eyes_big0000" x="98" y="0" width="32" height="30"/>
+	<SubTexture name="tree_big_eyes0000" x="131" y="0" width="32" height="24"/>
+	<SubTexture name="plateau_small0000" x="164" y="0" width="16" height="16"/>
+	<SubTexture name="rock_wedge0000" x="181" y="0" width="16" height="16"/>
+	<SubTexture name="tree_round0000" x="198" y="0" width="16" height="16"/>
+	<SubTexture name="rock_sea0000" x="215" y="0" width="16" height="15"/>
+	<SubTexture name="hill_eyes_small0000" x="232" y="0" width="16" height="14"/>
+	<SubTexture name="pond_round0000" x="249" y="0" width="16" height="14"/>
+	<SubTexture name="bush_tall0000" x="266" y="0" width="8" height="8"/>
+	<SubTexture name="pond_small0000" x="275" y="0" width="8" height="8"/>
+	<SubTexture name="stone_post0000" x="284" y="0" width="5" height="8"/>
+	<SubTexture name="pebbles0000" x="290" y="0" width="8" height="7"/>
+	<SubTexture name="rock_small0000" x="299" y="0" width="6" height="7"/>
+	<SubTexture name="bush_small0000" x="306" y="0" width="6" height="6"/>
+	<SubTexture name="grass_tuft0000" x="313" y="0" width="4" height="4"/>
+</TextureAtlas>

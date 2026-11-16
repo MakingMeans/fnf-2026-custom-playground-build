@@ -1,6 +1,7 @@
 package states.editors;
 
 import backend.OverworldData;
+import backend.OverworldTerrain;
 import backend.WeekData;
 
 import states.OverworldState;
@@ -9,6 +10,7 @@ import states.editors.content.FileDialogHandler;
 import flixel.FlxObject;
 import flixel.group.FlxGroup.FlxTypedGroup;
 import flixel.util.FlxSpriteUtil;
+import flixel.graphics.frames.FlxAtlasFrames;
 import openfl.display.BitmapData;
 
 import flash.net.FileFilter;
@@ -117,6 +119,10 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 	var paletteImage:String = '';
 	var paletteTileSize:Int = 16;
 	var paletteCell:Int = 34;
+	/** La paleta es de decorados enteros (un atlas de la carpeta props/): un clic pone el objeto completo. */
+	var paletteProps:Bool = false;
+	/** Vista previa del decorado elegido de la paleta, bajo el raton, en el modo T. */
+	var propGhost:FlxSprite;
 	var paletteColumns:Int = 8;
 	var paletteSelected:Int = -1;
 	var paletteScrollMax:Float = 0;
@@ -136,14 +142,21 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 	// al unir dos nodos que no estan alineados, el camino se hace en L
 	var lPaths:Bool = true;
 
-	// capas (pestana Capas, F2 / F3): GRAFO = nodos, caminos, puntos de curva y flechas; DIBUJO = tiles
-	// pintados y decorados. Bloqueada: el raton no la toca (no se elige, arrastra, crea ni borra nada de
-	// ella), asi se puede pintar sin llevarse un nodo o un camino por delante, y al reves. Oculta: no
-	// se ve, y tampoco se toca.
+	// capas (pestana Capas, F2 / F3 / F4): GRAFO = nodos, caminos, puntos de curva y flechas; TILES = los
+	// tiles sueltos pintados con la paleta (el terreno); DECORADOS = lo demas (decorados con su imagen y
+	// las piezas, aunque sean de tiles). Bloqueada: el raton no la toca (no se elige, arrastra, crea ni
+	// borra nada de ella), asi se puede pintar sin llevarse un nodo por delante, o mover decorados sobre
+	// la hierba sin arrancarla. Oculta: no se ve, y tampoco se toca.
 	var graphLocked:Bool = false;
 	var graphHidden:Bool = false;
-	var drawLocked:Bool = false;
+	var drawLocked:Bool = false; // TILES
 	var drawHidden:Bool = false;
+	var decoLocked:Bool = false; // DECORADOS
+	var decoHidden:Bool = false;
+
+	static inline final LAYER_GRAPH:Int = 0;
+	static inline final LAYER_TILES:Int = 1;
+	static inline final LAYER_DECO:Int = 2;
 
 	// progreso de los nodos que han desaparecido en esta sesion: deshacer se lo devuelve
 	var removedProgress:Map<String, Bool> = new Map<String, Bool>();
@@ -217,7 +230,11 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		add(bandSprite);
 
 		pasteGroup = new FlxTypedGroup<FlxSprite>(); // vista previa al pegar (CTRL+V)
+		propGhost = new FlxSprite().makeGraphic(1, 1, FlxColor.TRANSPARENT);
+		propGhost.visible = false;
+		propGhost.alpha = 0.6;
 		add(pasteGroup);
+		add(propGhost);
 
 		paletteGroup = new FlxSpriteGroup();
 		paletteGroup.cameras = [camPalette];
@@ -246,6 +263,20 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		{
 			FlxG.autoPause = false; // sin foco seguiria dibujando: la captura del final no sale en negro
 			runSelfTest();
+		}
+		// -tab <Pestana> [-palette <atlas>]: abre esa pestana (y esa paleta), para capturar la ventana
+		var tabArg:Int = Sys.args().indexOf('-tab');
+		if (tabArg > -1 && tabArg + 1 < Sys.args().length)
+		{
+			FlxG.autoPause = false;
+			UI_box.selectedName = Sys.args()[tabArg + 1];
+		}
+		var paletteArg:Int = Sys.args().indexOf('-palette');
+		if (paletteArg > -1 && paletteArg + 1 < Sys.args().length)
+		{
+			buildPalette(Sys.args()[paletteArg + 1]);
+			if (paletteFrames.length > 0) selectPaletteTile(0);
+			curMode = MODE_TILE;
 		}
 		#end
 
@@ -293,8 +324,37 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		bgSprite = bgSprites.length > 0 ? bgSprites[bgSprites.length - 1] : null;
 	}
 
+	/** El terreno (los tiles sueltos de detras) para que la vista previa de las carreteras se ponga
+	 * sola como en el juego: se rehace solo cuando cambia algun decorado. */
+	var roadTerrainCache:OverworldTerrain = null;
+	var roadTerrainDirty:Bool = true;
+
+	function roadTerrain():OverworldTerrain
+	{
+		if (roadTerrainCache != null && !roadTerrainDirty) return roadTerrainCache;
+		if (roadTerrainCache != null) roadTerrainCache.destroy();
+		var list:Array<FlxSprite> = [];
+		var locals:Array<Int> = decorLocalIndices();
+		for (i in 0...worldFile.sprites.length)
+		{
+			var data:OverworldSpriteFile = worldFile.sprites[i];
+			if (!data.front && OverworldData.isLooseTile(data) && locals[i] < spritesBack.length) list.push(spritesBack.members[locals[i]]);
+		}
+		roadTerrainCache = new OverworldTerrain(list);
+		roadTerrainDirty = false;
+		return roadTerrainCache;
+	}
+
+	override function destroy()
+	{
+		if (roadTerrainCache != null) roadTerrainCache.destroy();
+		roadTerrainCache = null;
+		super.destroy();
+	}
+
 	function rebuildDecor()
 	{
+		roadTerrainDirty = true;
 		spritesBack.forEachAlive(function(spr:FlxSprite) spr.destroy());
 		spritesFront.forEachAlive(function(spr:FlxSprite) spr.destroy());
 		spritesBack.clear();
@@ -316,7 +376,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		for (node in worldFile.nodes)
 		{
 			var spr:FlxSprite = OverworldState.buildSprite(node.image, node.anim, node.fps);
-			spr.setPosition(node.x - spr.width * 0.5, node.y - spr.height * 0.5);
+			OverworldState.placeNodeSprite(spr, node); // tuberias, castillos y estrellas, bajo los pies de BF
 			nodesGroup.add(spr);
 
 			var label:FlxText = new FlxText(node.x - 60, node.y + spr.height * 0.5 + 1, 120, nodeLabel(node), 8);
@@ -718,7 +778,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			// vista previa de la carretera o de los puntitos del camino
 			if (pth.road)
 			{
-				for (piece in OverworldState.buildRoadPieces(pth, nodeA, nodeB))
+				for (piece in OverworldState.buildRoadPieces(pth, nodeA, nodeB, null, roadTerrain()))
 				{
 					piece.alpha = 0.8;
 					dotsGroup.add(piece);
@@ -901,7 +961,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			+ '   (+SHIFT: con su salida secreta). Otro clic quita el enlace; L, V o ESC salen\n'
 			+ '   CTRL+clic en el mapa (modo T): cuentagotas, coge el tile de debajo para pintar con el\n'
 			+ 'P  paleta de tiles     CTRL+clic en la paleta: tile como aspecto del nodo (+SHIFT: completado)\n'
-			+ 'F2 bloquear la capa GRAFO (nodos y caminos)   F3 bloquear la capa DIBUJO (tiles y decorados)\n'
+			+ 'F2 / F3 / F4  bloquear la capa GRAFO (nodos y caminos) / TILES (sueltos) / DECORADOS (y piezas)\n'
 			+ '   con SHIFT: ocultarla. Una capa bloqueada u oculta no se toca con el raton (pestana Capas)\n'
 			+ 'E  siguiente aviso     U  flechas de desbloqueo (rosa normal, amarillo secreta, naranja camino)\n'
 			+ 'G  rejilla             Rueda: zoom      Raton central / flechas: mover la camara\n\n'
@@ -912,7 +972,9 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			+ '                      clic deja una (ESC termina). Se puede pegar en otro mundo\n'
 			+ 'M                     mover lo elegido con el raton (clic lo suelta, ESC lo devuelve)\n'
 			+ 'CTRL+flechas          mover lo elegido una casilla (+SHIFT: un pixel)\n'
-			+ 'Al elegir algo (V) sale encima la barra Mover / Copiar / Borrar\n'
+			+ 'Al elegir algo (V) sale encima la barra Mover / Copiar / Borrar (/ Unir pieza / Separar)\n'
+			+ 'CTRL+G / CTRL+SHIFT+G unir lo elegido en una pieza / separarla. Un clic coge la pieza\n'
+			+ '                      entera (y el clic derecho la borra entera); ALT+clic, un solo trozo\n'
 			+ 'ALT (mantener)        colocar sin ajustar a la rejilla\n'
 			+ 'CTRL+Z / CTRL+Y       deshacer / rehacer\n'
 			+ 'CTRL+S                guardar\n'
@@ -921,8 +983,8 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			+ 'F1                    esta ayuda\n'
 			+ 'ESC                   soltar el grupo, salir del modo actual; en SELECCIONAR, volver al menu';
 
-		helpTxt = new FlxText(40, 50, FlxG.width - 80, text, 15);
-		helpTxt.setFormat(Paths.font('vcr.ttf'), 15, FlxColor.WHITE, LEFT);
+		helpTxt = new FlxText(40, 36, FlxG.width - 80, text, 14);
+		helpTxt.setFormat(Paths.font('vcr.ttf'), 14, FlxColor.WHITE, LEFT);
 		helpTxt.cameras = [camHUD];
 		helpTxt.scrollFactor.set();
 		helpTxt.visible = false;
@@ -931,7 +993,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 
 	function label(group:FlxSpriteGroup, x:Float, y:Float, text:String):FlxText
 	{
-		var txt:FlxText = new FlxText(x, y, 260, text, 12);
+		var txt:FlxText = new FlxText(x, y, 340, text, 12); // ancho: que no salte de linea encima de los controles
 		group.add(txt);
 		return txt;
 	}
@@ -1529,7 +1591,22 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		y += 42;
 		tab.add(new PsychUIButton(x, y, 'Borrar decorado', function() deleteSelectedSprite(), 120));
 		tab.add(new PsychUIButton(x + 130, y, 'Duplicar', function() duplicateSelection(), 90));
+
+		// piezas: varios decorados (una montana de tiles...) que se eligen y mueven como uno
+		y += 36;
+		tab.add(new PsychUIButton(x, y, 'Unir en pieza', function() joinPiece(), 120));
+		tab.add(new PsychUIButton(x + 130, y, 'Separar pieza', function() splitPiece(), 120));
+		y += 26;
+		decorPieceTxt = new FlxText(x, y, 330, '', 10);
+		tab.add(decorPieceTxt);
+		y += 18;
+		tab.add(new FlxText(x, y, 330,
+			'Pieza: elige sus tiles (SHIFT+clic o un rectangulo) y\n'
+			+ 'pulsa Unir (CTRL+G). Despues un clic coge la pieza\n'
+			+ 'entera; ALT+clic, un solo tile. CTRL+SHIFT+G la separa.', 10));
 	}
+
+	var decorPieceTxt:FlxText;
 
 	function addPathTab()
 	{
@@ -1604,7 +1681,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		}, 140));
 
 		y += 44;
-		label(tab, x, y - 17, 'Solo se abre al completar (vacio: con sus nodos):');
+		label(tab, x, y - 17, 'Lo abre completar (vacio: sus nodos):');
 		pathByDropDown = new PsychUIDropDownMenu(x, y, [''].concat([for (node in worldFile.nodes) node.id]), function(sel:Int, value:String)
 		{
 			if (selectedPath == null) return;
@@ -1615,7 +1692,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		}, 150);
 		tab.add(pathByDropDown);
 
-		pathSecretCheck = new PsychUICheckBox(x + 160, y, 'con su salida secreta', 170, function()
+		pathSecretCheck = new PsychUICheckBox(x + 190, y, 'con su salida secreta', 150, function()
 		{
 			if (selectedPath == null) return;
 			selectedPath.secret = pathSecretCheck.checked && selectedPath.unlockedBy.length > 0;
@@ -1645,12 +1722,26 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		{
 			if (selectedPath == null) return;
 			selectedPath.move = PATH_MOVES[sel];
+			reloadMap(true); // a nado, el agua lleva puntitos; andando, un puente
 		}, 220);
 		tab.add(pathMoveDropDown);
 
+		y += 44;
+		label(tab, x, y - 17, 'Dibujo de la carretera:');
+		pathStyleDropDown = new PsychUIDropDownMenu(x, y, PATH_STYLE_LABELS, function(sel:Int, value:String)
+		{
+			if (selectedPath == null) return;
+			selectedPath.style = PATH_STYLES[sel];
+			reloadMap(true);
+		}, 220);
+		tab.add(pathStyleDropDown);
+
 		y += 34;
 		var tip:FlxText = new FlxText(x, y, 340,
-			'Modo CAMINO (C):\n- clic en un nodo y luego en otro para unirlos\n- si ya estan unidos, se selecciona el camino\n- con un camino elegido, clic en el vacio anade\n  un punto de curva\n- en modo L, clic en un camino: lo abre el nodo de origen', 8);
+			'Modo CAMINO (C):\n- clic en un nodo y luego en otro para unirlos\n- si ya estan unidos, se selecciona el camino\n- con un camino elegido, clic en el vacio anade\n  un punto de curva\n- en modo L, clic en un camino: lo abre el nodo de origen
+La carretera de SMW se pone sola segun lo de debajo:
+beis en la hierba, escalera en el acantilado y en el
+agua puntitos (a nado) o un puente (andando).', 8);
 		tab.add(tip);
 	}
 
@@ -1704,6 +1795,8 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 	var graphHideCheck:PsychUICheckBox;
 	var drawLockCheck:PsychUICheckBox;
 	var drawHideCheck:PsychUICheckBox;
+	var decoLockCheck:PsychUICheckBox;
+	var decoHideCheck:PsychUICheckBox;
 
 	function addLayersTab()
 	{
@@ -1711,20 +1804,27 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		var x:Int = 10;
 		var y:Int = 20;
 
-		label(tab, x, y - 17, 'GRAFO: nodos, caminos, puntos de curva y flechas');
+		label(tab, x, y - 17, 'GRAFO: nodos, caminos, curvas y flechas');
 		graphLockCheck = new PsychUICheckBox(x, y, 'Bloquear (F2)', 140, function() setGraphLayer(graphLockCheck.checked, graphHidden));
 		tab.add(graphLockCheck);
 		graphHideCheck = new PsychUICheckBox(x + 170, y, 'Ocultar (SHIFT+F2)', 150, function() setGraphLayer(graphLocked, graphHideCheck.checked));
 		tab.add(graphHideCheck);
 
-		y += 56;
-		label(tab, x, y - 17, 'DIBUJO: tiles pintados y decorados');
+		y += 50;
+		label(tab, x, y - 17, 'TILES: tiles sueltos (el terreno)');
 		drawLockCheck = new PsychUICheckBox(x, y, 'Bloquear (F3)', 140, function() setDrawLayer(drawLockCheck.checked, drawHidden));
 		tab.add(drawLockCheck);
 		drawHideCheck = new PsychUICheckBox(x + 170, y, 'Ocultar (SHIFT+F3)', 150, function() setDrawLayer(drawLocked, drawHideCheck.checked));
 		tab.add(drawHideCheck);
 
-		y += 46;
+		y += 50;
+		label(tab, x, y - 17, 'DECORADOS: con su imagen y piezas');
+		decoLockCheck = new PsychUICheckBox(x, y, 'Bloquear (F4)', 140, function() setDecoLayer(decoLockCheck.checked, decoHidden));
+		tab.add(decoLockCheck);
+		decoHideCheck = new PsychUICheckBox(x + 170, y, 'Ocultar (SHIFT+F4)', 150, function() setDecoLayer(decoLocked, decoHideCheck.checked));
+		tab.add(decoHideCheck);
+
+		y += 40;
 		var tip:FlxText = new FlxText(x, y, 340,
 			'Una capa BLOQUEADA no se puede tocar con el raton:\n'
 			+ 'no se elige, arrastra, crea ni borra nada de ella\n'
@@ -1733,21 +1833,42 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			+ 'Ejemplos:\n'
 			+ '- pintando tiles: bloquea el GRAFO y no moveras ni\n'
 			+ '  borraras un nodo o un camino sin querer;\n'
-			+ '- moviendo nodos: bloquea el DIBUJO y no te llevaras\n'
-			+ '  un tile al arrastrar;\n'
-			+ '- oculta el GRAFO para ver los tiles que tapan\n'
-			+ '  los nodos y caminos (el rectangulo de lo que se ve\n'
-			+ '  en el juego sigue).\n\n'
-			+ 'Las capas no se guardan con el mundo: al abrir el\n'
-			+ 'editor estan las dos desbloqueadas y visibles.', 11);
+			+ '- moviendo decorados: bloquea los TILES y no\n'
+			+ '  arrancaras la hierba al arrastrar (y el rectangulo\n'
+			+ '  se puede empezar encima del terreno);\n'
+			+ '- oculta el GRAFO para ver lo que tapan los nodos.\n\n'
+			+ 'Unir tiles en una pieza (CTRL+G) los pasa a la capa\n'
+			+ 'DECORADOS. Las capas no se guardan con el mundo.', 11);
 		tab.add(tip);
 	}
 
 	inline function graphBlocked():Bool
 		return graphLocked || graphHidden;
 
+	/** Capa TILES (los tiles sueltos) bloqueada u oculta. */
 	inline function drawBlocked():Bool
 		return drawLocked || drawHidden;
+
+	/** Capa DECORADOS bloqueada u oculta. */
+	inline function decoBlocked():Bool
+		return decoLocked || decoHidden;
+
+	static inline function hasPiece(data:OverworldSpriteFile):Bool
+		return data.piece != null && data.piece.length > 0;
+
+	/** Un tile suelto de la paleta (capa TILES); todo lo demas (con su imagen, o de una pieza) es DECORADOS. */
+	static inline function isLooseTile(data:OverworldSpriteFile):Bool
+		return OverworldData.isLooseTile(data);
+
+	inline function layerOf(data:OverworldSpriteFile):Int
+		return isLooseTile(data) ? LAYER_TILES : LAYER_DECO;
+
+	/** El raton no puede tocar este decorado (su capa esta bloqueada u oculta). */
+	inline function spriteBlocked(data:OverworldSpriteFile):Bool
+		return isLooseTile(data) ? drawBlocked() : decoBlocked();
+
+	inline function spriteHidden(data:OverworldSpriteFile):Bool
+		return isLooseTile(data) ? drawHidden : decoHidden;
 
 	/** Cambia la capa GRAFO: lo que tuviera elegido de ella se suelta (ya no se puede tocar). */
 	function setGraphLayer(locked:Bool, hidden:Bool)
@@ -1777,32 +1898,58 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		syncLayerChecks();
 	}
 
-	/** Cambia la capa DIBUJO: lo que tuviera elegido de ella se suelta. */
+	/** Cambia la capa TILES: lo que tuviera elegido de ella se suelta. */
 	function setDrawLayer(locked:Bool, hidden:Bool)
 	{
 		drawLocked = locked;
 		drawHidden = hidden;
-		if (drawBlocked())
-		{
-			endMouseGestures();
-			selectedSprite = null;
-			if (groupSprites.length > 0)
-			{
-				groupSprites = [];
-				normalizeGroup();
-			}
-			if (selectedNode == null && hasGroup()) selectedNode = groupNodes[0];
-			updateUI();
-		}
+		dropBlockedSprites();
 		applyLayerVisibility();
 		updateSelectionBox();
 		syncLayerChecks();
 	}
 
+	/** Cambia la capa DECORADOS: lo que tuviera elegido de ella se suelta. */
+	function setDecoLayer(locked:Bool, hidden:Bool)
+	{
+		decoLocked = locked;
+		decoHidden = hidden;
+		dropBlockedSprites();
+		applyLayerVisibility();
+		updateSelectionBox();
+		syncLayerChecks();
+	}
+
+	/** Suelta los decorados elegidos que ya no se pueden tocar (su capa se acaba de bloquear u ocultar). */
+	function dropBlockedSprites()
+	{
+		var changed:Bool = selectedSprite != null && spriteBlocked(selectedSprite);
+		var kept:Array<OverworldSpriteFile> = [for (data in groupSprites) if (!spriteBlocked(data)) data];
+		if (!changed && kept.length == groupSprites.length) return;
+
+		endMouseGestures();
+		if (selectedSprite != null && spriteBlocked(selectedSprite)) selectedSprite = null;
+		groupSprites = kept;
+		normalizeGroup();
+		if (selectedNode == null && selectedSprite == null && hasGroup())
+		{
+			if (groupNodes.length > 0) selectedNode = groupNodes[0];
+			else selectedSprite = groupSprites[0];
+		}
+		updateUI();
+	}
+
+	/** Lo que se ve de cada capa: el GRAFO por grupos, y los decorados uno a uno (TILES o DECORADOS). */
 	function applyLayerVisibility()
 	{
 		nodesGroup.visible = labelsGroup.visible = dotsGroup.visible = problemGroup.visible = !graphHidden;
-		spritesBack.visible = spritesFront.visible = !drawHidden;
+		var locals:Array<Int> = decorLocalIndices();
+		for (index in 0...worldFile.sprites.length)
+		{
+			var data:OverworldSpriteFile = worldFile.sprites[index];
+			var group = data.front ? spritesFront : spritesBack;
+			if (locals[index] < group.length) group.members[locals[index]].visible = !spriteHidden(data);
+		}
 	}
 
 	function syncLayerChecks()
@@ -1812,6 +1959,8 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		graphHideCheck.checked = graphHidden;
 		drawLockCheck.checked = drawLocked;
 		drawHideCheck.checked = drawHidden;
+		decoLockCheck.checked = decoLocked;
+		decoHideCheck.checked = decoHidden;
 	}
 
 	/** Para el texto de arriba: como estan las capas (nada si estan normales). */
@@ -1820,16 +1969,25 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		var parts:Array<String> = [];
 		if (graphHidden) parts.push('GRAFO oculto');
 		else if (graphLocked) parts.push('GRAFO bloqueado');
-		if (drawHidden) parts.push('DIBUJO oculto');
-		else if (drawLocked) parts.push('DIBUJO bloqueado');
+		if (drawHidden) parts.push('TILES ocultos');
+		else if (drawLocked) parts.push('TILES bloqueados');
+		if (decoHidden) parts.push('DECORADOS ocultos');
+		else if (decoLocked) parts.push('DECORADOS bloqueados');
 		return parts.length > 0 ? '  |  ' + parts.join(', ') : '';
 	}
 
-	/** Aviso al intentar tocar una capa bloqueada u oculta. */
-	function warnLayer(graph:Bool)
+	/** Aviso al intentar tocar una capa bloqueada u oculta (LAYER_GRAPH / LAYER_TILES / LAYER_DECO). */
+	function warnLayer(layer:Int)
 	{
-		if (graph) showOutput('La capa GRAFO (nodos y caminos) esta bloqueada u oculta: cambialo en la pestana Capas o con F2', true);
-		else showOutput('La capa DIBUJO (tiles y decorados) esta bloqueada u oculta: cambialo en la pestana Capas o con F3', true);
+		switch (layer)
+		{
+			case LAYER_GRAPH:
+				showOutput('La capa GRAFO (nodos y caminos) esta bloqueada u oculta: cambialo en la pestana Capas o con F2', true);
+			case LAYER_TILES:
+				showOutput('La capa TILES (los tiles sueltos) esta bloqueada u oculta: cambialo en la pestana Capas o con F3', true);
+			default:
+				showOutput('La capa DECORADOS (decorados y piezas) esta bloqueada u oculta: cambialo en la pestana Capas o con F4', true);
+		}
 	}
 
 	// --------------------------------------------- listas de sprites por categoria
@@ -2345,6 +2503,13 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			return;
 		}
 
+		paletteProps = isPropsAtlas(image);
+		if (paletteProps)
+		{
+			buildPropsPalette(image, atlas);
+			return;
+		}
+
 		paletteTileSize = Std.int(Math.max(atlas.frames[0].frame.width, atlas.frames[0].frame.height));
 		if (paletteTileSize < 1) paletteTileSize = 16;
 
@@ -2381,6 +2546,104 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 Rueda = bajar, shift+rueda = bajar rapido.';
 		showOutput('Paleta cargada: ${paletteFrames.length} tiles de ${paletteTileSize}px. Pulsa T para pintar.');
 	}
+
+	/** Un atlas de decorados enteros: los de la carpeta props/ (`overworld/props/smw_green`, `overworld/world1/props`). */
+	static function isPropsAtlas(image:String):Bool
+		return image != null && (image.indexOf('/props/') > -1 || image.endsWith('/props'));
+
+	/** Celda de la paleta de decorados: cada uno se ve entero, reducido si no cabe. */
+	static inline final PROP_CELL:Int = 52;
+
+	/**
+	 * La paleta de un atlas de decorados enteros: cada fotograma ("bush0000") es un objeto de su tamano
+	 * y se pone de una vez (su animacion es su nombre sin el numero: "bush").
+	 */
+	function buildPropsPalette(image:String, atlas:FlxAtlasFrames)
+	{
+		paletteCell = PROP_CELL;
+		paletteColumns = Std.int(Math.max(1, Math.floor(PALETTE_WIDTH / paletteCell)));
+		paletteTileSize = worldFile.gridSize > 0 ? worldFile.gridSize : 8;
+
+		var index:Int = 0;
+		for (frame in atlas.frames)
+		{
+			var name:String = ~/[0-9]+$/.replace(frame.name, '');
+			if (name.length < 1 || paletteFrames.contains(name)) continue; // un objeto por nombre (el primer fotograma)
+			paletteFrames.push(name);
+
+			var spr:FlxSprite = new FlxSprite();
+			spr.frames = atlas;
+			spr.animation.frameName = frame.name;
+			spr.antialiasing = false;
+			var size:Float = Math.max(frame.frame.width, frame.frame.height);
+			var scale:Float = Math.min(2, (paletteCell - 6) / Math.max(1, size));
+			spr.scale.set(scale, scale);
+			spr.updateHitbox();
+
+			var col:Int = index % paletteColumns;
+			var row:Int = Std.int(index / paletteColumns);
+			spr.setPosition(col * paletteCell + (paletteCell - spr.width) * 0.5, row * paletteCell + (paletteCell - spr.height) * 0.5);
+			paletteGroup.add(spr);
+			index++;
+		}
+
+		var rows:Int = Math.ceil(paletteFrames.length / paletteColumns);
+		paletteScrollMax = Math.max(0, rows * paletteCell - camPalette.height);
+		camPalette.scroll.y = 0;
+		paletteCursor.setGraphicSize(paletteCell, paletteCell);
+		paletteCursor.updateHitbox();
+
+		paletteInfoTxt.text = '${paletteFrames.length} decorados enteros: elige uno y\nhaz clic en el mapa para ponerlo (capa DECORADOS).';
+		showOutput('Paleta de decorados: ${paletteFrames.length} objetos. Elige uno y clic en el mapa (T) para ponerlo entero.');
+	}
+
+	/** Pone el decorado elegido de la paleta centrado en el raton (su esquina, ajustada a la rejilla). */
+	function placeProp(mouseX:Float, mouseY:Float)
+	{
+		if (paletteSelected < 0 || paletteSelected >= paletteFrames.length) return;
+		var anim:String = paletteFrames[paletteSelected];
+		var spr:FlxSprite = OverworldState.buildSprite(paletteImage, anim, 0);
+		var x:Float = snap(mouseX - spr.width * 0.5);
+		var y:Float = snap(mouseY - spr.height * 0.5);
+		spr.destroy();
+
+		pushUndo();
+		var data:OverworldSpriteFile = OverworldData.createSprite(paletteImage, x, y);
+		data.anim = anim;
+		data.fps = 0;
+		data.front = paintFront;
+		worldFile.sprites.push(data);
+		addDecorSprite(data);
+		unsavedProgress = true;
+		if (x + 64 > mapWidth || y + 64 > mapHeight) reloadMap(true);
+		showOutput('Puesto "$anim" (V para elegirlo y moverlo; CTRL+Z lo quita)');
+	}
+
+	/** En el modo T con la paleta de decorados: el elegido se ve bajo el raton, donde se pondria. */
+	function updatePropGhost()
+	{
+		var show:Bool = curMode == MODE_TILE && paletteProps && paletteSelected >= 0 && paletteSelected < paletteFrames.length
+			&& !mouseOnUI() && !mouseOnPalette() && !helpBg.visible;
+		if (!show)
+		{
+			propGhost.visible = false;
+			return;
+		}
+
+		var key:String = paletteImage + ':' + paletteFrames[paletteSelected];
+		if (ghostKey != key)
+		{
+			ghostKey = key;
+			OverworldState.buildSprite(paletteImage, paletteFrames[paletteSelected], 0, true, propGhost);
+			propGhost.alpha = 0.6;
+		}
+		var mouse = FlxG.mouse.getWorldPosition(camGame);
+		propGhost.setPosition(snap(mouse.x - propGhost.width * 0.5), snap(mouse.y - propGhost.height * 0.5));
+		mouse.put();
+		propGhost.visible = true;
+	}
+
+	var ghostKey:String = null;
 
 	function mouseOnPalette():Bool
 	{
@@ -2424,7 +2687,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 		selectPaletteTile(index);
 		curMode = MODE_TILE;
-		showOutput('Tile ${paletteFrames[index]} (${index + 1}/${paletteFrames.length}) elegido. Clic en el mapa para pintar.');
+		if (paletteProps) showOutput('Decorado "${paletteFrames[index]}" elegido: clic en el mapa para ponerlo entero');
+		else showOutput('Tile ${paletteFrames[index]} (${index + 1}/${paletteFrames.length}) elegido. Clic en el mapa para pintar.');
 	}
 
 	/** El tile `index` de la paleta pasa a ser el del pincel (con su recuadro en la paleta). */
@@ -2442,12 +2706,13 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 	 */
 	function pickTileUnderMouse(mouseX:Float, mouseY:Float):Bool
 	{
-		if (drawHidden)
+		if (drawHidden && decoHidden)
 		{
-			warnLayer(false);
+			warnLayer(LAYER_TILES);
 			return false;
 		}
 
+		// solo mira: vale con la capa bloqueada, pero no ve lo oculto
 		var picked:OverworldSpriteFile = null;
 		var locals:Array<Int> = decorLocalIndices();
 		for (front in [true, false])
@@ -2457,7 +2722,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			while (index >= 0 && picked == null)
 			{
 				var data:OverworldSpriteFile = worldFile.sprites[index];
-				if (data.front == front && isPaintedTile(data) && locals[index] < group.length)
+				if (data.front == front && (isPaintedTile(data) || isPropsAtlas(data.image)) && !spriteHidden(data) && locals[index] < group.length)
 				{
 					var spr:FlxSprite = group.members[locals[index]];
 					if (mouseX >= spr.x && mouseX < spr.x + spr.width && mouseY >= spr.y && mouseY < spr.y + spr.height) picked = data;
@@ -2548,6 +2813,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		}
 
 		if (existing != null && existing.image == paletteImage && existing.anim == frame) return; // ya esta pintado
+		if (existing != null && spriteBlocked(existing)) return; // un tile de una pieza con DECORADOS bloqueada
 
 		if (strokeUndoPending)
 		{
@@ -2560,6 +2826,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		data.anim = frame;
 		data.fps = 0;
 		data.front = paintFront;
+		if (existing != null && hasPiece(existing)) data.piece = existing.piece; // repintar una montana no la parte
 		worldFile.sprites.push(data);
 		unsavedProgress = true;
 
@@ -2572,8 +2839,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 	var strokeUndoPending:Bool = false;
 
 	/** Un tile pintado desde la paleta: un fotograma concreto ("tile0042") y 0 FPS. */
-	static function isPaintedTile(data:OverworldSpriteFile):Bool
-		return data.fps == 0 && data.anim != null && ~/[0-9]$/.match(data.anim);
+	static inline function isPaintedTile(data:OverworldSpriteFile):Bool
+		return OverworldData.isPaintedTile(data);
 
 	function addDecorSprite(data:OverworldSpriteFile):FlxSprite
 	{
@@ -2604,6 +2871,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 	function buildDecorSprite(data:OverworldSpriteFile):FlxSprite
 	{
+		roadTerrainDirty = true;
 		var spr:FlxSprite = OverworldState.buildSprite(data.image, data.anim, data.fps);
 		spr.flipX = data.flipX;
 		spr.flipY = data.flipY;
@@ -2616,6 +2884,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		spr.setPosition(data.x, data.y);
 		// un tile quieto no necesita update(): con un mapa pintado entero son miles por fotograma
 		if (spr.animation.curAnim == null || spr.animation.curAnim.numFrames < 2) spr.active = false;
+		spr.visible = !spriteHidden(data); // su capa (TILES o DECORADOS) puede estar oculta
 		return spr;
 	}
 
@@ -2760,6 +3029,13 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			decorFlipYCheck.checked = selectedSprite.flipY;
 			decorFrontCheck.checked = selectedSprite.front;
 		}
+		if (decorPieceTxt != null)
+		{
+			if (selectedSprite == null) decorPieceTxt.text = '';
+			else if (hasPiece(selectedSprite))
+				decorPieceTxt.text = 'Pieza "${selectedSprite.piece}" (${pieceMembers(selectedSprite).length} decorados): un clic la elige entera';
+			else decorPieceTxt.text = 'Suelto (no es de ninguna pieza)';
+		}
 
 		if (selectedPath != null)
 		{
@@ -2773,6 +3049,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			pathRoadCheck.checked = selectedPath.road;
 			var move:Int = PATH_MOVES.indexOf(selectedPath.move);
 			pathMoveDropDown.selectedLabel = PATH_MOVE_LABELS[move > -1 ? move : 0];
+			var style:Int = PATH_STYLES.indexOf(selectedPath.style);
+			pathStyleDropDown.selectedLabel = PATH_STYLE_LABELS[style > -1 ? style : 0];
 		}
 		else pathInfoTxt.text = 'Ningun camino seleccionado';
 	}
@@ -2866,6 +3144,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 		updateSelectionBox();
 		updateActionBar();
+		updatePropGhost();
 	}
 
 	function updateKeys(elapsed:Float)
@@ -2874,11 +3153,18 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		{
 			// moviendo algo con el raton, cualquier atajo lo devuelve antes a su sitio
 			var keys = FlxG.keys.justPressed;
-			if (carrying && (keys.Z || keys.Y || keys.S || keys.T || keys.D || keys.C || keys.X || keys.V)) finishCarry(false);
+			if (carrying && (keys.Z || keys.Y || keys.S || keys.T || keys.D || keys.C || keys.X || keys.V || keys.G)) finishCarry(false);
 
 			if (FlxG.keys.justPressed.C) copySelection();
 			if (FlxG.keys.justPressed.X) copySelection(true);
 			if (FlxG.keys.justPressed.V) startPaste();
+
+			// CTRL+G: unir lo elegido en una pieza; CTRL+SHIFT+G: separarla
+			if (FlxG.keys.justPressed.G)
+			{
+				if (FlxG.keys.pressed.SHIFT) splitPiece();
+				else joinPiece();
+			}
 
 			// CTRL+flechas: mover lo elegido una casilla (con SHIFT, un pixel)
 			var step:Float = FlxG.keys.pressed.SHIFT ? 1 : Math.max(1, worldFile.gridSize);
@@ -2891,9 +3177,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			if (FlxG.keys.justPressed.T) testWorld(FlxG.keys.pressed.SHIFT);
 			if (FlxG.keys.justPressed.D)
 			{
-				if (selectedNode != null && graphBlocked()) warnLayer(true);
-				else if (selectedSprite != null && drawBlocked()) warnLayer(false);
-				else duplicateSelection();
+				if (canTouchSelection()) duplicateSelection();
 			}
 			if (FlxG.keys.justPressed.Z) FlxG.keys.pressed.SHIFT ? redo() : undo();
 			if (FlxG.keys.justPressed.Y) redo();
@@ -3005,7 +3289,13 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		{
 			if (FlxG.keys.pressed.SHIFT) setDrawLayer(drawLocked, !drawHidden);
 			else setDrawLayer(!drawLocked, drawHidden);
-			showOutput('Capa DIBUJO (tiles y decorados): ' + (drawHidden ? 'oculta' : (drawLocked ? 'bloqueada' : 'normal')));
+			showOutput('Capa TILES (los tiles sueltos): ' + (drawHidden ? 'oculta' : (drawLocked ? 'bloqueada' : 'normal')));
+		}
+		if (FlxG.keys.justPressed.F4)
+		{
+			if (FlxG.keys.pressed.SHIFT) setDecoLayer(decoLocked, !decoHidden);
+			else setDecoLayer(!decoLocked, decoHidden);
+			showOutput('Capa DECORADOS (decorados y piezas): ' + (decoHidden ? 'oculta' : (decoLocked ? 'bloqueada' : 'normal')));
 		}
 
 		var speed:Float = 320 * elapsed / camGame.zoom;
@@ -3086,9 +3376,9 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			if ((curMode == MODE_SELECT || curMode == MODE_PATH) && deletePointUnderMouse(mouseX, mouseY)) return;
 
 			// pintando, el clic derecho es la goma: no debe cargarse un nodo sin querer
-			if (curMode == MODE_TILE && drawBlocked())
+			if (curMode == MODE_TILE && (paletteProps ? decoBlocked() : drawBlocked()))
 			{
-				warnLayer(false);
+				warnLayer(paletteProps ? LAYER_DECO : LAYER_TILES);
 				return;
 			}
 			deleteUnderMouse(mouseX, mouseY, curMode != MODE_TILE);
@@ -3104,9 +3394,19 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 				if (FlxG.mouse.justPressed) pickTileUnderMouse(mouseX, mouseY);
 				return;
 			}
+			// paleta de decorados enteros: cada clic pone uno (no se pinta arrastrando)
+			if (paletteProps)
+			{
+				if (FlxG.mouse.justPressed)
+				{
+					if (decoBlocked()) warnLayer(LAYER_DECO);
+					else placeProp(mouseX, mouseY);
+				}
+				return;
+			}
 			if (drawBlocked())
 			{
-				if (FlxG.mouse.justPressed) warnLayer(false);
+				if (FlxG.mouse.justPressed) warnLayer(LAYER_TILES);
 				return;
 			}
 			// el paso de deshacer se guarda al pintar la primera casilla que cambia: un clic sobre
@@ -3222,19 +3522,19 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		switch (curMode)
 		{
 			case MODE_NODE:
-				if (graphBlocked()) warnLayer(true);
+				if (graphBlocked()) warnLayer(LAYER_GRAPH);
 				else createNode(snap(mouseX), snap(mouseY));
 
 			case MODE_DECOR:
-				if (drawBlocked()) warnLayer(false);
+				if (decoBlocked()) warnLayer(LAYER_DECO);
 				else createDecor(snap(mouseX), snap(mouseY));
 
 			case MODE_PATH:
-				if (graphBlocked()) warnLayer(true);
+				if (graphBlocked()) warnLayer(LAYER_GRAPH);
 				else handlePathClick(mouseX, mouseY);
 
 			case MODE_LINK:
-				if (graphBlocked()) warnLayer(true);
+				if (graphBlocked()) warnLayer(LAYER_GRAPH);
 				else handleLinkClick(mouseX, mouseY);
 
 			default:
@@ -3307,6 +3607,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 	/** Mueve solo el sprite de un decorado (no hace falta rehacer los demas). */
 	function moveDecorSprite(data:OverworldSpriteFile)
 	{
+		roadTerrainDirty = true;
 		var spr:FlxSprite = decorSpriteOf(data);
 		if (spr == null)
 		{
@@ -3322,7 +3623,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 	function spriteUnderMouse(mouseX:Float, mouseY:Float):OverworldSpriteFile
 	{
-		if (drawBlocked()) return null; // capa DIBUJO bloqueada u oculta: el raton no la toca
+		if (drawBlocked() && decoBlocked()) return null; // las dos capas bloqueadas u ocultas: el raton no las toca
 		var locals:Array<Int> = decorLocalIndices();
 		var index:Int = worldFile.sprites.length - 1;
 		while (index >= 0)
@@ -3331,7 +3632,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			var group = data.front ? spritesFront : spritesBack;
 			var localIndex:Int = locals[index];
 
-			if (localIndex < group.length)
+			// lo de una capa bloqueada se salta: se coge lo que haya debajo (un decorado sobre la hierba)
+			if (localIndex < group.length && !spriteBlocked(data))
 			{
 				var spr:FlxSprite = group.members[localIndex];
 				if (mouseX >= spr.x && mouseX <= spr.x + spr.width && mouseY >= spr.y && mouseY <= spr.y + spr.height)
@@ -3345,19 +3647,36 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 	function selectUnderMouse(mouseX:Float, mouseY:Float, allowDrag:Bool)
 	{
 		var shift:Bool = allowDrag && FlxG.keys.pressed.SHIFT;
+		var single:Bool = FlxG.keys.pressed.ALT; // ALT+clic: un solo tile de una pieza
 		var node:OverworldNodeFile = nodeUnderMouse(mouseX, mouseY);
 		var data:OverworldSpriteFile = node == null ? spriteUnderMouse(mouseX, mouseY) : null;
 
-		// SHIFT+clic: suma o quita del grupo
+		// un decorado de una pieza (una montana de tiles...) se elige con toda su pieza
+		var piece:Array<OverworldSpriteFile> = (data != null && !single && hasPiece(data)) ? pieceMembers(data) : null;
+		if (piece != null && piece.length < 2) piece = null;
+
+		// SHIFT+clic: suma o quita del grupo (una pieza, entera)
 		if (shift && (node != null || data != null))
 		{
-			toggleInGroup(node, data);
+			if (piece != null) togglePieceInGroup(piece, data);
+			else toggleInGroup(node, data);
 			return;
 		}
 
 		// agarrar algo del grupo mueve el grupo entero; agarrar otra cosa lo suelta
 		var inGroup:Bool = hasGroup() && ((node != null && groupNodes.contains(node)) || (data != null && groupSprites.contains(data)));
+		if (single && data != null) inGroup = false;
 		if (!inGroup && !shift) clearGroup();
+
+		// clic en una pieza: queda elegida entera, y se arrastra entera
+		if (piece != null && !inGroup)
+		{
+			groupNodes = [];
+			groupSprites = piece;
+			inGroup = true;
+			refreshGroupBoxes();
+			showOutput('Pieza "${data.piece}" (${piece.length} decorados): arrastrala o usa la barra. ALT+clic elige uno solo');
+		}
 
 		if (node != null)
 		{
@@ -3497,6 +3816,121 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		if (hasGroup()) showOutput('${groupNodes.length} nodos y ${groupSprites.length} decorados: arrastra para moverlos, CTRL+D duplica, SUPR borra, ESC suelta');
 	}
 
+	// ------------------------------------------------------- piezas (decorados que van juntos)
+	/** Todos los decorados de la pieza de `data` (con el mismo `piece`), en el orden del mundo. */
+	function pieceMembers(data:OverworldSpriteFile):Array<OverworldSpriteFile>
+		return hasPiece(data) ? [for (other in worldFile.sprites) if (other.piece == data.piece) other] : [data];
+
+	/** Un nombre de pieza que no use nadie en el mundo ("pieza1", "pieza2"...). */
+	function uniquePieceId(base:String = 'pieza'):String
+	{
+		var used:Map<String, Bool> = new Map<String, Bool>();
+		for (data in worldFile.sprites) if (hasPiece(data)) used.set(data.piece, true);
+		var n:Int = 1;
+		while (used.exists(base + n)) n++;
+		return base + n;
+	}
+
+	/** SHIFT+clic en una pieza: la mete entera en el grupo, o la saca entera si ya estaba. */
+	function togglePieceInGroup(piece:Array<OverworldSpriteFile>, clicked:OverworldSpriteFile)
+	{
+		if (groupNodes.length + groupSprites.length == 0)
+		{
+			if (selectedNode != null) groupNodes.push(selectedNode);
+			else if (selectedSprite != null && !piece.contains(selectedSprite)) groupSprites.push(selectedSprite);
+		}
+
+		var all:Bool = Lambda.foreach(piece, data -> groupSprites.contains(data));
+		if (all) for (data in piece) groupSprites.remove(data);
+		else for (data in piece) if (!groupSprites.contains(data)) groupSprites.push(data);
+
+		if (!all)
+		{
+			selectedSprite = clicked;
+			selectedNode = null;
+			UI_box.selectedName = 'Deco';
+		}
+		else
+		{
+			selectedNode = groupNodes.length > 0 ? groupNodes[groupNodes.length - 1] : null;
+			selectedSprite = (selectedNode == null && groupSprites.length > 0) ? groupSprites[groupSprites.length - 1] : null;
+		}
+		if (groupNodes.length + groupSprites.length < 2)
+		{
+			groupNodes = [];
+			groupSprites = [];
+		}
+
+		updateUI();
+		refreshGroupBoxes();
+		updateSelectionBox();
+		if (hasGroup()) showOutput('${groupNodes.length} nodos y ${groupSprites.length} decorados: arrastra para moverlos, CTRL+D duplica, SUPR borra, ESC suelta');
+	}
+
+	/** La seleccion es justo una pieza entera (para ofrecer "Separar"). */
+	function selectionIsOnePiece():Bool
+	{
+		var sprites:Array<OverworldSpriteFile> = selectionSprites();
+		if (sprites.length < 1 || selectionNodes().length > 0 || !hasPiece(sprites[0])) return false;
+		var name:String = sprites[0].piece;
+		return Lambda.foreach(sprites, data -> data.piece == name) && pieceMembers(sprites[0]).length == sprites.length;
+	}
+
+	/** CTRL+G: los decorados elegidos (2 o mas) pasan a ser una pieza: un clic la elige entera. */
+	function joinPiece()
+	{
+		var sprites:Array<OverworldSpriteFile> = selectionSprites();
+		if (sprites.length < 2)
+		{
+			showOutput('Para unir una pieza elige antes 2 o mas decorados o tiles (SHIFT+clic o un rectangulo)', true);
+			return;
+		}
+		if (!canTouchSelection()) return;
+		if (decoBlocked()) // las piezas son de la capa DECORADOS: desaparecerian de la vista o del raton
+		{
+			warnLayer(LAYER_DECO);
+			return;
+		}
+
+		pushUndo();
+		var name:String = uniquePieceId();
+		for (data in sprites) data.piece = name;
+		unsavedProgress = true;
+		updateUI();
+		var nodes:Int = selectionNodes().length;
+		showOutput('Pieza "$name" con ${sprites.length} decorados: un clic la elige entera (ALT+clic, uno solo). CTRL+SHIFT+G la separa'
+			+ (nodes > 0 ? '\n(los nodos no entran en las piezas)' : ''));
+	}
+
+	/** CTRL+SHIFT+G: los decorados elegidos dejan de ser de su pieza (vuelven a ser sueltos). */
+	function splitPiece()
+	{
+		var sprites:Array<OverworldSpriteFile> = [for (data in selectionSprites()) if (hasPiece(data)) data];
+		if (sprites.length < 1)
+		{
+			showOutput('Lo elegido no es de ninguna pieza', true);
+			return;
+		}
+		if (!canTouchSelection()) return;
+		// los tiles de la paleta vuelven a la capa TILES
+		if (drawBlocked() && Lambda.exists(sprites, data -> isPaintedTile(data)))
+		{
+			warnLayer(LAYER_TILES);
+			return;
+		}
+
+		pushUndo();
+		var names:Array<String> = [];
+		for (data in sprites)
+		{
+			if (!names.contains(data.piece)) names.push(data.piece);
+			Reflect.deleteField(data, 'piece');
+		}
+		unsavedProgress = true;
+		updateUI();
+		showOutput('Separada${names.length > 1 ? "s las piezas" : " la pieza"} ${names.join(", ")}: sus ${sprites.length} decorados vuelven a ir sueltos');
+	}
+
 	/** Al soltar el rectangulo: selecciona los nodos (por su centro) y decorados (por su centro) de dentro. */
 	function finishBand(mouseX:Float, mouseY:Float)
 	{
@@ -3530,13 +3964,28 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		var back:Int = 0;
 		for (data in worldFile.sprites)
 		{
-			if (drawBlocked()) break;
+			if (drawBlocked() && decoBlocked()) break;
 			var local:Int = data.front ? front++ : back++;
 			var group = data.front ? spritesFront : spritesBack;
-			if (local >= group.length || already.exists(data)) continue;
+			if (local >= group.length || already.exists(data) || spriteBlocked(data)) continue;
 			var spr:FlxSprite = group.members[local];
-			if (inside(spr.x + spr.width * 0.5, spr.y + spr.height * 0.5)) groupSprites.push(data);
+			if (inside(spr.x + spr.width * 0.5, spr.y + spr.height * 0.5))
+			{
+				groupSprites.push(data);
+				already.set(data, true);
+			}
 		}
+
+		// una pieza entra entera aunque el rectangulo solo coja una parte (con ALT, solo lo de dentro)
+		if (!FlxG.keys.pressed.ALT)
+			for (data in groupSprites.copy())
+				if (hasPiece(data))
+					for (member in pieceMembers(data))
+						if (!already.exists(member))
+						{
+							groupSprites.push(member);
+							already.set(member, true);
+						}
 
 		var total:Int = groupNodes.length + groupSprites.length;
 		selectedNode = groupNodes.length > 0 ? groupNodes[0] : null;
@@ -3632,6 +4081,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		for (node in groupNodes) moveNodeTo(node, node.x + dx, node.y + dy, ids);
 
 		var grows:Bool = false;
+		if (groupSprites.length > 0) roadTerrainDirty = true;
 		for (data in groupSprites)
 		{
 			data.x += dx;
@@ -3765,12 +4215,31 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			worldFile.paths.push(copy);
 		}
 
+		// cada pieza copiada es una pieza nueva (moverla no arrastra a la original); un tile suelto
+		// copiado de una pieza (ALT+clic) se queda suelto
+		var pieceCount:Map<String, Int> = new Map<String, Int>();
+		for (data in sprites) if (hasPiece(data)) pieceCount.set(data.piece, (pieceCount.exists(data.piece) ? pieceCount.get(data.piece) : 0) + 1);
+		var pieceNames:Map<String, String> = new Map<String, String>();
+
 		var newSprites:Array<OverworldSpriteFile> = [];
 		for (data in sprites)
 		{
 			var copy:OverworldSpriteFile = deepCopy(data);
 			copy.x += dx;
 			copy.y += dy;
+			if (hasPiece(data))
+			{
+				if (pieceCount.get(data.piece) < 2) Reflect.deleteField(copy, 'piece');
+				else
+				{
+					if (!pieceNames.exists(data.piece))
+					{
+						var base:String = ~/[0-9]+$/.replace(data.piece, '');
+						pieceNames.set(data.piece, uniquePieceId(base.length > 0 ? base : 'pieza'));
+					}
+					copy.piece = pieceNames.get(data.piece);
+				}
+			}
 			worldFile.sprites.push(copy);
 			addDecorSprite(copy); // al final de su grupo, igual que en worldFile.sprites
 			newSprites.push(copy);
@@ -3793,14 +4262,15 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 	{
 		if (selectionNodes().length > 0 && graphBlocked())
 		{
-			warnLayer(true);
+			warnLayer(LAYER_GRAPH);
 			return false;
 		}
-		if (selectionSprites().length > 0 && drawBlocked())
-		{
-			warnLayer(false);
-			return false;
-		}
+		for (data in selectionSprites())
+			if (spriteBlocked(data))
+			{
+				warnLayer(layerOf(data));
+				return false;
+			}
 		return true;
 	}
 
@@ -3975,14 +4445,15 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		}
 		if (clipNodes.length > 0 && graphBlocked())
 		{
-			warnLayer(true);
+			warnLayer(LAYER_GRAPH);
 			return;
 		}
-		if (clipSprites.length > 0 && drawBlocked())
-		{
-			warnLayer(false);
-			return;
-		}
+		for (data in clipSprites)
+			if (spriteBlocked(data))
+			{
+				warnLayer(layerOf(data));
+				return;
+			}
 		if (carrying) finishCarry(true);
 		endMouseGestures();
 		curMode = MODE_SELECT;
@@ -4040,9 +4511,12 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			pasteGroup.members[i].setPosition(target[0] + pasteOffsets[i][0], target[1] + pasteOffsets[i][1]);
 	}
 
-	// ------------------------------------------------------- barra de acciones (Mover / Copiar / Borrar)
+	// ------------------------------------------------------- barra de acciones (Mover / Copiar / Borrar / pieza)
 	var actionBar:FlxSpriteGroup;
+	/** Cuarto boton: "Unir pieza" con 2 o mas decorados elegidos, "Separar" con una pieza entera. */
+	var pieceButton:PsychUIButton;
 	static inline final ACTION_BAR_WIDTH:Int = 206;
+	static inline final ACTION_BAR_WIDE:Int = 276;
 
 	function buildActionBar()
 	{
@@ -4050,6 +4524,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		actionBar.add(new PsychUIButton(0, 0, 'Mover (M)', function() startCarry(), 66));
 		actionBar.add(new PsychUIButton(70, 0, 'Copiar', function() if (copySelection()) startPaste(), 66));
 		actionBar.add(new PsychUIButton(140, 0, 'Borrar', function() deleteSelection(), 66));
+		pieceButton = new PsychUIButton(210, 0, 'Unir pieza', function() selectionIsOnePiece() ? splitPiece() : joinPiece(), 66);
+		actionBar.add(pieceButton);
 		actionBar.cameras = [camHUD];
 		actionBar.scrollFactor.set();
 		actionBar.visible = false;
@@ -4107,13 +4583,20 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		actionBar.visible = bounds != null;
 		if (bounds == null) return;
 
+		// el cuarto boton solo cuando hay algo que unir o separar
+		var onePiece:Bool = selectionIsOnePiece();
+		pieceButton.exists = onePiece || selectionSprites().length > 1;
+		var label:String = onePiece ? 'Separar' : 'Unir pieza';
+		if (pieceButton.label != label) pieceButton.label = label;
+		var width:Int = pieceButton.exists ? ACTION_BAR_WIDE : ACTION_BAR_WIDTH;
+
 		// del mapa a la pantalla: lo visible de camGame empieza en viewLeft / viewTop
 		var left:Float = (bounds[0] - camGame.viewLeft) * camGame.zoom;
 		var right:Float = (bounds[2] - camGame.viewLeft) * camGame.zoom;
 		var top:Float = (bounds[1] - camGame.viewTop) * camGame.zoom;
 		var bottom:Float = (bounds[3] - camGame.viewTop) * camGame.zoom;
-		var x:Float = (left + right) * 0.5 - ACTION_BAR_WIDTH * 0.5;
-		var maxX:Float = (UI_box != null ? UI_box.x : FlxG.width) - ACTION_BAR_WIDTH - 10;
+		var x:Float = (left + right) * 0.5 - width * 0.5;
+		var maxX:Float = (UI_box != null ? UI_box.x : FlxG.width) - width - 10;
 		x = Math.max(10, Math.min(maxX, x));
 		var y:Float = top - 28;
 		if (y < 70) y = bottom + 8;
@@ -4560,7 +5043,10 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 	var pathMoveDropDown:PsychUIDropDownMenu;
 	/** Valores del campo `move` de un camino y su texto en el desplegable. */
 	static final PATH_MOVES:Array<String> = ['walk', 'swim', 'climb'];
-	static final PATH_MOVE_LABELS:Array<String> = ['andando', 'nadando (en el agua)', 'trepando (escalera)'];
+	static final PATH_MOVE_LABELS:Array<String> = ['andando', 'nadando (en el agua)', 'trepando siempre'];
+	var pathStyleDropDown:PsychUIDropDownMenu;
+	static final PATH_STYLES:Array<String> = ['', 'rainbow'];
+	static final PATH_STYLE_LABELS:Array<String> = ['de SMW (beis)', 'arcoiris (Star Road)'];
 	var lPathsCheck:PsychUICheckBox;
 
 	/**
@@ -5159,9 +5645,9 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			setDrawLayer(true, false);
 			var spritesBefore:Int = worldFile.sprites.length;
 			strokeUndoPending = true;
-			check(spriteUnderMouse(cell * 0.5, cell * 6.5) == null, 'con el DIBUJO bloqueado el raton no encuentra tiles');
+			check(spriteUnderMouse(cell * 0.5, cell * 6.5) == null, 'con los TILES bloqueados el raton no encuentra tiles');
 			deleteUnderMouse(cell * 0.5, cell * 6.5);
-			check(worldFile.sprites.length == spritesBefore, 'con el DIBUJO bloqueado el clic derecho no borra un tile');
+			check(worldFile.sprites.length == spritesBefore, 'con los TILES bloqueados el clic derecho no borra un tile');
 			setDrawLayer(false, false);
 			strokeUndoPending = false;
 
@@ -5217,6 +5703,95 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			undo();
 			check(spriteUnderMouse(cell * 0.5, cell * 6.5) != null && worldFile.sprites.length == count, 'deshacer pegar y cortar lo deja como estaba');
 			selectedSprite = null;
+		}
+
+		// 14e. piezas: unir, un clic la elige entera, copiarla da otra pieza, capas TILES / DECORADOS, separar
+		if (paletteFrames.length > 0)
+		{
+			var cell:Float = paletteTileSize;
+			paletteSelected = 0;
+			strokeUndoPending = true;
+			for (i in 0...3) paintTile(cell * (40 + i + 0.5), cell * 40.5);
+			var tiles:Array<OverworldSpriteFile> = worldFile.sprites.slice(worldFile.sprites.length - 3);
+			clearGroup();
+			selectedNode = null;
+			groupSprites = tiles.copy();
+			selectedSprite = tiles[0];
+			joinPiece();
+			var name:String = tiles[0].piece;
+			check(hasPiece(tiles[0]) && Lambda.foreach(tiles, d -> d.piece == name) && !isLooseTile(tiles[0]), 'CTRL+G une los tiles en una pieza ($name)');
+
+			clearGroup();
+			selectedSprite = null;
+			selectUnderMouse(cell * 41.5, cell * 40.5, false);
+			check(hasGroup() && groupSprites.length == 3 && selectionIsOnePiece(), 'un clic en un tile de la pieza la elige entera');
+
+			var count:Int = worldFile.sprites.length;
+			copySelection();
+			startPaste();
+			pasteAt([cell * 50, cell * 50]);
+			stopPaste();
+			var pastedPiece:Array<OverworldSpriteFile> = worldFile.sprites.slice(count);
+			check(pastedPiece.length == 3 && hasPiece(pastedPiece[0]) && pastedPiece[0].piece != name
+				&& Lambda.foreach(pastedPiece, d -> d.piece == pastedPiece[0].piece), 'pegar una pieza crea otra pieza (${pastedPiece.length > 0 ? pastedPiece[0].piece : "-"})');
+			undo();
+
+			setDrawLayer(true, false);
+			check(spriteUnderMouse(cell * 41.5, cell * 40.5) != null && spriteUnderMouse(cell * 0.5, cell * 6.5) == null,
+				'con los TILES bloqueados la pieza (DECORADOS) se elige y un tile suelto no');
+			setDrawLayer(false, false);
+			setDecoLayer(true, false);
+			check(spriteUnderMouse(cell * 41.5, cell * 40.5) == null, 'con los DECORADOS bloqueados la pieza no se elige');
+			setDecoLayer(false, false);
+
+			count = worldFile.sprites.length;
+			clearGroup();
+			deleteUnderMouse(cell * 41.5, cell * 40.5);
+			check(worldFile.sprites.length == count - 3, 'el clic derecho borra la pieza entera');
+			undo();
+			check(worldFile.sprites.length == count, 'deshacer devuelve la pieza');
+
+			clearGroup();
+			selectedSprite = null;
+			selectUnderMouse(cell * 41.5, cell * 40.5, false);
+			splitPiece();
+			var loose:OverworldSpriteFile = spriteUnderMouse(cell * 41.5, cell * 40.5);
+			check(loose != null && isLooseTile(loose) && haxe.Json.stringify(loose).indexOf('piece') < 0, 'CTRL+SHIFT+G separa la pieza (y quita el campo del JSON)');
+			clearGroup();
+			selectedSprite = null;
+		}
+
+		// 14f. terreno por colores (carreteras automaticas) y paleta de decorados enteros
+		check(OverworldTerrain.classify(0xFF40D020) == OverworldTerrain.GROUND && OverworldTerrain.classify(0xFFD89860) == OverworldTerrain.CLIFF
+			&& OverworldTerrain.classify(0) == OverworldTerrain.NONE && OverworldTerrain.classify(0xFF4088F8) == OverworldTerrain.NONE
+			&& OverworldTerrain.classify(0xFF0D0C0D) == OverworldTerrain.EDGE, 'terreno: hierba, acantilado, agua y contorno por su color');
+		var rainbowPath:OverworldPathFile = OverworldData.createPath('a', 'b');
+		rainbowPath.road = true;
+		rainbowPath.style = 'rainbow';
+		var nodeA0:OverworldNodeFile = OverworldData.createNode('a', 0, 0);
+		var nodeB0:OverworldNodeFile = OverworldData.createNode('b', 40, 0);
+		var rainbowPieces:Array<FlxSprite> = OverworldState.buildRoadPieces(rainbowPath, nodeA0, nodeB0);
+		var rainbowOk:Bool = rainbowPieces.length > 0 && rainbowPieces[0].pixels.getPixel32(1, 0) == 0xFFFF2626;
+		for (piece in rainbowPieces) piece.destroy();
+		check(rainbowOk, 'carretera arcoiris: empieza por la franja roja');
+		var propsImage:String = 'overworld/world1/props';
+		if (OverworldData.hasAtlas(propsImage))
+		{
+			buildPalette(propsImage);
+			var bushIndex:Int = paletteFrames.indexOf('bush');
+			check(paletteProps && bushIndex > -1, 'la paleta de decorados enteros lista sus objetos (${paletteFrames.length})');
+			if (bushIndex > -1)
+			{
+				selectPaletteTile(bushIndex);
+				var before:Int = worldFile.sprites.length;
+				placeProp(200, 200);
+				var placed:OverworldSpriteFile = worldFile.sprites[worldFile.sprites.length - 1];
+				check(worldFile.sprites.length == before + 1 && placed.image == propsImage && placed.anim == 'bush' && !isLooseTile(placed),
+					'un clic pone el decorado entero (en la capa DECORADOS)');
+				undo();
+				check(worldFile.sprites.length == before, 'deshacer quita el decorado puesto');
+			}
+			pickDefaultTileset();
 		}
 
 		// 14d. copiar y pegar nodos: IDs nuevos y el camino entre ellos tambien
@@ -5301,11 +5876,26 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		}
 		OverworldData.clearWorldCache();
 		OverworldData.simStartWorld = null;
-		// deja elegido un nodo en el centro de la pantalla: la barra Mover / Copiar / Borrar sale en la captura
-		if (worldFile.nodes.length > 0)
+		// deja elegida una pieza en el centro de la pantalla: la barra Mover / Copiar / Borrar / Separar
+		// sale en la captura (sin paleta, un nodo)
+		clearGroup();
+		selectedSprite = null;
+		selectedNode = null;
+		if (paletteFrames.length > 0)
 		{
+			var cell:Float = paletteTileSize;
+			paletteSelected = 0;
+			strokeUndoPending = true;
+			for (i in 0...4) paintTile(cell * (60 + i % 2 + 0.5), cell * (60 + Std.int(i / 2) + 0.5));
+			groupSprites = worldFile.sprites.slice(worldFile.sprites.length - 4);
+			joinPiece();
 			clearGroup();
-			selectedSprite = null;
+			selectUnderMouse(cell * 60.5, cell * 60.5, false);
+			camGame.zoom = 3;
+			camGame.scroll.set(cell * 61 - FlxG.width * 0.5, cell * 61 - FlxG.height * 0.5);
+		}
+		else if (worldFile.nodes.length > 0)
+		{
 			selectedNode = worldFile.nodes[0];
 			UI_box.selectedName = 'Nodo';
 			updateUI();
@@ -5334,11 +5924,19 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		}
 
 		var data:OverworldSpriteFile = spriteUnderMouse(mouseX, mouseY);
-		if (data != null)
+		if (data == null) return;
+
+		// fuera del modo T (la goma de tiles) una pieza se borra entera; con ALT, solo ese trozo
+		var piece:Array<OverworldSpriteFile> = (allowNodes && !FlxG.keys.pressed.ALT) ? pieceMembers(data) : [data];
+		if (piece.length > 1)
 		{
-			selectedSprite = data;
-			deleteSelectedSprite();
+			clearGroup();
+			groupSprites = piece;
+			deleteGroup();
+			return;
 		}
+		selectedSprite = data;
+		deleteSelectedSprite();
 	}
 
 	function deleteSelectedNode()
@@ -5452,6 +6050,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 	 */
 	function removeDecor(data:OverworldSpriteFile)
 	{
+		roadTerrainDirty = true;
 		var spr:FlxSprite = decorSpriteOf(data);
 		worldFile.sprites.remove(data);
 		if (selectedSprite == data) selectedSprite = null;

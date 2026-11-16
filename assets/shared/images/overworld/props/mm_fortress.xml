@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="mm_fortress.png">
+	<SubTexture name="fortress_island0000" x="0" y="0" width="275" height="264"/>
+	<SubTexture name="tower_flat0000" x="276" y="0" width="48" height="89"/>
+	<SubTexture name="tower_glow_tall0000" x="325" y="0" width="32" height="89"/>
+	<SubTexture name="tower_glow_short0000" x="358" y="0" width="32" height="57"/>
+	<SubTexture name="pebble_pile0000" x="391" y="0" width="33" height="32"/>
+	<SubTexture name="rock_wedge_pair0000" x="425" y="0" width="31" height="29"/>
+	<SubTexture name="rock_wedge_single0000" x="457" y="0" width="16" height="16"/>
+	<SubTexture name="pebble_light0000" x="474" y="0" width="6" height="7"/>
+	<SubTexture name="pebble_dark0000" x="481" y="0" width="6" height="6"/>
+	<SubTexture name="ground_tuft0000" x="488" y="0" width="7" height="5"/>
+</TextureAtlas>

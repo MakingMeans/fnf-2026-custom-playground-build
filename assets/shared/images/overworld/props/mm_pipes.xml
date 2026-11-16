@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="mm_pipes.png">
+	<SubTexture name="pipe_giant0000" x="0" y="0" width="14" height="94"/>
+	<SubTexture name="pipe_tall0000" x="15" y="0" width="14" height="80"/>
+	<SubTexture name="pipe_mid0000" x="30" y="0" width="14" height="65"/>
+	<SubTexture name="pipe_stub0000" x="45" y="0" width="14" height="23"/>
+</TextureAtlas>

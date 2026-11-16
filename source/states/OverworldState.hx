@@ -1,6 +1,7 @@
 package states;
 
 import backend.OverworldData;
+import backend.OverworldTerrain;
 import backend.Song;
 import backend.Highscore;
 import backend.WeekData;
@@ -245,6 +246,10 @@ class OverworldState extends MusicBeatState
 	var walkTarget:OverworldNodeFile = null;
 	/** Como recorre BF el camino por el que va: 'walk', 'swim' o 'climb' (campo `move` del camino). */
 	var walkMove:String = 'walk';
+	/** El camino por el que va es una carretera: anda, trepa o nada segun el terreno que pisa. */
+	var walkRoad:Bool = false;
+	/** Lo que hay bajo cada pixel del mapa (ver OverworldTerrain); vacio en un mapa sin tiles. */
+	var terrain:OverworldTerrain;
 	/** El nodo del que salio BF en su ultimo paseo (para volver de una salida que aun no lleva a nada). */
 	var walkFrom:String = null;
 	/** Camino recien abierto por el que BF ira solo cuando acabe de revelarse (ver buildPaths). */
@@ -504,6 +509,7 @@ class OverworldState extends MusicBeatState
 		add(nodesGroup);
 		add(marksGroup);
 
+		var terrainSprites:Array<FlxSprite> = [];
 		for (data in worldFile.sprites)
 		{
 			var spr:FlxSprite = buildSprite(data.image, data.anim, data.fps);
@@ -520,7 +526,10 @@ class OverworldState extends MusicBeatState
 
 			if (data.front) spritesFront.add(spr);
 			else spritesBack.add(spr);
+			if (!data.front && OverworldData.isLooseTile(data)) terrainSprites.push(spr);
 		}
+		// lo que hay bajo cada pixel (suelo, acantilado, agua), antes de juntar los tiles en imagenes
+		terrain = new OverworldTerrain(terrainSprites);
 		bakeStillSprites(spritesBack);
 		bakeStillSprites(spritesFront);
 
@@ -536,9 +545,9 @@ class OverworldState extends MusicBeatState
 			var anim:String = (completed && hasDoneAnim) ? node.animDone : node.anim;
 
 			var spr:FlxSprite = buildSprite(node.image, anim, node.fps);
-			spr.setPosition(node.x - spr.width * 0.5, node.y - spr.height * 0.5);
-			// una salida sin sprite no se ve: solo se ve el camino que se va de la pantalla
-			if (node.type == 'exit' && (node.image == null || node.image.length < 1)) spr.visible = false;
+			placeNodeSprite(spr, node);
+			// un nodo sin sprite no se ve (una salida fuera de la pantalla, un cruce de caminos): solo su camino
+			if (node.image == null || node.image.length < 1) spr.visible = false;
 			nodesGroup.add(spr);
 			nodeSprites.set(node.id, spr);
 			// un nivel superado sin animDone se queda igual, como en SMW (el usuario no quiere
@@ -597,6 +606,7 @@ class OverworldState extends MusicBeatState
 			var arrivalTarget:OverworldNodeFile = arrival[1];
 			var arrivalPath:OverworldPathFile = pathBetween(curNodeId, arrivalTarget == null ? null : arrivalTarget.id);
 			walkMove = arrivalPath != null ? arrivalPath.move : 'walk';
+			walkRoad = arrivalPath != null && arrivalPath.road;
 			walking = true;
 		}
 
@@ -617,6 +627,73 @@ class OverworldState extends MusicBeatState
 	 * entre los tramos, asi que el orden de dibujo no cambia. Solo en el juego: el editor necesita
 	 * los sprites sueltos para editarlos.
 	 */
+	/** Cuanto se suben las tuberias, castillos y estrellas: BF tapa la mitad de arriba de su dibujo, y asi el
+	 * medio de lo que se ve queda en sus pies (en el centro del nodo). */
+	public static inline final STAND_ON_RAISE:Float = 3;
+
+	/**
+	 * Pone el sprite de un nodo en su sitio: centrado en el nodo. Las tuberias, castillos y estrellas (BF se
+	 * pone encima, como en SMW) van con su cuerpo, sin la sombra negra de la derecha, centrado bajo BF y
+	 * STAND_ON_RAISE px mas arriba (15/11/2026, a peticion del usuario). Lo usan el juego y el editor.
+	 */
+	public static function placeNodeSprite(spr:FlxSprite, node:OverworldNodeFile)
+	{
+		var x:Float = node.x - spr.width * 0.5;
+		var y:Float = node.y - spr.height * 0.5;
+		if (isStandOnImage(node.image))
+		{
+			x += bodyShiftX(spr);
+			y -= STAND_ON_RAISE;
+		}
+		spr.setPosition(x, y);
+	}
+
+	/** Las imagenes de nodo sobre las que BF se pone de pie: tuberias, castillos y estrellas. */
+	public static function isStandOnImage(image:String):Bool
+	{
+		if (image == null) return false;
+		var lower:String = image.toLowerCase();
+		return lower.indexOf('pipe') > -1 || lower.indexOf('castle') > -1 || lower.indexOf('star') > -1;
+	}
+
+	static var bodyShiftCache:Map<String, Float> = new Map<String, Float>();
+
+	/**
+	 * Cuanto hay que mover en horizontal el sprite para que el objeto en si (lo opaco que no es casi negro: sin
+	 * la sombra de la derecha) quede centrado en el nodo, bajo BF. Se calcula una vez por fotograma.
+	 */
+	static function bodyShiftX(spr:FlxSprite):Float
+	{
+		if (spr.frame == null || spr.frame.parent == null) return 0;
+		var key:String = spr.frame.parent.key + ':' + spr.frame.name;
+		if (bodyShiftCache.exists(key)) return bodyShiftCache.get(key);
+
+		var pixels:openfl.display.BitmapData = spr.updateFramePixels();
+		var minX:Int = pixels.width;
+		var maxX:Int = -1;
+		for (py in 0...pixels.height)
+			for (px in 0...pixels.width)
+			{
+				var argb:Int = pixels.getPixel32(px, py);
+				var bright:Int = Std.int(Math.max(Math.max((argb >> 16) & 0xFF, (argb >> 8) & 0xFF), argb & 0xFF));
+				if (((argb >>> 24) & 0xFF) >= 128 && bright >= 60)
+				{
+					if (px < minX) minX = px;
+					if (px > maxX) maxX = px;
+				}
+			}
+		var shift:Float = maxX < 0 ? 0 : Math.round(spr.frameWidth * 0.5 - (minX + maxX + 1) * 0.5);
+		bodyShiftCache.set(key, shift);
+		return shift;
+	}
+
+	override function destroy()
+	{
+		if (terrain != null) terrain.destroy();
+		terrain = null;
+		super.destroy();
+	}
+
 	static function bakeStillSprites(group:FlxTypedGroup<FlxSprite>)
 	{
 		var result:Array<FlxSprite> = [];
@@ -870,7 +947,7 @@ class OverworldState extends MusicBeatState
 
 		if (pth.road)
 		{
-			for (piece in buildRoadPieces(pth, nodeA, nodeB, isLandAt))
+			for (piece in buildRoadPieces(pth, nodeA, nodeB, isLandAt, terrain))
 			{
 				piece.visible = !hidden;
 				roadsGroup.add(piece);
@@ -1125,13 +1202,26 @@ class OverworldState extends MusicBeatState
 	public static inline final ROAD_WATER_COLOR:FlxColor = 0xFFF0F0F0;
 	static inline final ROAD_WATER_SPACING:Int = 6;
 
+	/** La escalera (en el acantilado) y el puente (en el aire o sobre el agua): largueros y peldanos. */
+	static inline final LADDER_DARK:FlxColor = 0xFF0D0C0D;
+	static inline final LADDER_RAIL:FlxColor = 0xFFD89860;
+	static inline final LADDER_RUNG:FlxColor = 0xFFF8E8B0;
+	static inline final LADDER_SHADE:FlxColor = 0xFFB87848;
+	/** Cada cuantos pixeles hay un peldano. */
+	static inline final LADDER_PERIOD:Int = 6;
+
 	/**
-	 * Una carretera de `a` hacia `b` en trozos de ROAD_PIECE px, en ese orden: franja beis de 8 px con
-	 * los extremos redondos y una plataforma en cada nodo, como los caminos de Mario's Madness (y de
-	 * SMW). Los trozos se solapan sin costuras porque son del mismo color liso. Con `isLand`, lo que
-	 * cae en el agua sale como puntitos blancos y sin plataforma (sin el, todo es carretera: el editor).
+	 * Una carretera de `a` hacia `b` en trozos de ROAD_PIECE px, en ese orden, como los caminos de Mario's
+	 * Madness (y de SMW). Con `terrain` (el del mapa) cada tramo se pone solo segun lo que tiene debajo:
+	 * - suelo: franja beis de 8 px con los extremos redondos y una plataforma en cada nodo, recortada a
+	 *   la hierba (no se sale por el borde);
+	 * - acantilado: una escalera (BF trepa por ella);
+	 * - nada (agua o aire): puntitos blancos si el camino es a nado (`move: 'swim'`) y, si no, un puente.
+	 * Sin `terrain` (un mapa sin tiles) hace como antes: `isLand` dice que es tierra (franja) y que agua
+	 * (puntitos); sin ninguno de los dos, todo es franja.
 	 */
-	public static function buildRoadPieces(pth:OverworldPathFile, nodeA:OverworldNodeFile, nodeB:OverworldNodeFile, ?isLand:Float->Float->Bool):Array<FlxSprite>
+	public static function buildRoadPieces(pth:OverworldPathFile, nodeA:OverworldNodeFile, nodeB:OverworldNodeFile, ?isLand:Float->Float->Bool,
+			?terrain:OverworldTerrain):Array<FlxSprite>
 	{
 		var line:Array<Array<Float>> = buildLine(pth, nodeA, nodeB);
 		var total:Float = 0;
@@ -1151,38 +1241,115 @@ class OverworldState extends MusicBeatState
 		}
 		samples.push(line[line.length - 1]);
 
-		// cada muestra: en tierra, un circulo de la franja; en el agua, un puntito cada ROAD_WATER_SPACING px
-		var land:Array<Bool> = [for (s in samples) isLand == null || isLand(s[0], s[1])];
+		// lo que hay bajo cada muestra
+		var useTerrain:Bool = terrain != null && !terrain.empty;
+		var kinds:Array<Int> = useTerrain ? terrain.kindsAlong(samples)
+			: [for (s in samples) (isLand == null || isLand(s[0], s[1])) ? OverworldTerrain.GROUND : OverworldTerrain.NONE];
+		var swim:Bool = pth.move == 'swim';
+		var ladder:Array<Bool> = [for (k in kinds) k == OverworldTerrain.CLIFF || (k == OverworldTerrain.NONE && !swim && useTerrain)];
+
+		// peldano de cada muestra de escalera (cuenta desde el principio de su tramo) y puntitos del agua
+		var phase:Array<Int> = [];
+		var dot:Array<Bool> = [];
+		var run:Int = 0;
+		var waterRun:Int = 0;
+		for (i in 0...samples.length)
+		{
+			run = (i > 0 && ladder[i - 1] && ladder[i]) ? run + 1 : 0;
+			phase.push(run);
+			var water:Bool = kinds[i] == OverworldTerrain.NONE && !ladder[i];
+			dot.push(water && waterRun++ % ROAD_WATER_SPACING == 0);
+			if (!water) waterRun = 0;
+		}
+
+		// arcoiris (la Star Road de Mario's Madness): franjas de colores por todo el camino, sin mirar el terreno
+		var rainbow:Bool = pth.style == 'rainbow';
+
 		var first:Array<Float> = line[0];
 		var last:Array<Float> = line[line.length - 1];
-
 		var pieces:Array<FlxSprite> = [];
 		var count:Int = Std.int(Math.max(1, Math.ceil(total / ROAD_PIECE)));
 		var perPiece:Int = Std.int(Math.ceil(samples.length / count));
 		var start:Int = 0;
-		var waterRun:Int = 0;
 		while (start < samples.length)
 		{
 			var end:Int = Std.int(Math.min(samples.length - 1, start + perPiece));
 			var circles:Array<RoadCircle> = [];
 			for (i in start...end + 1)
 			{
-				if (land[i]) circles.push({x: samples[i][0], y: samples[i][1], r: ROAD_RADIUS, color: ROAD_COLOR});
-				// la muestra que comparten dos trozos se cuenta una vez
-				else if ((i > start || start == 0) && waterRun++ % ROAD_WATER_SPACING == 0)
-					circles.push({x: samples[i][0], y: samples[i][1], r: 1.2, color: ROAD_WATER_COLOR});
+				var s:Array<Float> = samples[i];
+				if (rainbow) addRainbowSlice(circles, samples, i);
+				else if (kinds[i] == OverworldTerrain.GROUND) circles.push({x: s[0], y: s[1], r: ROAD_RADIUS, color: ROAD_COLOR, mask: useTerrain});
+				else if (ladder[i]) addLadderSlice(circles, samples, i, phase[i]);
+				else if (dot[i]) circles.push({x: s[0], y: s[1], r: 1.2, color: ROAD_WATER_COLOR});
 			}
-			if (start == 0 && land[0]) circles.push({x: first[0], y: first[1], r: ROAD_PAD_RADIUS, color: ROAD_COLOR});
-			if (end == samples.length - 1 && land[samples.length - 1]) circles.push({x: last[0], y: last[1], r: ROAD_PAD_RADIUS, color: ROAD_COLOR});
-			if (circles.length > 0) pieces.push(drawRoadPiece(circles));
+			if (start == 0 && kinds[0] == OverworldTerrain.GROUND && !rainbow)
+				circles.push({x: first[0], y: first[1], r: ROAD_PAD_RADIUS, color: ROAD_COLOR, mask: useTerrain});
+			if (end == samples.length - 1 && kinds[samples.length - 1] == OverworldTerrain.GROUND && !rainbow)
+				circles.push({x: last[0], y: last[1], r: ROAD_PAD_RADIUS, color: ROAD_COLOR, mask: useTerrain});
+			if (circles.length > 0) pieces.push(drawRoadPiece(circles, useTerrain ? terrain : null));
 			if (end >= samples.length - 1) break;
-			start = end;
+			start = end + 1;
 		}
 		return pieces;
 	}
 
-	/** Pinta circulos pixelados en un sprite del tamano justo. */
-	static function drawRoadPiece(circles:Array<RoadCircle>):FlxSprite
+	/**
+	 * Una fila de escalera (o de puente) en la muestra `i`: dos largueros negros con su marron y, cada
+	 * LADDER_PERIOD px, un peldano (raya negra, beis y sombra), como la escalera del mundo 1. Va de lado
+	 * si el camino va mas en horizontal (un puente).
+	 */
+	static function addLadderSlice(circles:Array<RoadCircle>, samples:Array<Array<Float>>, i:Int, step:Int)
+	{
+		var a:Array<Float> = samples[i > 0 ? i - 1 : i];
+		var b:Array<Float> = samples[i < samples.length - 1 ? i + 1 : i];
+		var across:Bool = Math.abs(b[0] - a[0]) > Math.abs(b[1] - a[1]); // camino en horizontal: puente
+		var cx:Int = Math.floor(samples[i][0]);
+		var cy:Int = Math.floor(samples[i][1]);
+		function px(offset:Int, color:FlxColor)
+		{
+			var x:Int = across ? cx : cx + offset;
+			var y:Int = across ? cy + offset : cy;
+			circles.push({x: x + 0.5, y: y + 0.5, r: 0.5, color: color});
+		}
+		px(-7, LADDER_DARK);
+		px(-6, LADDER_RAIL);
+		px(5, LADDER_RAIL);
+		px(6, LADDER_DARK);
+		var rung:Null<FlxColor> = switch (step % LADDER_PERIOD)
+		{
+			case 2: LADDER_DARK;
+			case 3: LADDER_RUNG;
+			case 4: LADDER_SHADE;
+			default: null;
+		}
+		if (rung != null) for (offset in -5...5) px(offset, rung);
+	}
+
+	/** Los colores del arcoiris de la Star Road de Mario's Madness, de un borde al otro (2 px cada uno) y su sombra. */
+	static final RAINBOW_COLORS:Array<FlxColor> = [0xFFFF2626, 0xFFFF2626, 0xFFF8D800, 0xFFF8D800, 0xFF00C800, 0xFF00C800, 0xFF00D8F8, 0xFF00D8F8];
+	static inline final RAINBOW_SHADOW:FlxColor = 0xFF8078D0;
+
+	/** Una fila del arcoiris en la muestra `i`: rojo, amarillo, verde y cian de lado a lado, y la sombra debajo. */
+	static function addRainbowSlice(circles:Array<RoadCircle>, samples:Array<Array<Float>>, i:Int)
+	{
+		var a:Array<Float> = samples[i > 0 ? i - 1 : i];
+		var b:Array<Float> = samples[i < samples.length - 1 ? i + 1 : i];
+		var across:Bool = Math.abs(b[0] - a[0]) > Math.abs(b[1] - a[1]); // en horizontal: franjas una encima de otra
+		var cx:Int = Math.floor(samples[i][0]);
+		var cy:Int = Math.floor(samples[i][1]);
+		for (k in 0...RAINBOW_COLORS.length + 1)
+		{
+			var offset:Int = k - 4;
+			var color:FlxColor = k < RAINBOW_COLORS.length ? RAINBOW_COLORS[k] : RAINBOW_SHADOW;
+			var x:Int = across ? cx : cx + offset;
+			var y:Int = across ? cy + offset : cy;
+			circles.push({x: x + 0.5, y: y + 0.5, r: 0.5, color: color});
+		}
+	}
+
+	/** Pinta circulos pixelados en un sprite del tamano justo (los de `mask`, solo sobre el suelo de `terrain`). */
+	static function drawRoadPiece(circles:Array<RoadCircle>, ?terrain:OverworldTerrain):FlxSprite
 	{
 		var minX:Float = Math.POSITIVE_INFINITY;
 		var minY:Float = Math.POSITIVE_INFINITY;
@@ -1206,13 +1373,15 @@ class OverworldState extends MusicBeatState
 			var cy:Float = c.y - minY;
 			var r:Float = c.r;
 			var color:FlxColor = c.color;
+			var masked:Bool = c.mask == true && terrain != null;
 			for (py in Std.int(Math.floor(cy - r))...Std.int(Math.ceil(cy + r)) + 1)
 				for (px in Std.int(Math.floor(cx - r))...Std.int(Math.ceil(cx + r)) + 1)
 				{
 					var dx:Float = px + 0.5 - cx;
 					var dy:Float = py + 0.5 - cy;
-					if (dx * dx + dy * dy <= r * r && px >= 0 && py >= 0 && px < width && py < height)
-						bitmap.setPixel32(px, py, color);
+					if (dx * dx + dy * dy > r * r || px < 0 || py < 0 || px >= width || py >= height) continue;
+					if (masked && terrain.rawAt(px + minX, py + minY) != OverworldTerrain.GROUND) continue;
+					bitmap.setPixel32(px, py, color);
 				}
 		}
 		bitmap.unlock();
@@ -1720,6 +1889,7 @@ class OverworldState extends MusicBeatState
 		walkQueue = bestLine;
 		walkTarget = bestTarget;
 		walkMove = bestPath.move;
+		walkRoad = bestPath.road;
 		walking = true;
 	}
 
@@ -1814,6 +1984,14 @@ class OverworldState extends MusicBeatState
 	function moveAnim():String
 	{
 		if (walkMove == 'climb' && player.animation.getByName('climb') != null) return 'climb';
+		// por una carretera, segun lo que pisa: trepa por la escalera del acantilado y nada en el agua
+		if (walkRoad && terrain != null && !terrain.empty)
+		{
+			var kind:Int = terrain.kindAt(playerX, playerY);
+			if (kind == OverworldTerrain.CLIFF && player.animation.getByName('climb') != null) return 'climb';
+			if (kind == OverworldTerrain.NONE && walkMove == 'swim' && player.animation.getByName('swim_$facing') != null) return 'swim_$facing';
+			return 'walk_$facing';
+		}
 		if (walkMove == 'swim' && player.animation.getByName('swim_$facing') != null && !isLandAt(playerX, playerY)) return 'swim_$facing';
 		return 'walk_$facing';
 	}
@@ -1824,6 +2002,8 @@ class OverworldState extends MusicBeatState
 	 */
 	function isLandAt(x:Float, y:Float):Bool
 	{
+		// con terreno de tiles: el suelo y el acantilado son tierra (los decorados no cuentan)
+		if (terrain != null && !terrain.empty) return terrain.kindAt(x, y) != OverworldTerrain.NONE;
 		if (spritesBack == null) return true;
 		var point:FlxPoint = FlxPoint.get(x, y);
 		var land:Bool = false;
@@ -1855,6 +2035,7 @@ class OverworldState extends MusicBeatState
 		walkQueue = line;
 		walkTarget = (pth.a == from.id) ? nodeB : nodeA;
 		walkMove = pth.move;
+		walkRoad = pth.road;
 		walking = true;
 		return true;
 	}
@@ -2088,49 +2269,85 @@ class OverworldState extends MusicBeatState
 		}});
 	}
 
-	/** Tuberia (como la de vuelta de Mario's Madness): BF da un saltito y se mete dentro; despues se cierra el iris. */
+	/**
+	 * La boca de la tuberia del nodo actual: la raya del borde de delante del agujero negro (a un tercio
+	 * de su alto, como la de overworld/pipe). Lo que queda de BF por debajo se recorta: asi parece que se
+	 * mete por el agujero y no por delante de la tuberia. Sin sprite, a la altura de los pies.
+	 */
+	function pipeMouthY():Float
+	{
+		var pipe:FlxSprite = nodeSprites.get(curNodeId);
+		if (pipe == null || !pipe.visible) return player.y + player.height;
+		return pipe.y + Math.round(pipe.height * PIPE_MOUTH);
+	}
+
+	/** Donde esta el borde de delante del agujero, en fraccion del alto del sprite de la tuberia. */
+	static inline final PIPE_MOUTH:Float = 0.32;
+
+	/**
+	 * Tuberia (como la de vuelta de Mario's Madness): BF salta encima, cae en el agujero y se hunde en el
+	 * (recortado por el borde de delante); despues se cierra el iris.
+	 */
 	function pipeExit(onGone:Void->Void)
 	{
 		playAnim('enter');
 		playWarpSound(false, true);
-		var standY:Float = player.y;
-		var mouthY:Float = standY + player.height; // la boca de la tuberia: a la altura de sus pies
-		FlxTween.tween(player, {y: standY - 6}, 0.15, {ease: FlxEase.quadOut, onComplete: function(_:FlxTween)
+		var mouthY:Float = pipeMouthY();
+		var inHoleY:Float = mouthY - player.height + 2; // de pie dentro del agujero: los pies, bajo el borde
+		FlxTween.tween(player, {y: inHoleY - 8}, 0.16, {ease: FlxEase.quadOut, onComplete: function(_:FlxTween)
 		{
-			FlxTween.tween(player, {y: mouthY}, 0.45, {
+			FlxTween.tween(player, {y: inHoleY}, 0.12, {
 				ease: FlxEase.quadIn,
 				onUpdate: function(_:FlxTween) clipPlayerAbove(mouthY),
 				onComplete: function(_:FlxTween)
 				{
-					player.visible = false;
-					new FlxTimer().start(0.15, function(_:FlxTimer) irisClose(onGone));
+					FlxTween.tween(player, {y: mouthY}, 0.5, {
+						startDelay: 0.12,
+						ease: FlxEase.quadIn,
+						onUpdate: function(_:FlxTween) clipPlayerAbove(mouthY),
+						onComplete: function(_:FlxTween)
+						{
+							player.visible = false;
+							new FlxTimer().start(0.15, function(_:FlxTimer) irisClose(onGone));
+						}
+					});
 				}
 			});
 		}});
 	}
 
-	/** Llegando por una tuberia: BF sale de ella de un salto. */
+	/** Llegando por una tuberia: BF sale del agujero (recortado por su borde) y salta delante de ella. */
 	function pipeArrival()
 	{
 		entering = true;
 		var standY:Float = player.y;
-		var mouthY:Float = standY + player.height;
+		var mouthY:Float = pipeMouthY();
+		var inHoleY:Float = mouthY - player.height + 2;
 		player.y = mouthY;
 		clipPlayerAbove(mouthY);
 		player.visible = true;
 		playAnim('enter');
 		playWarpSound(false);
-		FlxTween.tween(player, {y: standY - 6}, 0.4, {
+		FlxTween.tween(player, {y: inHoleY}, 0.5, {
 			ease: FlxEase.quadOut,
 			onUpdate: function(_:FlxTween) clipPlayerAbove(mouthY),
 			onComplete: function(_:FlxTween)
 			{
-				player.clipRect = null;
-				FlxTween.tween(player, {y: standY}, 0.12, {ease: FlxEase.quadIn, onComplete: function(_:FlxTween)
-				{
-					idleAnim();
-					entering = false;
-				}});
+				// del agujero, de un saltito, a su sitio delante de la tuberia
+				FlxTween.tween(player, {y: inHoleY - 8}, 0.16, {
+					startDelay: 0.1,
+					ease: FlxEase.quadOut,
+					onUpdate: function(_:FlxTween) clipPlayerAbove(mouthY),
+					onComplete: function(_:FlxTween)
+					{
+						player.clipRect = null;
+						FlxTween.tween(player, {y: standY}, 0.16, {ease: FlxEase.quadIn, onComplete: function(_:FlxTween)
+						{
+							idleAnim();
+							entering = false;
+						}});
+					}
+				});
 			}
 		});
 	}
@@ -2369,4 +2586,6 @@ typedef RoadCircle =
 	var y:Float;
 	var r:Float;
 	var color:FlxColor;
+	/** Solo se pinta sobre el suelo del terreno (la franja no se sale por el borde de la hierba). */
+	@:optional var mask:Bool;
 }

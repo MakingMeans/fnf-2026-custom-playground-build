@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="smw_snow.png">
+	<SubTexture name="round_clearing0000" x="0" y="0" width="48" height="48"/>
+	<SubTexture name="round_mound0000" x="49" y="0" width="48" height="48"/>
+	<SubTexture name="star_ring0000" x="98" y="0" width="44" height="48"/>
+	<SubTexture name="hill_eyes_big0000" x="143" y="0" width="32" height="30"/>
+	<SubTexture name="moon_crescent0000" x="176" y="0" width="24" height="24"/>
+	<SubTexture name="spike_tall0000" x="201" y="0" width="16" height="24"/>
+	<SubTexture name="plateau_small0000" x="218" y="0" width="16" height="16"/>
+	<SubTexture name="rock_wedge0000" x="235" y="0" width="16" height="16"/>
+	<SubTexture name="sparkle_gold0000" x="252" y="0" width="16" height="16"/>
+	<SubTexture name="spike_small0000" x="269" y="0" width="16" height="16"/>
+	<SubTexture name="tree_round0000" x="286" y="0" width="16" height="16"/>
+	<SubTexture name="ice_mound0000" x="303" y="0" width="16" height="15"/>
+	<SubTexture name="hill_eyes_small0000" x="320" y="0" width="16" height="14"/>
+	<SubTexture name="pond_round0000" x="337" y="0" width="16" height="14"/>
+	<SubTexture name="sparkle_cyan0000" x="354" y="0" width="12" height="12"/>
+	<SubTexture name="bush_tall0000" x="367" y="0" width="8" height="8"/>
+	<SubTexture name="pond_small0000" x="376" y="0" width="8" height="8"/>
+	<SubTexture name="stone_post0000" x="385" y="0" width="5" height="8"/>
+	<SubTexture name="twinkle_big0000" x="391" y="0" width="8" height="8"/>
+	<SubTexture name="twinkle_gold0000" x="400" y="0" width="8" height="8"/>
+	<SubTexture name="pebbles0000" x="409" y="0" width="8" height="7"/>
+	<SubTexture name="rock_small0000" x="418" y="0" width="6" height="7"/>
+	<SubTexture name="bush_small0000" x="425" y="0" width="6" height="6"/>
+	<SubTexture name="twinkle_small0000" x="432" y="0" width="6" height="6"/>
+	<SubTexture name="grass_tuft0000" x="439" y="0" width="4" height="4"/>
+</TextureAtlas>
