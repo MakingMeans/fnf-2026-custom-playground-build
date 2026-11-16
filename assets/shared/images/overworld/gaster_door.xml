@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="gaster_door.png">
+	<SubTexture name="idle0000" x="0" y="0" width="16" height="20" frameX="0" frameY="0" frameWidth="16" frameHeight="20"/>
+</TextureAtlas>

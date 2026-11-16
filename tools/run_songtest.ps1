@@ -13,6 +13,7 @@
 # -Hit "Bad Poison": el bot tambien pulsa las notas de esos tipos (normalmente las deja pasar).
 # -Skip "emerald": el bot deja pasar las notas de esos tipos (p. ej. jugar chaos sin esmeraldas).
 # -Pause 30: abre el menu de pausa en el segundo 30, captura la ventana y acaba.
+# -Exp 20: ensena la pantalla de EXP ganada en el segundo 20 (sin sumar EXP), la captura dos veces y acaba.
 # -WallShots "4,6,8": captura la ventana en esos segundos de reloj desde que arranca el juego (para
 # lo que pasa antes de la cancion, como la intro de chaos).
 param(
@@ -28,6 +29,7 @@ param(
 	[string]$Hit = "",
 	[string]$Skip = "",
 	[string]$Pause = "",
+	[string]$Exp = "",
 	[string]$WallShots = ""
 )
 Add-Type -AssemblyName System.Drawing
@@ -53,6 +55,7 @@ if ($DeathConfirm -ne "") { $gameArgs += @("-deathconfirm", $DeathConfirm) }
 if ($Hit -ne "") { $gameArgs += @("-hit", "`"$Hit`"") }
 if ($Skip -ne "") { $gameArgs += @("-skip", "`"$Skip`"") }
 if ($Pause -ne "") { $gameArgs += @("-pause", $Pause) }
+if ($Exp -ne "") { $gameArgs += @("-exp", $Exp) }
 if ($WallShots -ne "") { $gameArgs += @("-wallshots", $WallShots) }
 $log = Join-Path $Out "songtest_$Song.log"
 $p = Start-Process -FilePath "$bin\FNF2026Playground.exe" -ArgumentList $gameArgs -WorkingDirectory $bin -RedirectStandardOutput $log -PassThru

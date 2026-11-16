@@ -2,9 +2,6 @@ package substates;
 
 import flixel.addons.display.FlxBackdrop;
 import options.ControlsSubState;
-import options.OptionsState;
-import states.FreeplayState;
-import states.StoryMenuState;
 
 /**
  * Menu de pausa de World of Chaos (data/scripts/Pausemenu.hx del mod): fondo que se desplaza, una barra,
@@ -141,30 +138,9 @@ class WoCPauseSubState extends MusicBeatSubstate
 			case 'reset':
 				PauseSubState.restartSong();
 			case 'options':
-				PlayState.instance.paused = true;
-				PlayState.instance.vocals.volume = 0;
-				PlayState.instance.canResync = false;
-				MusicBeatState.switchState(new OptionsState());
-				OptionsState.onPlayState = true;
+				PauseSubState.openOptions();
 			case 'exit':
-				#if DISCORD_ALLOWED DiscordClient.resetClientID(); #end
-				PlayState.deathCounter = 0;
-				PlayState.seenCutscene = false;
-				PlayState.instance.canResync = false;
-				Mods.loadTopMod();
-				if (states.OverworldState.fromOverworld)
-					states.OverworldState.backToOverworld(); // el mapa pone su musica
-				else
-				{
-					if (PlayState.isStoryMode)
-						MusicBeatState.switchState(new StoryMenuState());
-					else
-						MusicBeatState.switchState(new FreeplayState());
-					FlxG.sound.playMusic(Paths.music('freakyMenu'));
-				}
-				PlayState.changedDifficulty = false;
-				PlayState.chartingMode = false;
-				FlxG.camera.followLerp = 0;
+				PauseSubState.exitToMenu();
 		}
 	}
 

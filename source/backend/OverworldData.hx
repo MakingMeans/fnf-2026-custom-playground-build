@@ -11,6 +11,7 @@ typedef OverworldNodeFile =
 	var x:Float;            // posicion en pixeles del mundo
 	var y:Float;
 	var type:String;        // 'level' | 'world' | 'empty' | 'exit' (al pisarlo) | 'warp' (con ENTER, en pareja)
+	                        // | 'door' (paso cerrado: se abre solo al tener su llave) | 'shop' (tienda, con ENTER)
 	var image:String;       // clave de imagen, ej: 'overworld/dot'
 	var anim:String;        // prefijo de animacion (vacio = imagen estatica)
 	var animDone:String;    // animacion al estar completado (vacio = la misma)
@@ -27,6 +28,9 @@ typedef OverworldNodeFile =
 	var secretMode:String;  // salida secreta: 'fc' (pocos fallos) | 'accuracy' (precision minima) | 'song' (la decide la cancion)
 	var secretMisses:Int;   // con 'fc': fallos maximos permitidos (0 = sin fallos)
 	var secretAccuracy:Float; // con 'accuracy': % minimo (0-100)
+	@:optional var key:String;  // la llave que lo abre (se gana en una cancion: OverworldData.giveKey). Una 'door' se
+	                            // abre con ella; cualquier otro nodo sigue cerrado hasta tenerla (isKeyed)
+	@:optional var shop:String; // type 'shop': la tienda que abre (p. ej. 'gaster_w1': data/gaster_shop/gaster_w1.json)
 }
 
 /**
@@ -257,7 +261,9 @@ class OverworldData
 			secretUnlocks: [],
 			secretMode: 'fc',
 			secretMisses: 0,
-			secretAccuracy: 95
+			secretAccuracy: 95,
+			key: '',
+			shop: ''
 		};
 	}
 
@@ -395,7 +401,21 @@ class OverworldData
 	{
 		if (isCompleted(world, id)) setCompleted(world, id, false);
 		if (isSecretCompleted(world, id)) setCompleted(world, id + SECRET, false);
+		if (isCompleted(world, id + KEYED)) setCompleted(world, id + KEYED, false);
 	}
+
+	/**
+	 * Sufijo de la clave de progreso de un nodo con llave ya abierto ("mundo::nodo#key"). Lo apunta el mapa
+	 * (OverworldState.syncKeyNodes) la primera vez que se vuelve a el con la llave, para animarlo una sola vez.
+	 */
+	public static inline final KEYED:String = '#key';
+
+	/**
+	 * Un nodo con llave que no es una puerta (p. ej. la tienda de Gaster del mundo 1): cerrado, y con sus
+	 * caminos ocultos, hasta tener la llave; da igual lo que diga "Desbloqueado al empezar" o quien lo desbloquee.
+	 */
+	public static inline function isKeyed(node:OverworldNodeFile):Bool
+		return node != null && node.type != 'door' && node.key != null && node.key.length > 0;
 
 	/** Sufijo de la clave de progreso de la salida secreta de un nivel ("mundo::nodo#secret"). */
 	public static inline final SECRET:String = '#secret';
@@ -514,6 +534,8 @@ class OverworldData
 	 */
 	static function openedInWorld(world:String, file:OverworldFile, node:OverworldNodeFile, ?ignore:Array<String>):Bool
 	{
+		// con llave: abierto en cuanto el mapa lo apunta (ignore "id#key" = como justo antes de tenerla)
+		if (isKeyed(node)) return isCompleted(world, node.id + KEYED) && (ignore == null || !ignore.contains(node.id + KEYED));
 		if (node.unlocked) return true;
 
 		for (other in file.nodes)
@@ -547,7 +569,7 @@ class OverworldData
 		var count:Int = 0;
 		for (node in file.nodes)
 		{
-			if (!canBeCompleted(node) || isBackLink(world, node)) continue;
+			if (!canBeCompleted(node) || node.type == 'door' || isBackLink(world, node)) continue; // una puerta no es un nivel
 			if (ignore != null && ignore.contains(node.id)) continue;
 			if (isNodeCompleted(world, node)) count++;
 		}
@@ -653,7 +675,7 @@ class OverworldData
 		var required:Int = 0;
 		for (node in file.nodes)
 		{
-			if (!canBeCompleted(node)) continue;
+			if (!canBeCompleted(node) || node.type == 'door') continue; // las llaves son un extra
 
 			if (node.type == 'world')
 			{
@@ -724,6 +746,11 @@ class OverworldData
 	public static function renameProgress(world:String, oldId:String, newId:String)
 	{
 		if (world == null) return;
+		if (isCompleted(world, oldId + KEYED)) // la marca de "abierto con su llave" va aparte
+		{
+			setCompleted(world, oldId + KEYED, false);
+			setCompleted(world, newId + KEYED);
+		}
 		// se renombra tecla a tecla: pasar por un ID con progreso viejo no debe quedarselo
 		if (!isCompleted(world, oldId))
 		{
@@ -775,7 +802,7 @@ class OverworldData
 		var total:Int = 0;
 		for (node in file.nodes)
 		{
-			if (!canBeCompleted(node)) continue;
+			if (!canBeCompleted(node) || node.type == 'door') continue;
 			if (node.type == 'world' && (node.world == world || (parentWorlds != null && parentWorlds.contains(node.world)))) continue;
 			total++;
 			if (isCompleted(world, node.id)) done++;
@@ -798,7 +825,7 @@ class OverworldData
 
 	/** Algo puede abrir este nodo: un desbloqueo, la regla de "N superados" o su pareja de warp. */
 	public static function hasOpener(file:OverworldFile, node:OverworldNodeFile, ?name:String):Bool
-		return node.unlocked || anyoneUnlocks(file, node.id) || node.needLevels > 0 || opensByPartner(name, node);
+		return node.unlocked || anyoneUnlocks(file, node.id) || node.needLevels > 0 || opensByPartner(name, node) || isKeyed(node);
 
 	/** Cuantos niveles con salida secreta tiene el mundo y cuantas se han sacado: [sacadas, total]. */
 	public static function secretCount(world:String, file:OverworldFile):Array<Int>
@@ -821,6 +848,22 @@ class OverworldData
 	public static function isStarWarp(node:OverworldNodeFile):Bool
 		return node != null && node.image != null && node.image.toLowerCase().indexOf('star') > -1;
 
+	static function isPipeImage(image:String):Bool
+		return image != null && image.toLowerCase().indexOf('pipe') > -1;
+
+	static function isGrayPipe(image:String):Bool
+		return image != null && (image.toLowerCase().indexOf('gray') > -1 || image.toLowerCase().indexOf('grey') > -1);
+
+	/** Algun castillo (un nodo con imagen de castillo) desbloquea este nodo. */
+	static function openedByCastle(file:OverworldFile, id:String):Bool
+	{
+		for (other in file.nodes)
+			if (other.image != null && other.image.toLowerCase().indexOf('castle') > -1
+				&& ((other.unlocks != null && other.unlocks.contains(id)) || (other.secretUnlocks != null && other.secretUnlocks.contains(id))))
+				return true;
+		return false;
+	}
+
 	/**
 	 * Un 'level' se completa al acabar su cancion; un 'world', cuando su mundo queda superado
 	 * (ver isWorldCleared). Un 'empty' es solo un punto de paso y nunca se completa.
@@ -831,6 +874,8 @@ class OverworldData
 		{
 			case 'level': node.song != null && node.song.length > 0;
 			case 'world': node.world != null && node.world.length > 0;
+			// una puerta se "completa" (se abre y abre lo suyo) al tener su llave
+			case 'door': node.key != null && node.key.length > 0;
 			default: false;
 		}
 	}
@@ -925,8 +970,8 @@ class OverworldData
 		if (name != null) chain.push(name);
 
 		var open:Map<String, Bool> = new Map<String, Bool>();
-		for (node in file.nodes)
-			if (openAtStart(name, node)) open.set(node.id, true);
+		for (node in file.nodes) // los nodos con llave: se supone que el jugador la consigue
+			if (openAtStart(name, node) || isKeyed(node)) open.set(node.id, true);
 
 		var completed:Map<String, Bool> = new Map<String, Bool>();
 		var completedCount:Int = 0;
@@ -1030,7 +1075,7 @@ class OverworldData
 			result = true;
 			for (node in file.nodes)
 			{
-				if (!canBeCompleted(node)) continue;
+				if (!canBeCompleted(node) || node.type == 'door') continue;
 				if (node.type == 'world' && chain.contains(node.world)) continue;
 
 				required++;
@@ -1089,7 +1134,7 @@ class OverworldData
 			var required:Int = 0;
 			for (node in file.nodes)
 			{
-				if (!canBeCompleted(node)) continue;
+				if (!canBeCompleted(node) || node.type == 'door') continue;
 				if (node.type == 'world' && chain.contains(node.world)) continue;
 				required++;
 				if (done.exists('$world::${node.id}')) continue;
@@ -1112,7 +1157,7 @@ class OverworldData
 		{
 			var count:Int = 0;
 			for (node in file.nodes)
-				if (canBeCompleted(node) && !isBackLink(world, node) && isDone(world, node)) count++;
+				if (canBeCompleted(node) && node.type != 'door' && !isBackLink(world, node) && isDone(world, node)) count++;
 			return count;
 		}
 
@@ -1120,7 +1165,7 @@ class OverworldData
 		function opened(world:String, file:OverworldFile, node:OverworldNodeFile, ?viaPartner:Bool = true):Bool
 		{
 			if (node == null) return false;
-			if (node.unlocked) return true;
+			if (node.unlocked || isKeyed(node)) return true; // la llave: se supone que el jugador la consigue
 			for (other in file.nodes)
 			{
 				if (other.unlocks != null && other.unlocks.contains(node.id) && isDone(world, other)) return true;
@@ -1258,7 +1303,8 @@ class OverworldData
 			for (entry in reachedList)
 			{
 				var node:OverworldNodeFile = findNode(fileOf(entry[0]), entry[1]);
-				if (node != null && node.type == 'level' && canBeCompleted(node) && !done.exists('${entry[0]}::${node.id}'))
+				// niveles y puertas con llave (se da por hecho que la llave se puede ganar)
+				if (node != null && (node.type == 'level' || node.type == 'door') && canBeCompleted(node) && !done.exists('${entry[0]}::${node.id}'))
 				{
 					done.set('${entry[0]}::${node.id}', true);
 					changed = true;
@@ -1364,6 +1410,75 @@ class OverworldData
 		for (key in [for (key in reached.keys()) key])
 			if (key.endsWith('::door')) reached.remove(key);
 		return reached;
+	}
+
+	// ------------------------------------------------------------- llaves
+	/**
+	 * Las llaves que tiene el jugador: un inventario de toda la partida (no de un mundo), guardado en
+	 * FlxG.save.data.overworldKeys. Se ganan en las canciones (p. ej. la de Bad Day) y abren las puertas
+	 * ('door') que las piden; mas adelante las venderan las tiendas de Gaster y decidiran el final.
+	 */
+	public static function hasKey(id:String):Bool
+	{
+		if (id == null || id.length < 1) return false;
+		if (testKeys.contains(id)) return true;
+		var keys:Dynamic = FlxG.save.data.overworldKeys;
+		return keys != null && Reflect.field(keys, id) == true;
+	}
+
+	/** EXP que da superar un nivel por primera vez. */
+	public static inline final XP_PER_LEVEL:Int = 500;
+
+	/**
+	 * EXP: la moneda de las tiendas de Gaster (como el "EXP" de Friday Night Dustin'). Se guarda en la partida
+	 * (FlxG.save.data.overworldXP) y se escribe al momento, para no perderla si se cierra el juego.
+	 */
+	public static function getXP():Int
+	{
+		var xp:Dynamic = FlxG.save.data.overworldXP;
+		return xp == null ? 0 : Std.int(xp);
+	}
+
+	public static function addXP(amount:Int)
+	{
+		FlxG.save.data.overworldXP = Std.int(Math.max(0, getXP() + amount));
+		FlxG.save.flush();
+	}
+
+	/**
+	 * Da la EXP de superar un nivel, solo si ese nivel no la ha dado nunca: la lista de los que ya la dieron
+	 * (FlxG.save.data.overworldXPGiven, "mundo::nodo") no se borra al reiniciar un mundo con R. Devuelve la
+	 * EXP dada (0 si ya la habia dado).
+	 */
+	public static function awardLevelXP(world:String, nodeId:String):Int
+	{
+		var key:String = world + '::' + nodeId;
+		var given:Array<String> = FlxG.save.data.overworldXPGiven;
+		if (given == null) given = FlxG.save.data.overworldXPGiven = [];
+		if (given.contains(key)) return 0;
+		given.push(key);
+		addXP(XP_PER_LEVEL); // tambien guarda la lista
+		return XP_PER_LEVEL;
+	}
+
+	/** Llaves de prueba (debug, `-test-key <llave>`): cuentan como tenidas pero no se guardan. */
+	public static var testKeys:Array<String> = [];
+
+	public static function giveKey(id:String)
+	{
+		if (id == null || id.length < 1 || hasKey(id)) return;
+		if (FlxG.save.data.overworldKeys == null) FlxG.save.data.overworldKeys = {};
+		Reflect.setField(FlxG.save.data.overworldKeys, id, true);
+		FlxG.save.flush();
+	}
+
+	/** Quita una llave (las pruebas automaticas la devuelven a como estaba). */
+	public static function takeKey(id:String)
+	{
+		var keys:Dynamic = FlxG.save.data.overworldKeys;
+		if (keys == null || !Reflect.hasField(keys, id)) return;
+		Reflect.deleteField(keys, id);
+		FlxG.save.flush();
 	}
 
 	/** Un tile pintado desde la paleta: un fotograma concreto ("tile0042", "w1_0007") y 0 FPS. */
@@ -1479,7 +1594,7 @@ class OverworldData
 			{
 				var available:Int = 0;
 				for (other in file.nodes)
-					if (other != node && canBeCompleted(other) && !(name != null && isBackLink(name, other))) available++;
+					if (other != node && canBeCompleted(other) && other.type != 'door' && !(name != null && isBackLink(name, other))) available++;
 				if (available < node.needLevels)
 					warn(node.id, '"${node.id}": se abre con ${node.needLevels} superados, pero en este mundo solo hay $available que superar.');
 			}
@@ -1509,10 +1624,17 @@ class OverworldData
 				else if (partner != null && !node.unlocked && !anyoneUnlocks(file, node.id) && node.needLevels <= 0
 					&& !partner.unlocked && !anyoneUnlocks(dest, partner.id) && partner.needLevels <= 0)
 					warn(node.id, '"${node.id}": ni este warp ni su pareja de "${node.world}" se abren nunca: que algo desbloquee uno de los dos (p. ej. el castillo).');
+				// regla del usuario (16/11/2026): la tuberia que abre el castillo de un mundo es gris
+				if (isPipeImage(node.image) && !isGrayPipe(node.image) && openedByCastle(file, node.id))
+					warn(node.id, '"${node.id}": la abre el castillo, asi que deberia ser una tuberia gris (overworld/pipegray).');
 			}
 
 			if (node.type == 'level' && (node.song == null || node.song.length < 1))
 				warn(node.id, '"${node.id}": es un nivel sin cancion.');
+			if (node.type == 'door' && (node.key == null || node.key.length < 1))
+				warn(node.id, '"${node.id}": es una puerta sin "Llave": no se abre nunca.');
+			if (node.type == 'shop' && (node.shop == null || node.shop.length < 1))
+				warn(node.id, '"${node.id}": es una tienda sin "Tienda": no lleva a ninguna.');
 
 			if (node.type == 'world')
 			{

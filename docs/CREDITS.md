@@ -97,12 +97,18 @@ aquí en adelante, `Q/`).
   flechas, chispazos, game over, fuentes `mariones.ttf` y `mario2.ttf` (del repo del mod) y la lógica
   de su `PlayState.hx` reescrita en Haxe (`tools/ports/mario_madness.py`, `MarioStage`, `TurmoilSweep`,
   `SuperBad`).
+- **Su menú de pausa** (`source/PauseSubState.hx` del repo, rehecho en `MarioPauseSubState`): el panel
+  `modstuff/pause/momichi`, los botones `mainmenu/pause/Mario_pause_*`, la estática de TV (`TVStatic` de
+  su `TitleScreenShaders.hx`), la música `breakfast1-3`, el sonido `RESTART` y los textos `desc.txt` de
+  cada canción (descripción y créditos tal cual).
 - **Qué usamos de su mapa (overworld)**:
   - El diseño del mundo 1 se basa en la isla del mundo 1 de Mario's Madness
     (`assets/images/warpzone/1/bg1.png`). Columnas, rocas, matorrales y rocas del mar están
     recortados de ella; los peces son su `warpzone/1/bg2`.
-  - Sprites de BF en el mapa, punto de los caminos, castillo, estrella, tubería, humo y anillo
-    (`assets/images/warpzone/`).
+  - Sprites de BF en el mapa, punto de los caminos, castillo, estrella, tubería, tubería gris
+    (`pipegray`), humo y anillo (`assets/images/warpzone/`).
+  - La tienda de Gaster del mundo 1, ya abierta con la llave, es su nivel corrupto de Game Boy
+    (`warpzone/4/gbaura` y `gb_level`, montados juntos, con su parpadeo de aparición).
   - La música del mapa del mundo 1 (`music/warpzone/1.ogg`).
   - El mundo de las estrellas (`star_world`, el de viajar rápido entre mundos) se basa en su Star Road
     (mundo 3): las columnas con estrellas (`warpzone/3/bg2.png`, enteras), la luna y los colores del
@@ -158,6 +164,10 @@ aquí en adelante, `Q/`).
   - La fuente `SonicCD.ttf` y su lógica, reescrita en Haxe (`tools/ports/sonic_exe.py`,
     `SonicStage`, `FleetwayStage`, `MajinStage`).
   - La pantalla de inicio de endless y, montada a partir de sus pantallas de inicio, la de chaos.
+  - Las piezas de su menú de pausa (`assets/exe/pause/`: título, panel, opciones, raya y los Sonic en
+    miniatura de chaos y endless-us), su música `pause.ogg` y los sonidos de menú `scrollMenu`,
+    `confirmMenu` y `cancelMenu`. La pausa va compilada en su exe: `SonicPauseSubState` la rehace con
+    esas piezas (la colocación es nuestra).
 
 ## World of Chaos: *ClubP Literature* (`Q/clubpe`)
 
@@ -183,6 +193,20 @@ aquí en adelante, `Q/`).
   - La fuente `doki.ttf` y su lógica, reescrita en Haxe (`tools/ports/world_of_chaos.py`,
     `ClubStage`).
   - Doki Doki Literature Club es de Team Salvato.
+
+## Tienda de Gaster: *Friday Night Dustin'* (`Q/dustin`)
+
+- Mod de Codename Engine (descarga en GameBanana 613322 y Game Jolt). Su README no lista autores: hay
+  que mirarlos en su página.
+- **Qué usamos**: la tienda de Gaster (fondo, luz, Gaster con sus caras, las cuatro llaves), su música
+  (`gaster_shop.ogg`), los susurros de Gaster (`wing_oggster/snd_wngdng1-7`), `gaster-vanish` y
+  `select`, y las fuentes `8bit-jve.ttf` y `pixel-wingdings.otf`. Lo copia `tools/ports/gaster_shop.py`;
+  la tienda está rehecha en Haxe a partir de su `data/states/ShopState.hx`. Los diálogos son nuestros.
+  El sonido de recoger la llave (`key_get.ogg`) es una mezcla nuestra de sus susurros y `gaster-vanish`.
+  La pantalla de EXP ganada imita la suya (`songs/misc_getrichquick.hx`), con su fuente `DTM-Mono.ttf`
+  y su sonido `levelup`. El cuadro "EXP:" de la tienda, como el de su `ShopState.hx`.
+- La llave dorada (`guilty key`) es la que se esconde en Bad Day.
+- W. D. Gaster es un personaje de Undertale (Toby Fox).
 
 ## Super Mario World (Nintendo)
 

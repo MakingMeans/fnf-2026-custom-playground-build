@@ -66,6 +66,7 @@ class MarioStage extends BaseStage
 	override function create()
 	{
 		play.songCard = false; // tienen su propio rotulo (evento Show Song)
+		play.pauseMenuFactory = function() return new substates.MarioPauseSubState(songAuthor);
 		eventTweens = [];
 		eventTimers = [];
 		extraTween = [];

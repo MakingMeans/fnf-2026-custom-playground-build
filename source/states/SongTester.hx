@@ -41,6 +41,8 @@ class SongTester extends FlxBasic
 	var skipTypes:Array<String> = []; // -skip: tipos de nota que el bot deja pasar (p. ej. "emerald")
 	var pauseAt:Float = -1; // -pause: ms de cancion en que se abre el menu de pausa (se captura y se acaba)
 	var pauseTime:Float = -1;
+	var expAt:Float = -1; // -exp: ms de cancion en que se ensena la pantalla de EXP ganada (sin sumar EXP; se captura y se acaba)
+	var expTime:Float = -1;
 	var taken:Array<String> = [];
 	var log:Array<String> = [];
 	var started:Bool = false;
@@ -87,6 +89,9 @@ class SongTester extends FlxBasic
 		times = [];
 		readTimes(args, '-pause', times);
 		if (times.length > 0) tester.pauseAt = times[0];
+		times = [];
+		readTimes(args, '-exp', times);
+		if (times.length > 0) tester.expAt = times[0];
 		FlxG.plugins.addPlugin(tester);
 	}
 
@@ -135,6 +140,21 @@ class SongTester extends FlxBasic
 		if (deathTime >= 0)
 		{
 			updateDeath(elapsed);
+			return;
+		}
+
+		// -exp: pantalla de EXP; capturas a los 0,4 s (contando) y a los 1,5 s (ya en 500) y se acaba
+		if (expTime >= 0)
+		{
+			var before:Float = expTime;
+			expTime += elapsed;
+			if (before < 0.4 && expTime >= 0.4) File.saveContent('song_winshot.txt', '$song-exp-a');
+			else if (before < 1.5 && expTime >= 1.5) File.saveContent('song_winshot.txt', '$song-exp-b');
+			else if (expTime >= 2.2 && !FileSystem.exists('song_winshot.txt'))
+			{
+				log.push('Pantalla de EXP ensenada');
+				finish();
+			}
 			return;
 		}
 
@@ -199,6 +219,13 @@ class SongTester extends FlxBasic
 			// -skip <tipos>: el bot no las toca (con botplay, PlayState no pulsa las notas ignoreNote)
 			for (note in play.unspawnNotes) if (skipTypes.contains(note.noteType)) note.ignoreNote = true;
 			for (note in play.notes.members) if (note != null && skipTypes.contains(note.noteType)) note.ignoreNote = true;
+		}
+		if (expAt >= 0 && lastPos >= expAt)
+		{
+			expAt = -1;
+			expTime = 0;
+			play.showExpGain(backend.OverworldData.XP_PER_LEVEL, function() {}); // solo la pantalla: no suma EXP
+			return;
 		}
 		if (pauseAt >= 0 && lastPos >= pauseAt && FlxG.state.subState == null)
 		{

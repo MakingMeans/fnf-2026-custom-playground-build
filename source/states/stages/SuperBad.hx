@@ -17,6 +17,10 @@ import substates.GameOverSubstate;
  *    downscroll la coreografía es otra, como en el mod.
  *  - Degradados laterales del color de cada nota, icono de Mario que salta y se gira con el pulso.
  *  - Game over: Mario azul pisotea a BF tres veces y le dice algo antes de irse.
+ *  - Propio (no es del mod): cuando el Mario pixel rompe la barra de vida, de ella salta una llave (la
+ *    dorada de la tienda de Gaster de Friday Night Dustin') que cae escondida en la comoda, al pie del
+ *    jarron. Con un clic encima se recoge (suena un susurro de Gaster); si se acaba la cancion con
+ *    ella, se gana KEY_ID, que abre la puerta del camino a la tienda de Gaster en el mundo 1.
  */
 @:access(states.PlayState)
 @:access(backend.MusicBeatState)
@@ -33,10 +37,21 @@ class SuperBad extends MarioStage
 	var rippleOn:Bool;
 	var stompsDone:Int;
 
+	/** La llave escondida: la pide la puerta del mundo 1 (nodo 'door' con `key` = KEY_ID). */
+	public static inline final KEY_ID:String = 'world1_key';
+	/** Donde cae (su centro, en el mundo): al pie del jarron de la comoda de `lumpy`, lejos de Mario. */
+	static final KEY_SPOT:Array<Float> = [452, 404];
+
+	var key:FlxSprite;
+	var keyReady:Bool;
+	var keyCollected:Bool;
+
 	override function create()
 	{
 		super.create();
 		stompsDone = 0;
+		keyReady = false;
+		keyCollected = false;
 		// stages/superbad.json del mod: boyfriend [570, 50, 650, 380, 1.1, 20], opponent [90, -190, 520, 380, 1.4, 10]
 		setCameraPoints([650, 380, 1.1, 20], [520, 380, 1.4, 10]);
 		songAuthor = 'RedTV53';
@@ -140,6 +155,7 @@ class SuperBad extends MarioStage
 	{
 		super.update(elapsed);
 		updateStomps();
+		updateKey();
 
 		// el mod restaba por fotograma, a 60 FPS
 		var frames:Float = elapsed * 60;
@@ -435,8 +451,9 @@ class SuperBad extends MarioStage
 				insert(members.indexOf(badHUDMario) + 1, flash);
 				flash.animation.play('idle', true);
 
-			case 14: // la barra de vida se cae
+			case 14: // la barra de vida se cae (y de ella salta la llave escondida)
 				moveHealthBar(camEst);
+				spawnKey();
 				if (!downScroll)
 				{
 					for (tween in eventTweens) tween.cancel();
@@ -472,6 +489,70 @@ class SuperBad extends MarioStage
 				badGrad2.visible = true;
 				FlxG.camera.flash(ClientPrefs.data.flashing ? FlxColor.WHITE : FlxColor.BLACK, 1.5);
 		}
+	}
+
+	/**
+	 * La llave sale de donde se rompe la barra (abajo en el centro de la pantalla; arriba en downscroll),
+	 * da vueltas en el aire y cae en la comoda, detras de los personajes. Ahi se queda hasta que se recoja.
+	 */
+	function spawnKey()
+	{
+		// una vez ganada (y con ella abierta la puerta) no vuelve a salir: la llave no se gasta al abrir
+		if (key != null || keyCollected || backend.OverworldData.hasKey(KEY_ID)) return;
+		key = new FlxSprite().loadGraphic(Paths.image('gaster_shop/keys/guilty'));
+		key.antialiasing = ClientPrefs.data.antialiasing;
+		key.scale.set(0.42, 0.42);
+		key.updateHitbox();
+
+		var startX:Float = camGame.viewLeft + FlxG.width * 0.5 / camGame.zoom - key.width * 0.5;
+		var startY:Float = camGame.viewTop + (ClientPrefs.data.downScroll ? 90 : FlxG.height - 70) / camGame.zoom - key.height * 0.5;
+		var endX:Float = KEY_SPOT[0] - key.width * 0.5;
+		var endY:Float = KEY_SPOT[1] - key.height * 0.5;
+		key.setPosition(startX, startY);
+
+		// detras de los personajes, delante del escenario
+		var front:Int = members.length;
+		for (group in [gfGroup, dadGroup, boyfriendGroup])
+			if (group != null && members.indexOf(group) > -1) front = Std.int(Math.min(front, members.indexOf(group)));
+		insert(front, key);
+
+		var beat:Float = Conductor.crochet / 1000;
+		var peak:Float = Math.min(startY, endY) - 220;
+		FlxTween.tween(key, {x: endX}, 2 * beat);
+		FlxTween.tween(key, {angle: 720 - 35}, 2 * beat);
+		FlxTween.tween(key, {y: peak}, 0.8 * beat, {ease: FlxEase.quadOut, onComplete: function(_)
+		{
+			FlxTween.tween(key, {y: endY}, 1.2 * beat, {ease: FlxEase.quadIn, onComplete: function(_)
+			{
+				keyReady = true;
+				FlxG.mouse.visible = true; // hay que hacerle clic
+			}});
+		}});
+	}
+
+	/** Clic encima de la llave: se recoge (un susurro de Gaster) y cuenta si se acaba la cancion. */
+	function updateKey()
+	{
+		if (!keyReady || keyCollected || key == null) return;
+		if (!FlxG.mouse.justPressed || !FlxG.mouse.overlaps(key, camGame)) return;
+
+		keyCollected = true;
+		keyReady = false;
+		FlxG.mouse.visible = false;
+		if (!states.OverworldState.songKeys.contains(KEY_ID)) states.OverworldState.songKeys.push(KEY_ID);
+		// rafaga de susurros de Gaster sobre la cola de su desvanecerse (la monta tools/ports/gaster_shop.py)
+		FlxG.sound.play(Paths.sound('gaster_shop/key_get'), 1);
+		FlxTween.tween(key.scale, {x: 0.45, y: 0.45}, 0.5, {ease: FlxEase.quadOut});
+		FlxTween.tween(key, {alpha: 0, y: key.y - 40, angle: key.angle + 25}, 0.6, {ease: FlxEase.quadIn, onComplete: function(_)
+		{
+			key.kill();
+		}});
+	}
+
+	override function destroy()
+	{
+		FlxG.mouse.visible = false;
+		super.destroy();
 	}
 
 	function moveHealthBar(cam:FlxCamera)

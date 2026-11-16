@@ -192,6 +192,20 @@ class Main extends Sprite
 			};
 		}
 		else
+		// -gaster-shop <tienda>: abre esa tienda de Gaster directamente (para verla y capturarla)
+		if (launchArgs.indexOf('-gaster-shop') > -1 && launchArgs.indexOf('-gaster-shop') + 1 < launchArgs.length)
+		{
+			var shopToOpen:String = launchArgs[launchArgs.indexOf('-gaster-shop') + 1];
+			firstState = function():flixel.FlxState
+			{
+				initDirectLaunch();
+				FlxG.autoPause = false;
+				// -forget: borra la marca de "ya visitada" de esa tienda en la partida
+				if (launchArgs.contains('-forget')) states.GasterShopState.forgetVisit(shopToOpen);
+				return new states.GasterShopState(shopToOpen, false);
+			};
+		}
+		else
 		#end
 		if (editorArg > -1)
 		{
@@ -236,6 +250,12 @@ class Main extends Sprite
 				// -warp-from <mundo>: entra como si BF llegara de ese mundo por un warp
 				var warpArg:Int = launchArgs.indexOf('-warp-from');
 				var warpFrom:String = (warpArg > -1 && warpArg + 1 < launchArgs.length) ? launchArgs[warpArg + 1] : null;
+
+				// -test-key <llave>: la da solo en esta ejecucion (sin guardarla), para ver una puerta abierta
+				#if debug
+				var testKeyArg:Int = launchArgs.indexOf('-test-key');
+				if (testKeyArg > -1 && testKeyArg + 1 < launchArgs.length) backend.OverworldData.testKeys.push(launchArgs[testKeyArg + 1]);
+				#end
 
 				firstState = function():flixel.FlxState
 				{

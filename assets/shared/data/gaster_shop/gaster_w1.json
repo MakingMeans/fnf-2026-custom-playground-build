@@ -1,0 +1,46 @@
+{
+	"first": [
+		{
+			"text": "WELCOME.",
+			"face": "talk"
+		},
+		{
+			"text": "YOU HAVE FOUND A PATH\nTHAT SHOULD NOT BE HERE.",
+			"face": "focus"
+		},
+		{
+			"text": "INTERESTING.\nVERY INTERESTING.",
+			"face": "surprised"
+		},
+		{
+			"text": "THAT KEY WAS NOT THERE\nBY ACCIDENT.",
+			"face": "talk"
+		},
+		{
+			"text": "THERE ARE MORE KEYS.\nONE IN EVERY WORLD.",
+			"face": "focus"
+		},
+		{
+			"text": "WHAT YOU CHOOSE TO OPEN\nWILL DECIDE HOW IT ALL ENDS.",
+			"face": "scary"
+		},
+		{
+			"text": "FOR NOW, I HAVE NOTHING\nTO OFFER YOU.",
+			"face": "talk"
+		},
+		{
+			"text": "SEEK ME IN THE NEXT WORLD.",
+			"face": "focus"
+		}
+	],
+	"return": [
+		{
+			"text": "WELCOME BACK.",
+			"face": "talk"
+		},
+		{
+			"text": "SEEK ME IN THE NEXT WORLD.",
+			"face": "focus"
+		}
+	]
+}

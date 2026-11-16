@@ -14,4 +14,19 @@
 	<SubTexture name="red0004" x="64" y="16" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
 	<SubTexture name="red0005" x="80" y="16" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
 	<SubTexture name="red0006" x="96" y="16" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="mid_yellow0000" x="0" y="32" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="mid_yellow0001" x="16" y="32" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="mid_yellow0002" x="32" y="32" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="mid_yellow0003" x="48" y="32" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="mid_yellow0004" x="64" y="32" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="mid_yellow0005" x="80" y="32" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="mid_yellow0006" x="96" y="32" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="mid_red0000" x="0" y="48" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="mid_red0001" x="16" y="48" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="mid_red0002" x="32" y="48" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="mid_red0003" x="48" y="48" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="mid_red0004" x="64" y="48" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="mid_red0005" x="80" y="48" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="mid_red0006" x="96" y="48" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
+	<SubTexture name="mid_white0000" x="0" y="64" width="16" height="16" frameX="0" frameY="0" frameWidth="16" frameHeight="16"/>
 </TextureAtlas>

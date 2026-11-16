@@ -59,6 +59,21 @@ Reglas que siguen todas:
 | Semana | `assets/base_game/shared/weeks/world1.json` | Una semana por mundo; sale en Freeplay, no en el modo historia |
 | Listas | `weekList.txt`, `stageList.txt`, `characterList.txt` (en `assets/shared/`) | Las añade el script |
 
+## Menú de pausa propio
+
+Si el mod de una canción traía su pausa, el escenario la pone con `PlayState.pauseMenuFactory`
+(`play.pauseMenuFactory = function() return new MiPausa();`); si no, sale la de Psych. Las tres comparten
+con la de Psych lo que hacen sus opciones: `PauseSubState.restartSong()`, `openOptions()` y `exitToMenu()`
+(al mapa si se vino de él). Lo que ve el jugador va en inglés.
+
+| Pausa | Canciones | Origen |
+|---|---|---|
+| `substates/WoCPauseSubState.hx` | World of Chaos (`ClubStage`) | `data/scripts/Pausemenu.hx` del mod |
+| `substates/MarioPauseSubState.hx` | Last Course, Bad Day (`MarioStage`) | `source/PauseSubState.hx` del repo de Mario's Madness: panel con estática de TV (`shaders/TVStaticShader.hx`), botones de Mario, modo, canción, autor, créditos y descripción (`data/<canción>/desc.txt`), música breakfast 1-3. Sin "Options", como el mod; "Botplay" (su botón *Call Luigi*) solo fuera del mapa. Piezas: `mario_madness.py --pause` |
+| `substates/SonicPauseSubState.hx` | chaos, endless-us (`SonicStage`) | Va compilada en el exe del mod: rehecha con sus imágenes (pixel art x3, panel en sierra por la derecha, PAUSE, CONTINUE/RESTART/OPTIONS/EXIT, raya bajo la elegida y el Sonic en miniatura de la canción). Piezas: `sonic_exe.py --pause` |
+
+yararara no tiene pausa propia (su mod no traía ninguna). Capturas: `run_songtest.ps1 -Song <canción> -Pause 30`.
+
 ## Probar una canción
 
 - **`play-song.bat <canción>`** (o `tests\test-<canción>.bat`): abre el juego directamente en la
@@ -97,9 +112,11 @@ de Psych 1.0, así que funcionan tal cual; solo cambian nombres y rutas.
 - Escenario `yararara` (`stages/yararara.lua`): panel del principio, puente rojo desde el paso 224 y,
   en el "HITTING Mode", el escenario partido en dos carriles con zombis que llegan por los dos lados.
 - Vídeos `yararara/1` (entrada, a pantalla completa), `yararara/2` y `yararara/3` (bajo las flechas).
-  El de entrada lo lanza un evento en el segundo 0: sin la cuenta atrás a la vista, sus 2,4 s de espera
-  dejaban ver el escenario antes del vídeo. `intro-cover.lua` (script propio que escribe
-  `yararara.py`) pone `skipCountdown` y tapa de negro hasta que sale el vídeo.
+  El de entrada (11,54 s) tiene que acabar cuando Teto empieza a cantar (11,52 s). En el mod lo lanzaba un
+  evento en el segundo 0, pero abrir un vídeo 1080p tarda unos 2 s y se veía con Teto ya cantando.
+  `intro-sync.hx` (script propio que escribe `yararara.py`, que además quita ese evento del chart) lo abre
+  antes de la canción, tapado de negro y sin cuenta atrás, y arranca la canción cuando el vídeo ya avanza:
+  acaba unos 0,4 s antes de que cante Teto.
 - Shader `yararara-chrom` (aberración cromática en la cámara del juego).
 
 Diferencias con el mod, todas a propósito:
@@ -151,6 +168,13 @@ los gatillos L/R). La usan Last Course y la usará chaos.
   downscroll las sube); se quedan así el resto de la canción. Luego tira la barra de vida, que no
   vuelve hasta el "YAHOO" del paso 1312. Con downscroll la coreografía es otra, como en el mod.
 - Game over propio: Mario azul pisotea a BF tres veces, dice una frase (6 posibles) y se va.
+- **Propio (no es del mod):** cuando el Mario pixel rompe la barra de vida (disparador 14, a los 62,4 s),
+  de ella salta una llave (la dorada de la tienda de Gaster de Friday Night Dustin') que cae al pie del
+  jarrón de la cómoda, detrás de los personajes. Con un clic encima se recoge (susurro de Gaster) y, si
+  se acaba la canción, se gana `world1_key`, que abre el camino a la tienda de Gaster del
+  mundo 1 (`SuperBad.spawnKey` / `updateKey`, `OverworldState.songKeys`, que `PlayState.endSong` guarda).
+  Al recogerla suena `gaster_shop/key_get`. Una vez ganada (la llave no se gasta) ya no
+  vuelve a salir.
 
 Diferencias con el mod, todas a propósito:
 - Los desvanecimientos que el mod hacía restando alpha en cada fotograma se calculan por tiempo

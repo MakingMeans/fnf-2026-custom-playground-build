@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="key_door.png">
+	<SubTexture name="closed0000" x="0" y="0" width="16" height="20" frameX="0" frameY="0" frameWidth="16" frameHeight="20"/>
+	<SubTexture name="open0000" x="16" y="0" width="16" height="20" frameX="0" frameY="0" frameWidth="16" frameHeight="20"/>
+</TextureAtlas>

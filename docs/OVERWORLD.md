@@ -165,7 +165,23 @@ En la pestaña **Nodo**, junto a *Borrar nodo*, salen dos botones según el nodo
 (una salida sin destino busca a su mapa de fuera; un warp, a su pareja). Las etiquetas de estos
 nodos muestran a dónde llevan (`sub` / `> test_subworld`).
 
-### Aspecto de un nodo desde la paleta
+### Aspecto de un nodo: la paleta de aspectos (A)
+
+La forma fácil: elige el nodo (V) y pulsa **A** (o el botón *Elegir aspecto (A)* de la pestaña Nodo, o
+*(aspectos de nodo)* en el desplegable de tilesets). La paleta de la izquierda enseña los aspectos con su
+nombre; **un clic** en uno se lo pone al nodo con su animación, su aspecto al superarlo y sus FPS (CTRL+Z
+lo deshace) y los nodos nuevos salen con él. Esa paleta no pinta. Hay: niveles grandes y medianos
+(amarillo, rojo), el blanco, niveles en tierra, el punto de Mario's Madness, casa de Yoshi, casa fantasma,
+casa, castillos (el de MM, el de SMW, fortaleza, castillo de jefe y el de Bowser), los 4 interruptores
+(pulsados al superarlos), estrellas, tuberías (verde, gris, SMW), puerta azul, el vacío de Game Boy, el
+candado e *Invisible*. La lista está en `NODE_LOOKS` (OverworldEditorState); los de SMW los recorta
+`tools/build_node_sprites.py` de `og_mario/level_tiles` y `level_blocks`, cada uno en su atlas de
+`overworld/nodes/`.
+
+**Sobre cuáles se pone BF de pie** (se centran bajo él y suben 3 px): tuberías, castillos, fortalezas,
+casas, interruptores, estrellas y puertas (lo dice el nombre de la imagen).
+
+### Aspecto de un nodo desde un tile cualquiera de la paleta
 
 Con un nodo elegido, **CTRL+clic en un tile de la paleta** se lo pone como aspecto, y
 **CTRL+SHIFT+clic** como aspecto al completarlo (tiene que ser del mismo tileset). Es la forma de
@@ -349,7 +365,9 @@ Sirven igual para los **nodos**: con el nodo elegido, CTRL+clic en el tile de la
    animación `path 1`, o `overworld/pipe`, `overworld/star`, `overworld/ring`).
 2. Pulsa **B** y haz clic para ir colocándolos. Cada clic pone una copia.
 3. Con uno seleccionado (modo **V**) puedes cambiarle escala, alpha, flip y si va **delante** de los
-   nodos y de BF o detrás.
+   nodos y de BF o detrás (casilla *Delante de BF* de la pestaña Deco; al pintar tiles, *Pintar por
+   delante de BF* de la pestaña Tiles). **Manteniendo F** se ve en azul todo lo que va delante de BF;
+   lo demás va detrás.
 
 Los overlays a pantalla completa (`overworld/overworld_overlay`, `selector/hub_path`) van colocados
 en 0,0 y con **Delante** marcado.
@@ -478,6 +496,65 @@ igual); la animación del camino sale la próxima vez que pises el mapa de fuera
 **Para volver de un submundo usa siempre una salida `exit`.** Un nodo `world` dentro del submundo
 que apunte al mapa de fuera te lleva de vuelta a él (no te mete "otra vez dentro"), pero
 *Comprobar mundo* lo avisa: el mapa de fuera parecería hijo de su propio submundo.
+
+### Puertas con llave y tiendas: nodos `door` y `shop`
+
+- **`door`**: un paso cerrado. Se le pone en **Llave** la llave que lo abre (p. ej.
+  `world1_key`) y en *Desbloquea al completarlo* lo que hay detrás. Mientras no se tenga la llave, BF
+  llega hasta ella pero no pasa (ENTER: "hace falta una llave"). La llave se gana en una canción (la de
+  Bad Day la esconde en la cómoda) y se guarda en un inventario de toda la partida
+  (`OverworldData.giveKey`, `FlxG.save.data.overworldKeys`). Al volver al mapa con ella, la puerta se
+  "completa" sola: se ve abierta (`animDone`) y lo que abre se revela como al superar un nivel. No
+  cuenta en *Superados* ni para dar un mundo por superado. Aspecto por defecto: `overworld/key_door`
+  (`closed` / `open`). Si la imagen tiene además fotogramas `unlock0000`..., la puerta recién abierta
+  sale cerrada y los reproduce una vez (con el primer "boom" del revelado, o tras el iris si no hay
+  nada que revelar) antes de quedarse en `animDone`. (El mundo 1 ya no tiene puerta: ver abajo.)
+- **Cualquier otro nodo con Llave** (campo **Llave** de la pestaña Nodo): sigue cerrado, y sus caminos
+  ocultos, hasta tener la llave, diga lo que diga *Desbloqueado al empezar* o quien lo desbloquee
+  (`OverworldData.isKeyed`). Al volver al mapa con ella se apunta en la partida como `"mundo::nodo#key"`
+  (`OverworldState.syncKeyNodes`, una sola vez) y sus caminos se revelan como al superar un nivel. Su
+  sprite solo pasa a `animDone` cuando, además de la llave, ya se ve algún camino hasta él (si el mundo
+  está reiniciado y aún no se llega, sigue con su aspecto cerrado); ese momento hace la animación `unlock`
+  (si la imagen la tiene) justo cuando el camino que se revela llega al nodo. La simulación y los avisos
+  dan por hecho que la llave se consigue.
+- **`shop`**: una tienda, con ENTER. Se le pone en **Tienda** cuál abre: lo que dice Gaster está
+  en `data/gaster_shop/<tienda>.json` (`first` la primera vez, `return` las siguientes). La tienda es
+  la de Gaster de Friday Night Dustin' (`states/GasterShopState.hx`); al salir se vuelve al mismo
+  nodo. Aspecto por defecto: `overworld/gb_void` (abajo).
+
+**La tienda de Gaster del mundo 1** (plan del usuario, 16/11/2026): no hay puerta. La tienda (`tienda`) es un
+nodo con la llave `world1_key` (la de Bad Day): sin ella es un nodo normal pero blanco y su camino desde
+Bad Day (a la derecha, arriba y a la derecha, como lo dibujó el usuario) no se ve; con ella, al volver al
+mapa crece el camino y, al llegar, el vacío del nivel corrupto de Game Boy de Mario's Madness sustituye al
+nodo blanco. Imagen `overworld/gb_void` (`warpzone/4/gbaura` + `gb_level`, la
+monta `build_world1.py`): `closed` = el nodo blanco; `unlock` = el vacío parpadea 1 s detrás del nodo (como
+el FlxFlicker de su WarpState) y luego, ya sin él, la estática se junta en un punto; `open` = el vacío con
+el punto, sobre el que se pone BF.
+
+**R dos veces en el mapa** borra el progreso de ese mundo y sus submundos, y además quita las llaves
+que abren algo en ellos (la de Bad Day vuelve a salir en la canción) y olvida las visitas a sus tiendas
+(Gaster vuelve a saludar como la primera vez). La EXP no se toca.
+
+### EXP: la moneda de las tiendas
+
+Superar un nivel (`level`) **por primera vez** desde el mapa da `OverworldData.XP_PER_LEVEL` (500) de
+EXP. Sale la pantalla de EXP ganada de Friday Night Dustin' (`PlayState.showExpGain`: todo a negro,
+"+ 500 EXP" contando con su sonido `levelup`, 2,6 s) y luego se vuelve al mapa. Repetir un nivel ya
+superado no da EXP ni enseña la pantalla. La EXP se guarda al momento en la partida
+(`FlxG.save.data.overworldXP`, `getXP`/`addXP`) y los niveles que ya la dieron, en
+`FlxG.save.data.overworldXPGiven` (`"mundo::nodo"`): reiniciar un mundo con R no la vuelve a dar. La
+tienda de Gaster enseña la que se tiene (cuadro "EXP:" encima del de diálogo); será lo que cuesten sus
+cosas. Prueba de la pantalla sin sumar EXP: `run_songtest.ps1 -Song <canción> -Exp 20`.
+
+### Regla: tuberías grises
+
+La tubería que abre el castillo de un mundo es **gris** (`overworld/pipegray`, la de Mario's Madness
+sin su versión con glitch); su pareja del otro mundo también. Se coloca igual que la verde (mismo
+tamaño y mismo centrado). *Comprobar mundo* avisa si un castillo abre una tubería que no es gris.
+
+Pruebas (debug): `-gaster-shop <tienda>` abre la tienda directamente (sin apuntar la visita; con
+`-forget` borra la marca de "ya visitada"), y `-test-key <llave>` junto a `-overworld` da esa llave
+solo durante esa ejecución, sin guardarla.
 
 ### Warps (tuberías y estrellas): nodos `warp`
 
@@ -790,9 +867,10 @@ dibujo. En el juego, los decorados quietos se juntan en una sola imagen al carga
 | Nodo | Qué es |
 |---|---|
 | `inicio` | Punto de aparición (no es nivel), con la tubería encima |
-| `tuberia` | Tubería (warp) al **mundo de las estrellas** (`star_world`, el de viajar rápido entre mundos). Se ve desde el principio, pero su camino solo se abre al derrotar el castillo |
+| `tuberia` | Tubería gris (warp, `overworld/pipegray`) al **mundo de las estrellas** (`star_world`, el de viajar rápido entre mundos). Se ve desde el principio, pero su camino solo se abre al derrotar el castillo |
 | `yararara` | Primer nivel (abierto) |
-| `bad-day` | Lo abre yararara |
+| `bad-day` | Lo abre yararara. Al superarlo abre Chaos |
+| `tienda` | La tienda de Gaster (`shop`, `gaster_w1`, llave `world1_key`), al final del camino en L que sale de Bad Day. La llave está escondida en Bad Day: cuando el Mario pixel rompe la barra de vida, salta una llave dorada que cae al pie del jarrón de la cómoda; un clic encima la recoge (suenan los susurros de Gaster) y, si se acaba la canción, se gana. Sin ella la tienda es un nodo blanco sin camino; con ella se revela el camino y el nodo se vuelve el vacío de Game Boy (`overworld/gb_void`). En el mundo 1 Gaster solo habla: avisa de que existen las llaves |
 | `chaos` | El cruce de 3 caminos. Al superarlo abre la escalera a la meseta; su **salida secreta** (las 7 esmeraldas) abre el camino a nado al norte |
 | `last-course` | En la meseta |
 | `castillo` | World of Chaos. Al superarlo abre la estrella y la tubería |

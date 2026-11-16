@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="smw_dirt_level.png">
+	<SubTexture name="yellow0000" x="0" y="0" width="16" height="16"/>
+	<SubTexture name="yellow0001" x="16" y="0" width="16" height="16"/>
+	<SubTexture name="yellow0002" x="32" y="0" width="16" height="16"/>
+	<SubTexture name="yellow0003" x="48" y="0" width="16" height="16"/>
+	<SubTexture name="red0000" x="64" y="0" width="16" height="16"/>
+	<SubTexture name="red0001" x="80" y="0" width="16" height="16"/>
+	<SubTexture name="red0002" x="96" y="0" width="16" height="16"/>
+	<SubTexture name="red0003" x="112" y="0" width="16" height="16"/>
+</TextureAtlas>

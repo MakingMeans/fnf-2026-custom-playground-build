@@ -304,39 +304,51 @@ class PauseSubState extends MusicBeatSubstate
 					PlayState.instance.botplayTxt.alpha = 1;
 					PlayState.instance.botplaySine = 0;
 				case 'Options':
-					PlayState.instance.paused = true; // For lua
-					PlayState.instance.vocals.volume = 0;
-					PlayState.instance.canResync = false;
-					MusicBeatState.switchState(new OptionsState());
+					openOptions();
 					if(ClientPrefs.data.pauseMusic != 'None')
 					{
 						FlxG.sound.playMusic(Paths.music(Paths.formatToSongPath(ClientPrefs.data.pauseMusic)), pauseMusic.volume);
 						FlxTween.tween(FlxG.sound.music, {volume: 1}, 0.8);
 						FlxG.sound.music.time = pauseMusic.time;
 					}
-					OptionsState.onPlayState = true;
 				case "Exit to menu":
-					#if DISCORD_ALLOWED DiscordClient.resetClientID(); #end
-					PlayState.deathCounter = 0;
-					PlayState.seenCutscene = false;
-
-					PlayState.instance.canResync = false;
-					Mods.loadTopMod();
-					if(states.OverworldState.fromOverworld)
-						states.OverworldState.backToOverworld(); // el mapa pone su musica
-					else
-					{
-						if(PlayState.isStoryMode)
-							MusicBeatState.switchState(new StoryMenuState());
-						else
-							MusicBeatState.switchState(new FreeplayState());
-						FlxG.sound.playMusic(Paths.music('freakyMenu'));
-					}
-					PlayState.changedDifficulty = false;
-					PlayState.chartingMode = false;
-					FlxG.camera.followLerp = 0;
+					exitToMenu();
 			}
 		}
+	}
+
+	/** Lo que hace "Options" (tambien lo usan las pausas propias de algunas canciones). */
+	public static function openOptions()
+	{
+		PlayState.instance.paused = true; // For lua
+		PlayState.instance.vocals.volume = 0;
+		PlayState.instance.canResync = false;
+		MusicBeatState.switchState(new OptionsState());
+		OptionsState.onPlayState = true;
+	}
+
+	/** Lo que hace "Exit to menu": al mapa si se vino de el y si no a Story Mode / Freeplay. */
+	public static function exitToMenu()
+	{
+		#if DISCORD_ALLOWED DiscordClient.resetClientID(); #end
+		PlayState.deathCounter = 0;
+		PlayState.seenCutscene = false;
+
+		PlayState.instance.canResync = false;
+		Mods.loadTopMod();
+		if(states.OverworldState.fromOverworld)
+			states.OverworldState.backToOverworld(); // el mapa pone su musica
+		else
+		{
+			if(PlayState.isStoryMode)
+				MusicBeatState.switchState(new StoryMenuState());
+			else
+				MusicBeatState.switchState(new FreeplayState());
+			FlxG.sound.playMusic(Paths.music('freakyMenu'));
+		}
+		PlayState.changedDifficulty = false;
+		PlayState.chartingMode = false;
+		FlxG.camera.followLerp = 0;
 	}
 
 	function deleteSkipTimeText()

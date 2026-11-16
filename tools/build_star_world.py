@@ -71,25 +71,25 @@ def rainbow(a, b, points=None):
 # ------------------------------------------------------------------------------------------ grafo
 # las seis estrellas, de abajo arriba: un mundo cada una (se pueden cambiar en el editor)
 STARS = [  # (id, punta, mundo, nombre)
-    ('estrella-2', 4, 'world2', 'Mundo 2'),
-    ('estrella-3', 5, 'world3', 'Mundo 3'),
-    ('estrella-4', 1, 'world4', 'Mundo 4'),
-    ('estrella-5', 2, 'world5', 'Mundo 5'),
-    ('estrella-6', 3, 'world6', 'Mundo 6'),
-    ('estrella-7', 0, 'world7', 'Mundo 7'),
+    ('estrella-2', 4, 'world2', 'World 2'),
+    ('estrella-3', 5, 'world3', 'World 3'),
+    ('estrella-4', 1, 'world4', 'World 4'),
+    ('estrella-5', 2, 'world5', 'World 5'),
+    ('estrella-6', 3, 'world6', 'World 6'),
+    ('estrella-7', 0, 'world7', 'World 7'),
 ]
 
 
 def graph():
     star_xy = {sid: tip(t) for sid, t, _, _ in STARS}
     nodes = [
-        w1.node('tuberia', 56, LANE, 'Mundo 1', kind='warp', look=w1.PIPE_LOOK, world='world1'),
+        w1.node('tuberia', 56, LANE, 'World 1', kind='warp', look=w1.PIPE_GRAY_LOOK, world='world1'),  # pareja de la gris del mundo 1
         w1.node('centro', 208, LANE, 'Star Road', kind='empty', look=w1.HIDDEN_LOOK, unlocked=True),
     ]
     # cruces sobre las nubes, uno bajo cada estrella de los lados (sin dibujo: BF para y sube desde ahi)
     for sid in ('estrella-4', 'estrella-2', 'estrella-3', 'estrella-5'):
         x, _ = star_xy[sid]
-        nodes.append(w1.node('cruce-' + sid.split('-')[1], x, LANE, 'Cruce', kind='empty', look=w1.HIDDEN_LOOK, unlocked=True))
+        nodes.append(w1.node('cruce-' + sid.split('-')[1], x, LANE, 'Crossing', kind='empty', look=w1.HIDDEN_LOOK, unlocked=True))
     for sid, _, world, name in STARS:
         x, y = star_xy[sid]
         nodes.append(w1.node(sid, x, y, name, kind='warp', look=w1.STAR_LOOK, world=world))
@@ -261,7 +261,7 @@ def main(args):
     sprites += [{'image': image_key + 'props', 'anim': name, 'fps': 0, 'x': x, 'y': y, 'flipX': flip, 'flipY': False,
                  'scale': 1, 'alpha': 1, 'front': False} for name, x, y, flip in PROPS]
     world = {
-        'displayName': 'Mundo de las estrellas',
+        'displayName': 'Star World',
         'bg': 'overworld/backgrounds/star_sky', 'bgAnim': 'idle', 'bgFps': 3, 'bgTile': True,
         'music': 'overworld/star_world', 'zoom': 3, 'gridSize': 8, 'startNode': 'centro',
         'player': 'overworld/overworld_bf', 'walkSpeed': 60,

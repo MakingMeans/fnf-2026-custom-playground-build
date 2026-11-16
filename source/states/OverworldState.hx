@@ -68,7 +68,19 @@ class OverworldState extends MusicBeatState
 	function resetWorldProgress()
 	{
 		// tambien los submundos: si no, un submundo ya superado volveria a marcar su nodo al momento
-		for (world in OverworldData.worldTree(curWorld, parentWorlds())) OverworldData.resetProgress(world);
+		for (world in OverworldData.worldTree(curWorld, parentWorlds()))
+		{
+			OverworldData.resetProgress(world);
+			// y como nuevo del todo: fuera las llaves que abren algo aqui (la de Bad Day vuelve a salir en la
+			// cancion) y Gaster vuelve a saludar como la primera vez. La EXP no se toca (no se vuelve a dar)
+			var file:OverworldFile = OverworldData.loadCached(world);
+			if (file == null) continue;
+			for (node in file.nodes)
+			{
+				if (node.key != null && node.key.length > 0) OverworldData.takeKey(node.key);
+				if (node.type == 'shop' && node.shop != null && node.shop.length > 0) GasterShopState.forgetVisit(node.shop);
+			}
+		}
 		sfx(SFX_BACK);
 		// switchState y no resetState: el primer mapa lo crea Main con los argumentos de arranque,
 		// y resetState los volveria a aplicar (-from, -warp-from o la posicion guardada)
@@ -162,9 +174,10 @@ class OverworldState extends MusicBeatState
 	 * Llamado al terminar una cancion lanzada desde el overworld. Con `misses` y `accuracy` (0-1) de
 	 * la partida se mira tambien la salida secreta del nivel (sin fallos o con precision minima).
 	 */
-	public static function completeCurrentNode(?misses:Int = -1, ?accuracy:Float = 0)
+	/** Marca el nivel jugado como superado. Devuelve la EXP ganada: solo la primera vez que se supera (0 si no). */
+	public static function completeCurrentNode(?misses:Int = -1, ?accuracy:Float = 0):Int
 	{
-		if (!fromOverworld || lastLevelNode == null) return;
+		if (!fromOverworld || lastLevelNode == null) return 0;
 
 		var firstTime:Bool = !OverworldData.isCompleted(curWorld, lastLevelNode);
 		OverworldData.setCompleted(curWorld, lastLevelNode);
@@ -183,6 +196,9 @@ class OverworldState extends MusicBeatState
 		// primera vez que se saca su salida secreta, y entonces solo lo que abre ella)
 		if (firstTime) pendingReveal = [curWorld, lastLevelNode];
 		else if (secretNow) pendingReveal = [curWorld, lastLevelNode + OverworldData.SECRET];
+
+		// EXP (la moneda de las tiendas de Gaster): una vez por nivel, aunque luego se reinicie el mundo con R
+		return (firstTime && node != null && node.type == 'level') ? OverworldData.awardLevelXP(curWorld, node.id) : 0;
 	}
 
 	/** Al volver al mapa se avisa de que se acaba de sacar una salida secreta. */
@@ -193,6 +209,9 @@ class OverworldState extends MusicBeatState
 	 * consigue, p. ej. chaos al reunir las 7 esmeraldas. PlayState la vuelve a false al empezar.
 	 */
 	public static var songSecret:Bool = false;
+
+	/** Llaves recogidas en la cancion que se esta jugando (p. ej. la de Bad Day): se dan al acabarla. */
+	public static var songKeys:Array<String> = [];
 
 	/**
 	 * Vuelve al mapa (usado por PlayState, pausa y game over): el mapa se abre con el iris y pone su
@@ -282,7 +301,7 @@ class OverworldState extends MusicBeatState
 			irisOpenNext = false;
 			fadeOpenNext = false;
 			FlxTransitionableState.skipNextTransOut = false;
-			var msg:String = 'NO SE PUDO CARGAR EL MUNDO "$curWorld"\n\nassets/shared/overworlds/$curWorld.json\n\nACCEPT: abrir el editor de mundos\nBACK: menu principal';
+			var msg:String = 'COULD NOT LOAD WORLD "$curWorld"\n\nassets/shared/overworlds/$curWorld.json\n\nACCEPT: open the world editor\nBACK: main menu';
 			FlxTransitionableState.skipNextTransIn = true;
 			MusicBeatState.switchState(new ErrorState(msg,
 				function() MusicBeatState.switchState(new states.editors.OverworldEditorState(curWorld)),
@@ -346,7 +365,7 @@ class OverworldState extends MusicBeatState
 		if (secretMessage)
 		{
 			secretMessage = false;
-			showError('¡Salida secreta!', 0xFFFFD84A);
+			showError('Secret exit!', 0xFFFFD84A);
 		}
 
 		if (worldFile.music != null && worldFile.music.length > 0)
@@ -534,7 +553,8 @@ class OverworldState extends MusicBeatState
 		bakeStillSprites(spritesFront);
 
 		// antes de dibujar nodos y caminos: un nodo 'world' recien superado cambia los dos
-		buildPaths(collectRevealNodes());
+		revealList = collectRevealNodes();
+		buildPaths(revealList);
 
 		// Los nodos se dibujan siempre, estén o no accesibles: lo que se revela al
 		// desbloquear es el camino, igual que en Super Mario World.
@@ -542,7 +562,20 @@ class OverworldState extends MusicBeatState
 		{
 			var completed:Bool = OverworldData.isCompleted(curWorld, node.id);
 			var hasDoneAnim:Bool = node.animDone != null && node.animDone.length > 0;
-			var anim:String = (completed && hasDoneAnim) ? node.animDone : node.anim;
+			// una puerta que se acaba de abrir sale cerrada y hace su animacion 'unlock' (si su imagen la tiene)
+			var opening:Bool = hasDoneAnim && doorsOpening.contains(node.id) && hasUnlockAnim(node.image);
+			var onArrival:Bool = false;
+			if (OverworldData.isKeyed(node))
+			{
+				// un nodo con llave se ve abierto (animDone) cuando, ademas de tener la llave, ya se ve un camino
+				// hasta el; si eso pasa ahora, hace 'unlock' cuando el camino que se revela llega a el
+				var before:Bool = keyedOpen(node, revealList);
+				var now:Bool = keyedOpen(node, null);
+				opening = hasDoneAnim && now && !before && hasUnlockAnim(node.image);
+				onArrival = opening;
+				completed = before || (now && !opening);
+			}
+			var anim:String = (completed && hasDoneAnim && !opening) ? node.animDone : node.anim;
 
 			var spr:FlxSprite = buildSprite(node.image, anim, node.fps);
 			placeNodeSprite(spr, node);
@@ -550,9 +583,13 @@ class OverworldState extends MusicBeatState
 			if (node.image == null || node.image.length < 1) spr.visible = false;
 			nodesGroup.add(spr);
 			nodeSprites.set(node.id, spr);
+			if (opening) doorUnlocks.push({sprite: spr, node: node, onArrival: onArrival});
 			// un nivel superado sin animDone se queda igual, como en SMW (el usuario no quiere
 			// marcas encima): lo dicen los caminos abiertos y el HUD (SUPERADO)
 		}
+		// nada que revelar: se abren en cuanto se abre el iris (si no, la animacion pasaria sin verse)
+		if (!revealing && doorUnlocks.length > 0)
+			new FlxTimer().start(IRIS_OPEN_TIME + REVEAL_DELAY, function(_) playDoorUnlocks(true));
 
 		// jugador
 		player = new FlxSprite();
@@ -579,7 +616,7 @@ class OverworldState extends MusicBeatState
 		var start:OverworldNodeFile = getCurrentNode();
 		if (start == null)
 		{
-			errorTxt = new FlxText(0, 0, FlxG.width, 'Este mundo no tiene ningun nodo desbloqueado', 20);
+			errorTxt = new FlxText(0, 0, FlxG.width, 'This world has no unlocked nodes', 20);
 			errorTxt.setFormat(Paths.font('vcr.ttf'), 20, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 			errorTxt.screenCenter();
 			errorTxt.cameras = [camHUD];
@@ -648,12 +685,15 @@ class OverworldState extends MusicBeatState
 		spr.setPosition(x, y);
 	}
 
-	/** Las imagenes de nodo sobre las que BF se pone de pie: tuberias, castillos y estrellas. */
+	/** Las imagenes de nodo sobre las que BF se pone de pie: tuberias, castillos, fortalezas, casas, interruptores,
+	 * estrellas y puertas (las de overworld/ y las de SMW de overworld/nodes/). */
 	public static function isStandOnImage(image:String):Bool
 	{
 		if (image == null) return false;
 		var lower:String = image.toLowerCase();
-		return lower.indexOf('pipe') > -1 || lower.indexOf('castle') > -1 || lower.indexOf('star') > -1;
+		for (word in ['pipe', 'castle', 'fortress', 'house', 'switch', 'star', 'door'])
+			if (lower.indexOf(word) > -1) return true;
+		return false;
 	}
 
 	static var bodyShiftCache:Map<String, Float> = new Map<String, Float>();
@@ -885,7 +925,10 @@ class OverworldState extends MusicBeatState
 	 */
 	function collectRevealNodes():Array<String>
 	{
-		var result:Array<String> = syncWorldNodes();
+		doorsOpening = syncDoorNodes();
+		var keyed:Array<String> = syncKeyNodes();
+		// "id#key": isUnlocked lo ignora para saber como estaba antes de tener la llave
+		var result:Array<String> = syncWorldNodes().concat(doorsOpening).concat([for (id in keyed) id + OverworldData.KEYED]);
 		if (pendingReveal != null && pendingReveal[0] == curWorld && !result.contains(pendingReveal[1]))
 			result.push(pendingReveal[1]);
 		pendingReveal = null;
@@ -903,6 +946,91 @@ class OverworldState extends MusicBeatState
 	/** Los mundos por encima del actual en la pila: un nodo que lleve a ellos es una salida. */
 	function parentWorlds():Array<String>
 		return [for (entry in worldStack) entry[0]];
+
+	/**
+	 * Abre las puertas cuya llave ya se tiene (se ha ganado en una cancion): las marca como completadas y
+	 * devuelve sus ids, asi lo que abren se revela como al superar un nivel y la puerta sale abierta.
+	 */
+	function syncDoorNodes():Array<String>
+	{
+		var newly:Array<String> = [];
+		for (node in worldFile.nodes)
+		{
+			if (node.type != 'door' || !OverworldData.hasKey(node.key) || OverworldData.isCompleted(curWorld, node.id)) continue;
+			OverworldData.setCompleted(curWorld, node.id);
+			newly.push(node.id);
+		}
+		return newly;
+	}
+
+	/**
+	 * Abre los nodos con llave (que no son puertas, p. ej. la tienda de Gaster del mundo 1) cuya llave ya se tiene:
+	 * los apunta como "id#key" y devuelve sus ids, asi sus caminos se revelan y su sprite hace 'unlock'.
+	 */
+	function syncKeyNodes():Array<String>
+	{
+		var newly:Array<String> = [];
+		for (node in worldFile.nodes)
+		{
+			if (!OverworldData.isKeyed(node) || !OverworldData.hasKey(node.key)) continue;
+			if (OverworldData.isCompleted(curWorld, node.id + OverworldData.KEYED)) continue;
+			OverworldData.setCompleted(curWorld, node.id + OverworldData.KEYED);
+			newly.push(node.id);
+		}
+		return newly;
+	}
+
+	/**
+	 * Las puertas abiertas al volver al mapa y los nodos con llave que se acaban de ver abiertos, con sus sprites:
+	 * hacen su animacion 'unlock' al revelarse (las puertas con el primer "boom"; los nodos con llave, `onArrival`,
+	 * cuando el camino que se revela llega a ellos).
+	 */
+	var doorsOpening:Array<String> = [];
+	var doorUnlocks:Array<{sprite:FlxSprite, node:OverworldNodeFile, onArrival:Bool}> = [];
+
+	/** Lo que se ha superado o abierto al volver al mapa (collectRevealNodes): "como estaba antes" para isUnlocked. */
+	var revealList:Array<String> = [];
+
+	/** Un nodo con llave se ve abierto si se tiene su llave (ya apuntada) y se ve algun camino hasta el. */
+	function keyedOpen(node:OverworldNodeFile, ignore:Array<String>):Bool
+	{
+		if (!OverworldData.isUnlocked(curWorld, worldFile, node, ignore)) return false;
+		for (pth in worldFile.paths)
+			if ((pth.a == node.id || pth.b == node.id) && isPathOpen(pth, ignore)) return true;
+		return false;
+	}
+
+	/** Si la imagen tiene la animacion de abrirse ("unlock0000"...; p. ej. overworld/gb_void). */
+	static function hasUnlockAnim(image:String):Bool
+		return image != null && image.length > 0 && OverworldData.hasAtlas(image) && atlasFrames(image).getByName('unlock0000') != null;
+
+	/**
+	 * Las puertas recien abiertas pasan de cerradas a abiertas con su animacion 'unlock' (una vez). `all`: tambien
+	 * los nodos con llave que esperan a su camino (al saltarse el revelado o si no hay nada que revelar).
+	 */
+	function playDoorUnlocks(?all:Bool = false)
+	{
+		for (entry in doorUnlocks.copy())
+			if (all || !entry.onArrival) startUnlock(entry);
+	}
+
+	/** Los nodos con llave a los que acaba de llegar un camino revelado (ids de la oleada terminada). */
+	function playArrivalUnlocks(ids:Array<String>)
+	{
+		for (entry in doorUnlocks.copy())
+			if (entry.onArrival && ids.contains(entry.node.id)) startUnlock(entry);
+	}
+
+	function startUnlock(entry:{sprite:FlxSprite, node:OverworldNodeFile, onArrival:Bool})
+	{
+		doorUnlocks.remove(entry);
+		var spr:FlxSprite = entry.sprite;
+		var fps:Int = entry.node.fps > 0 ? entry.node.fps : 6;
+		spr.animation.addByPrefix('unlock', 'unlock', fps, false);
+		spr.animation.addByPrefix('open', entry.node.animDone, fps, true);
+		spr.animation.finishCallback = function(name:String) if (name == 'unlock') spr.animation.play('open');
+		spr.animation.play('unlock');
+	}
 
 	/** Marca como superados los nodos 'world' cuyo mundo ya esta completo y devuelve sus ids. */
 	function syncWorldNodes():Array<String>
@@ -974,6 +1102,8 @@ class OverworldState extends MusicBeatState
 
 	/** Oleadas de caminos por revelar; cada camino es su lista de puntitos en orden de aparicion. */
 	var revealWaves:Array<Array<Array<FlxSprite>>> = [];
+	/** Los nodos a los que llega cada oleada (para los nodos con llave que se abren al llegarles su camino). */
+	var waveTargets:Array<Array<String>> = [];
 	var revealStep:Int = 0;
 	var revealTimer:Float = 0;
 	var revealing:Bool = false;
@@ -987,7 +1117,9 @@ class OverworldState extends MusicBeatState
 	{
 		var known:Map<String, Bool> = new Map<String, Bool>();
 		for (node in worldFile.nodes)
-			if (OverworldData.isUnlocked(curWorld, worldFile, node, revealNodes)) known.set(node.id, true);
+			// un nodo con llave solo cuenta si ya se veia abierto: asi su camino crece hacia el, no desde el
+			if (OverworldData.isKeyed(node) ? keyedOpen(node, revealNodes) : OverworldData.isUnlocked(curWorld, worldFile, node, revealNodes))
+				known.set(node.id, true);
 
 		var pending:Array<OverworldPathFile> = newPaths.copy();
 		while (pending.length > 0)
@@ -1010,12 +1142,18 @@ class OverworldState extends MusicBeatState
 			// caminos sin contacto con nada abierto (desbloqueos a distancia): todos a la vez
 			if (wave.length < 1)
 			{
-				for (pth in pending) wave.push(buildPathDots(pth, true));
+				for (pth in pending)
+				{
+					wave.push(buildPathDots(pth, true));
+					reachedNow.push(pth.a);
+					reachedNow.push(pth.b);
+				}
 				pending = [];
 			}
 
 			for (id in reachedNow) known.set(id, true);
 			revealWaves.push(wave);
+			waveTargets.push(reachedNow);
 		}
 
 		revealing = true;
@@ -1045,7 +1183,11 @@ class OverworldState extends MusicBeatState
 			if (shown)
 			{
 				// como en Mario's Madness: un "boom" al abrirse cada tanda de caminos
-				if (revealStep == 0) sfx(SFX_UNLOCK);
+				if (revealStep == 0)
+				{
+					sfx(SFX_UNLOCK);
+					playDoorUnlocks(); // la puerta se abre con el primer "boom"
+				}
 				revealStep++;
 				revealTimer += REVEAL_DOT_TIME;
 				continue;
@@ -1053,11 +1195,14 @@ class OverworldState extends MusicBeatState
 
 			// oleada terminada: la siguiente sale tras una pausa de un puntito
 			revealWaves.shift();
+			var arrived:Array<String> = waveTargets.shift();
+			if (arrived != null) playArrivalUnlocks(arrived);
 			revealStep = 0;
 			revealTimer += REVEAL_DOT_TIME;
 			if (revealWaves.length < 1)
 			{
 				revealing = false;
+				playDoorUnlocks(true); // lo que quedara por abrir
 				endRevealFocus();
 				startAutoWalk();
 			}
@@ -1122,7 +1267,9 @@ class OverworldState extends MusicBeatState
 				for (dot in dots) dot.visible = true;
 
 		revealWaves = [];
+		waveTargets = [];
 		revealing = false;
+		playDoorUnlocks(true); // si se salto el revelado antes de que llegaran
 		endRevealFocus();
 		startAutoWalk();
 	}
@@ -1541,8 +1688,8 @@ class OverworldState extends MusicBeatState
 		nameTxt.cameras = [camHUD];
 		add(nameTxt);
 
-		var backHint:String = returnToEditor ? 'BACK: volver al editor' : 'BACK: menu';
-		hintTxt = new FlxText(10, FlxG.height - 22, FlxG.width - 20, 'ACCEPT: entrar    $backHint    R dos veces: reiniciar este mundo y sus submundos', 14);
+		var backHint:String = returnToEditor ? 'BACK: back to the editor' : 'BACK: menu';
+		hintTxt = new FlxText(10, FlxG.height - 22, FlxG.width - 20, 'ACCEPT: enter    $backHint    R twice: reset this world and its subworlds', 14);
 		hintTxt.setFormat(Paths.font('vcr.ttf'), 14, 0xFFCCCCCC, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		hintTxt.cameras = [camHUD];
 		add(hintTxt);
@@ -1551,7 +1698,7 @@ class OverworldState extends MusicBeatState
 		var count:Array<Int> = OverworldData.levelCount(curWorld, worldFile, parentWorlds());
 		if (count[1] > 0)
 		{
-			var progressTxt:FlxText = new FlxText(10, FlxG.height - 44, FlxG.width - 20, 'Superados: ${count[0]}/${count[1]}', 18);
+			var progressTxt:FlxText = new FlxText(10, FlxG.height - 44, FlxG.width - 20, 'Cleared: ${count[0]}/${count[1]}', 18);
 			progressTxt.setFormat(Paths.font('vcr.ttf'), 18, count[0] >= count[1] ? DONE_COLOR : FlxColor.WHITE, RIGHT,
 				FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 			progressTxt.cameras = [camHUD];
@@ -1562,7 +1709,7 @@ class OverworldState extends MusicBeatState
 		var secrets:Array<Int> = OverworldData.secretCount(curWorld, worldFile);
 		if (secrets[1] > 0)
 		{
-			var secretTxt:FlxText = new FlxText(10, FlxG.height - 22, FlxG.width - 20, 'Secretos: ${secrets[0]}/${secrets[1]}', 14);
+			var secretTxt:FlxText = new FlxText(10, FlxG.height - 22, FlxG.width - 20, 'Secrets: ${secrets[0]}/${secrets[1]}', 14);
 			secretTxt.setFormat(Paths.font('vcr.ttf'), 14, secrets[0] >= secrets[1] ? SECRET_COLOR : 0xFFCCCCCC, RIGHT,
 				FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 			secretTxt.cameras = [camHUD];
@@ -1630,6 +1777,8 @@ class OverworldState extends MusicBeatState
 				var bmp:openfl.display.BitmapData = new openfl.display.BitmapData(FlxG.stage.stageWidth, FlxG.stage.stageHeight, false, 0xFF000000);
 				bmp.draw(FlxG.stage);
 				sys.io.File.saveBytes('world_shot.png', bmp.encode(bmp.rect, new openfl.display.PNGEncoderOptions()));
+				// con -test-key, lo que se ha abierto en este mundo (de prueba) no se queda en la partida
+				if (OverworldData.testKeys.length > 0) OverworldData.resetProgress(curWorld);
 				Sys.exit(0);
 			}
 		}
@@ -1672,7 +1821,7 @@ class OverworldState extends MusicBeatState
 			}
 			resetAskedAt = now;
 			sfx(SFX_WRONG);
-			showError('Pulsa R otra vez para borrar el progreso de este mundo y sus submundos');
+			showError('Press R again to erase the progress of this world and its subworlds');
 			return;
 		}
 
@@ -1721,7 +1870,7 @@ class OverworldState extends MusicBeatState
 		{
 			if (!OverworldData.exists(exit.world))
 			{
-				failExit('Por aqui se ira a otro mundo ("${exit.world}"), que todavia no existe');
+				failExit('This way leads to another world ("${exit.world}") that does not exist yet');
 				return;
 			}
 
@@ -1753,7 +1902,7 @@ class OverworldState extends MusicBeatState
 		var target:Array<String> = worldStack.length > 0 ? worldStack.pop() : OverworldData.findParentWorld(curWorld);
 		if (target == null)
 		{
-			failExit('Esta salida no lleva a ningun mapa:\nponle un "Mundo destino" o haz que un nodo "world" lleve aqui');
+			failExit('This exit does not lead to any map:\nset its target world in the editor or make a "world" node lead here');
 			return;
 		}
 
@@ -1880,7 +2029,7 @@ class OverworldState extends MusicBeatState
 			if (lockedAhead) sfx(SFX_WRONG);
 			// un nodo de "N superados": se dice cuantos faltan
 			if (needAhead != null)
-				showError('Hacen falta ${needAhead.needLevels} superados en este mundo (llevas ${OverworldData.completedCount(curWorld, worldFile)})');
+				showError('You need ${needAhead.needLevels} cleared levels in this world (you have ${OverworldData.completedCount(curWorld, worldFile)})');
 			return;
 		}
 
@@ -2126,10 +2275,13 @@ class OverworldState extends MusicBeatState
 
 		var text:String = node.name != null && node.name.length > 0 ? node.name : node.id;
 		if (node.type == 'world') text += '  >>';
-		if (node.type == 'warp') text += '  (ENTER: viajar)';
-		if (OverworldData.canBeCompleted(node) && OverworldData.isCompleted(curWorld, node.id)) text += '  <g>SUPERADO<g>';
+		if (node.type == 'warp') text += '  (ENTER: travel)';
+		if (node.type == 'shop') text += '  (ENTER: enter)';
+		if (node.type == 'door')
+			text += OverworldData.isCompleted(curWorld, node.id) ? '  <g>OPEN<g>' : '  (locked: needs a key)';
+		else if (OverworldData.canBeCompleted(node) && OverworldData.isCompleted(curWorld, node.id)) text += '  <g>CLEARED<g>';
 		if (OverworldData.hasSecret(worldFile, node))
-			text += OverworldData.isSecretCompleted(curWorld, node.id) ? '  <y>SECRETO<y>' : '  <y>?<y>';
+			text += OverworldData.isSecretCompleted(curWorld, node.id) ? '  <y>SECRET<y>' : '  <y>?<y>';
 
 		nameTxt.applyMarkup(text, DONE_MARKUP);
 	}
@@ -2146,7 +2298,7 @@ class OverworldState extends MusicBeatState
 				if (node.world == null || node.world.length < 1 || !OverworldData.exists(node.world))
 				{
 					sfx(SFX_WRONG);
-					showError('El mundo "${node.world}" no existe');
+					showError('World "${node.world}" does not exist');
 					return;
 				}
 
@@ -2178,7 +2330,7 @@ class OverworldState extends MusicBeatState
 				if (node.song == null || node.song.length < 1)
 				{
 					sfx(SFX_WRONG);
-					showError('Este nodo no tiene cancion asignada');
+					showError('This level has no song assigned');
 					return;
 				}
 				startLevel(node);
@@ -2186,9 +2338,48 @@ class OverworldState extends MusicBeatState
 			case 'warp':
 				warpTo(node);
 
+			case 'door':
+				if (!OverworldData.isCompleted(curWorld, node.id))
+				{
+					sfx(SFX_WRONG);
+					showError('The door is locked: you need a key');
+				}
+
+			case 'shop':
+				enterShop(node);
+
 			default:
 				sfx(SFX_WRONG);
 		}
+	}
+
+	/** Tienda (con ENTER): se cierra el iris y se abre la tienda; al salir se vuelve aqui. */
+	function enterShop(node:OverworldNodeFile)
+	{
+		if (node.shop == null || node.shop.length < 1)
+		{
+			sfx(SFX_WRONG);
+			showError('This shop node has no shop assigned');
+			return;
+		}
+		busy = true;
+		sfx(SFX_ENTER);
+		savePosition();
+		if (FlxG.sound.music != null && FlxG.sound.music.playing) FlxG.sound.music.fadeOut(0.7, 0);
+		var shop:String = node.shop;
+		irisClose(function()
+		{
+			FlxTransitionableState.skipNextTransIn = true;
+			FlxTransitionableState.skipNextTransOut = true;
+			MusicBeatState.switchState(new GasterShopState(shop));
+		});
+	}
+
+	/** Vuelve al mapa desde una tienda (al mismo nodo), abriendo con el iris. */
+	public static function backFromShop()
+	{
+		if (FlxG.sound.music != null) FlxG.sound.music.stop();
+		switchToMap();
 	}
 
 	/**
@@ -2202,7 +2393,7 @@ class OverworldState extends MusicBeatState
 		if (node.world == null || node.world.length < 1 || !OverworldData.exists(node.world))
 		{
 			sfx(SFX_WRONG);
-			showError(node.world != null && node.world.length > 0 ? 'Este mundo todavia no existe' : 'Este warp no lleva a ningun mundo');
+			showError(node.world != null && node.world.length > 0 ? 'This world does not exist yet' : 'This warp does not lead anywhere');
 			return;
 		}
 
@@ -2438,7 +2629,7 @@ class OverworldState extends MusicBeatState
 		catch (e:haxe.Exception)
 		{
 			sfx(SFX_WRONG);
-			showError('No se pudo cargar "$songName":\n${e.message}');
+			showError('Could not load "$songName":\n${e.message}');
 			return;
 		}
 

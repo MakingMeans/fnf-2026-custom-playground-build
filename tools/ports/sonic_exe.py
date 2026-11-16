@@ -1,7 +1,8 @@
 """Importa "chaos" (FLEETWAY) y "endless-us" (MAJIN) de Vs Sonic.exe (carpeta sanic) a este juego.
 
-Uso:  python tools/ports/sonic_exe.py [carpeta sanic]
+Uso:  python tools/ports/sonic_exe.py [carpeta sanic] [--pause]
       (por defecto C:/Users/david/Downloads/QsychEngine2.0/QsychEngine2.0/sanic)
+      --pause: solo copia lo del menu de pausa (substates/SonicPauseSubState.hx), sin rehacer las canciones
 Necesita Pillow (para pasar las imagenes .webp a .png) y numpy.
 
 El mod es un Psych 1.0.4 modificado y compilado. Charts, personajes, escenarios y scripts van DENTRO
@@ -31,7 +32,7 @@ import numpy as np
 from PIL import Image, ImageFilter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SRC = sys.argv[1] if len(sys.argv) > 1 else 'C:/Users/david/Downloads/QsychEngine2.0/QsychEngine2.0/sanic'
+SRC = next((a for a in sys.argv[1:] if not a.startswith('--')), 'C:/Users/david/Downloads/QsychEngine2.0/QsychEngine2.0/sanic')
 EXE = os.path.join(SRC, 'Vs Sonic.exe')
 SHARED = os.path.join(ROOT, 'assets', 'base_game', 'shared')
 SONGS = os.path.join(ROOT, 'assets', 'base_game', 'songs')
@@ -685,10 +686,34 @@ def port_endless(mod):
     print('endless-us: %d notas, %d eventos (+ events.json)' % (notes, events))
 
 
+# ---------------------------------------------------------------- menu de pausa
+# La pausa del mod va compilada en el exe (states.substates.PauseSubState, sin script): solo quedan sus
+# imagenes (pixel art: titulo PAUSE, panel negro con borde en sierra, opciones, raya de la elegida y un
+# Sonic en miniatura por cancion), su musica y los sonidos de menu. substates/SonicPauseSubState.hx la rehace.
+PAUSE_IMAGES = ['pauseText', 'pauseText-normal', 'separator', 'selected', 'continue', 'restart', 'options', 'exit']
+PAUSE_MINIS = {'chaos': 'chaos', 'endless-us': 'endless-us'}  # cancion -> mini-sonics/<nombre> del mod
+PAUSE_SOUNDS = {'assets/shared/sounds/scrollMenu.ogg': 'scrollMenu', 'assets/shared/sounds/confirmMenu.ogg': 'confirmMenu',
+                'assets/shared/sounds/cancelMenu.ogg': 'cancelMenu'}
+
+
+def port_pause(mod):
+    for name in PAUSE_IMAGES:
+        port_image(mod, 'assets/exe/pause/' + name, 'sonic_exe/pause/' + name)
+    for song, mini in PAUSE_MINIS.items():
+        port_image(mod, 'assets/exe/pause/mini-sonics/' + mini, 'sonic_exe/pause/mini/' + song)
+    write('music/sonic_exe/pause.ogg', mod.read('assets/exe/music/pause.ogg'))
+    for asset, name in PAUSE_SOUNDS.items():
+        write('sounds/sonic_exe/%s.ogg' % name, mod.read(asset))
+
+
 def main():
     if not os.path.isdir(SRC):
         raise SystemExit('No existe la carpeta del mod: ' + SRC)
     mod = Mod(SRC)
+    port_pause(mod)
+    if '--pause' in sys.argv:
+        print('Vs Sonic.exe: pausa, %d archivos' % len(set(copied)))
+        return
     port_common(mod)
     port_chaos(mod)
     port_endless(mod)

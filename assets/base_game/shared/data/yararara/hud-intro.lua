@@ -7,7 +7,6 @@ function onCreatePost()
     end
     setProperty('uiGroup.visible', false)
     setProperty('uiGroup.alpha', 0)
-    setProperty('botplayTxt.visible', false) 
 end
 
 function onStepHit()

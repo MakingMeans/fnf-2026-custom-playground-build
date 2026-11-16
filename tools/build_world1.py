@@ -53,6 +53,7 @@ OWN_DIR = os.path.join(IMAGES, 'overworld', 'world1')
 SHEET = os.path.join(ROOT, 'art', 'overworld_source', 'smw_overworld_tiles.png')
 MM_WARPZONE = 'C:/Users/david/Downloads/QsychEngine2.0/QsychEngine2.0/mamami/assets/images/warpzone/1'
 MM_FISH = MM_WARPZONE + '/bg2'
+MM_GB = os.path.join(os.path.dirname(MM_WARPZONE), '4')  # el nivel corrupto de Game Boy del mundo 4
 MM_ISLAND = MM_WARPZONE + '/bg1.png'
 WEEK = 'world1'
 
@@ -62,12 +63,24 @@ W, H = 416, 224  # cabe en la pantalla del juego (427x240 a zoom 3): la camara s
 # ------------------------------------------------------------------------------------------ grafo
 # Como en SMW: los niveles son amarillos y el que tiene salida secreta, rojo (no cambian al superarlos), y
 # brillan cambiando un poco de color (overworld/level_dot, ver level_dot_frames)
+# Hay dos tamanos, como en SMW y Mario's Madness: grande (12x10) y mediano (8x6); los niveles se reparten entre
+# los dos (16/11/2026, a peticion del usuario) y el punto de aparicion es mediano y blanco
 LEVEL_LOOK = {'image': 'overworld/level_dot', 'anim': 'yellow', 'animDone': '', 'fps': 6}
+LEVEL_MID_LOOK = {'image': 'overworld/level_dot', 'anim': 'mid_yellow', 'animDone': '', 'fps': 6}
 SECRET_LOOK = {'image': 'overworld/level_dot', 'anim': 'red', 'animDone': '', 'fps': 6}
+# el punto de aparicion: la casa de Yoshi azul de SMW (overworld/nodes, tools/build_node_sprites.py)
+START_LOOK = {'image': 'overworld/nodes/smw_yoshi_house', 'anim': 'idle', 'animDone': '', 'fps': 0}
 CASTLE_LOOK = {'image': 'overworld/castle', 'anim': 'idle', 'animDone': 'dead', 'fps': 0}  # derrumbado al superarlo
 DOT_LOOK = {'image': 'overworld/dot', 'anim': 'idle', 'animDone': '', 'fps': 6}
 PIPE_LOOK = {'image': 'overworld/pipe', 'anim': 'idle', 'animDone': '', 'fps': 0}
+# Regla del usuario (16/11/2026): la tuberia que abre el castillo de un mundo es gris (warpzone/pipegray de
+# Mario's Madness, sin la variante con glitch "pibby"); se coloca igual que la verde (mismo tamano)
+PIPE_GRAY_LOOK = {'image': 'overworld/pipegray', 'anim': 'idle', 'animDone': '', 'fps': 0}
 STAR_LOOK = {'image': 'overworld/star', 'anim': 'idle', 'animDone': '', 'fps': 8}
+# la tienda de Gaster (16/11/2026, plan del usuario): sin la llave de Bad Day es un nodo normal pero blanco, sin
+# camino; con ella, el vacio del nivel corrupto de Mario's Madness sustituye al nodo blanco (gb_void_frames:
+# 'closed' -> 'unlock' -> 'open'). Las puertas dibujadas (door_frames: key_door, gaster_door) ya no se usan aqui.
+SHOP_LOOK = {'image': 'overworld/gb_void', 'anim': 'closed', 'animDone': 'open', 'fps': 6}
 HIDDEN_LOOK = {'image': '', 'anim': '', 'animDone': '', 'fps': 0}  # una salida fuera de la pantalla no se ve
 
 # Posiciones (centro del nodo, en pixeles del mapa)
@@ -76,15 +89,19 @@ CROSS = 132      # Chaos, al pie de la meseta
 TOP = 60         # fila de la meseta: Last Course, castillo y estrella
 X_STAIRS = 216   # Bad Day, Chaos, la escalera y Last Course
 X_NORTH = 120    # el camino a nado hacia el islote de Endless
+X_SHOP, Y_SHOP = 364, 136  # la tienda de Gaster, a la derecha; el vacio no pisa el acantilado
+X_SHOP_TURN = 296           # donde su camino sube desde la fila de abajo
 
 
-def node(node_id, x, y, name, kind='level', song='', look=None, unlocked=False, unlocks=None, secret=None, secret_mode='fc', world=''):
+def node(node_id, x, y, name, kind='level', song='', look=None, unlocked=False, unlocks=None, secret=None, secret_mode='fc', world='',
+         key='', shop=''):
     data = {
         'id': node_id, 'x': x, 'y': y, 'type': kind,
         'image': '', 'anim': '', 'animDone': '', 'fps': 0,
         'name': name, 'song': song, 'week': WEEK if kind == 'level' else '', 'difficulty': '', 'world': world,
         'unlocked': unlocked, 'unlocks': unlocks or [],
         'needLevels': 0, 'secretUnlocks': secret or [], 'secretMode': secret_mode, 'secretMisses': 0, 'secretAccuracy': 95,
+        'key': key, 'shop': shop,
     }
     data.update(look or (LEVEL_LOOK if kind == 'level' else DOT_LOOK))
     return data
@@ -97,28 +114,34 @@ def path(a, b, points=None, road=True, move='walk', dots='overworld/dot', spacin
 
 def graph():
     nodes = [
-        node('inicio', 64, LOW, 'Inicio', kind='empty', unlocked=True),
+        node('inicio', 64, LOW, 'Start', kind='empty', look=START_LOOK, unlocked=True),
         # la tuberia lleva al mundo de las estrellas (el de viajar rapido entre mundos) y solo se abre al
         # derrotar el castillo; hasta entonces se ve, pero sin camino (15/11/2026, a peticion del usuario)
-        node('tuberia', 64, 136, 'Mundo de las estrellas', kind='warp', look=PIPE_LOOK, world='star_world'),
-        node('yararara', 136, LOW, 'YARARARA', song='yararara', unlocked=True, unlocks=['bad-day']),
+        node('tuberia', 64, 136, 'Star World', kind='warp', look=PIPE_GRAY_LOOK, world='star_world'),
+        node('yararara', 136, LOW, 'YARARARA', song='yararara', look=LEVEL_MID_LOOK, unlocked=True, unlocks=['bad-day']),
         node('bad-day', X_STAIRS, LOW, 'Bad Day', song='bad-day', unlocks=['chaos']),
+        # la tienda de Gaster: la abre la llave escondida en Bad Day (cae en la comoda al romperse la barra de
+        # vida: SuperBad.KEY_ID). Sin ella no se ve su camino; con ella, al volver al mapa se revela el camino
+        # desde Bad Day y el nodo blanco se vuelve el vacio (OverworldData.isKeyed, OverworldState.syncKeyNodes)
+        node('tienda', X_SHOP, Y_SHOP, "Gaster's Shop", kind='shop', look=SHOP_LOOK, shop='gaster_w1', key='world1_key'),
         # salida normal: la escalera a la meseta; salida secreta (7 esmeraldas, la decide la cancion): a
         # nado al norte. Por tener salida secreta es rojo, como en SMW
         node('chaos', X_STAIRS, CROSS, 'Chaos', song='chaos', look=SECRET_LOOK, unlocks=['last-course'], secret=['endless'], secret_mode='song'),
-        node('last-course', X_STAIRS, TOP, 'Last Course', song='last-course', unlocks=['castillo']),
+        node('last-course', X_STAIRS, TOP, 'Last Course', song='last-course', look=LEVEL_MID_LOOK, unlocks=['castillo']),
         node('castillo', 296, TOP, 'World of Chaos', song='world-of-chaos', look=CASTLE_LOOK, unlocks=['estrella', 'tuberia']),
         # la estrella del final lleva al mundo 2 (cuando exista, con una estrella que apunte de vuelta aqui)
-        node('estrella', 376, TOP, 'Hacia el mundo 2', kind='warp', look=STAR_LOOK, world='world2'),
-        node('endless', X_NORTH, 42, 'Endless', song='endless-us', unlocks=['salida-norte']),
+        node('estrella', 376, TOP, 'To World 2', kind='warp', look=STAR_LOOK, world='world2'),
+        node('endless', X_NORTH, 42, 'Endless', song='endless-us', look=LEVEL_MID_LOOK, unlocks=['salida-norte']),
         # salida fuera de la pantalla, a nado hacia el norte: lleva a otro mundo que aun no existe (BF vuelve)
-        node('salida-norte', X_NORTH, -24, 'Hacia el norte', kind='exit', look=HIDDEN_LOOK, world='world-secret'),
+        node('salida-norte', X_NORTH, -24, 'To the North', kind='exit', look=HIDDEN_LOOK, world='world-secret'),
     ]
     paths = [
         path('inicio', 'tuberia'),
         path('inicio', 'yararara'),
         path('yararara', 'bad-day'),
         path('bad-day', 'chaos'),
+        # el que dibujo el usuario: a la derecha, arriba y otra vez a la derecha hasta la tienda
+        path('bad-day', 'tienda', [[X_SHOP_TURN, LOW], [X_SHOP_TURN, Y_SHOP]]),
         # a la meseta: carretera normal; donde cruza el acantilado se pone sola una escalera y BF trepa
         # (OverworldTerrain), y en la hierba de arriba y de abajo es franja beis
         path('chaos', 'last-course'),
@@ -316,25 +339,24 @@ def decorate():
     eyed_pillar(376, 45, 30)
     eyed_pillar(224, 49, 26)
     eyed_pillar(96, 40, 20)  # en el islote, a la izquierda del camino de Endless
-    # la zona de la derecha de la isla, que estaba vacia: un grupo de columnas bajas
-    eyed_pillar(352, 150, 22)
-    eyed_pillar(368, 156, 28, flip=True)
+    # la zona de la derecha de la isla: una columna junto a la tienda de Gaster (el camino en L pasa por ahi)
+    eyed_pillar(386, 150, 26)
     # rocas en cuna, matorrales, piedrecitas y matas, lejos de caminos y nodos y enteros sobre la hierba
     # (a 4 px o mas del borde). Entre la fila de abajo y la de Chaos hay poco sitio: alli van bajitos
-    for x, y, flip in [(84, 141, False), (152, 141, True), (250, 146, False), (330, 160, True),
-                       (264, 40, True), (338, 66, False), (300, 126, False)]:
+    for x, y, flip in [(84, 141, False), (152, 141, True), (250, 146, False), (308, 148, True),
+                       (264, 40, True), (338, 66, False), (306, 111, False)]:
         put('rock', ROCK, x, y, flip)
-    for x, y in [(36, 128), (98, 176), (176, 176), (290, 140), (392, 172), (360, 180),
+    for x, y in [(36, 128), (98, 176), (176, 176), (276, 136), (392, 172), (360, 180),
                  (196, 112), (262, 72), (360, 42), (132, 34), (40, 150), (48, 156), (136, 112), (144, 112),
                  (330, 108), (342, 112), (388, 112), (200, 40), (330, 38), (250, 44),
-                 (264, 128), (272, 168), (304, 160),
+                 (264, 128), (272, 178), (304, 178),
                  # la derecha: matorrales sueltos alrededor de las columnas y las rocas
-                 (318, 178), (350, 166), (378, 176), (282, 154), (240, 176)]:
+                 (340, 178), (378, 176), (280, 148), (240, 176)]:
         put('bush', BUSH, x, y)
-    for x, y in [(102, 150), (190, 154), (270, 112), (350, 112), (300, 40), (240, 72), (320, 146), (256, 184)]:
+    for x, y in [(102, 150), (190, 154), (270, 112), (350, 112), (300, 40), (240, 72), (340, 170), (256, 184)]:
         put('pebble', PEBBLE, x, y)
-    for x, y in [(70, 122), (106, 180), (240, 120), (320, 120), (390, 150), (280, 50), (360, 60), (110, 50),
-                 (296, 176), (336, 132), (232, 160)]:
+    for x, y in [(70, 122), (106, 180), (240, 120), (284, 120), (398, 160), (280, 50), (360, 60), (110, 50),
+                 (326, 182), (232, 160)]:
         put('tuft', TUFT, x, y)
     # rocas blancas en el mar: las 8 de los lados del paso a nado del islote las puso el usuario
     for x, y in [(24, 16), (220, 2), (336, 0), (4, 90),
@@ -494,6 +516,139 @@ LEVEL_CYCLES = {
     'red': ('tile0003', [(232, 32, 0), (248, 72, 32), (248, 120, 88), (248, 120, 88), (248, 72, 32),
                          (232, 32, 0), (216, 0, 0)]),
 }
+# los medianos (tile0000 amarillo, tile0001 rojo) con el mismo brillo; el blanco, quieto (punto de aparicion).
+# Nombres con "mid_" delante: "yellow" como prefijo no debe coger tambien los medianos
+LEVEL_CYCLES['mid_yellow'] = ('tile0000', LEVEL_CYCLES['yellow'][1])
+LEVEL_CYCLES['mid_red'] = ('tile0001', LEVEL_CYCLES['red'][1])
+LEVEL_CYCLES['mid_white'] = ('tile0000', [(248, 248, 248)])
+
+
+def door_frames():
+    """Puerta con candado (16x20): madera con contorno negro y un candado amarillo; abierta, la hoja girada
+    a un lado y el hueco negro. Y la puerta gris de la tienda de Gaster (la misteriosa de Undertale)."""
+    wood, wood_dark, wood_light = (184, 120, 72), (136, 80, 40), (216, 152, 96)
+    gold, gold_dark = (248, 208, 0), (184, 136, 0)
+    gray, gray_dark, gray_light = (152, 152, 168), (104, 104, 120), (200, 200, 216)
+
+    def frame(draw):
+        img = Image.new('RGBA', (16, 20), (0, 0, 0, 0))
+        px = img.load()
+
+        def put(x, y, c):
+            if 0 <= x < 16 and 0 <= y < 20:
+                px[x, y] = c + (255,)
+        draw(put)
+        return img
+
+    def arch(put, fill, edge, light):
+        # marco con el arco de arriba redondeado y contorno negro
+        for y in range(1, 19):
+            for x in range(2, 14):
+                if (y == 1 and x in (2, 3, 12, 13)) or (y == 2 and x in (2, 13)):
+                    continue
+                put(x, y, fill)
+        for y in range(1, 19):
+            put(1 if y > 2 else 2, y, BLACK)
+            put(14 if y > 2 else 13, y, BLACK)
+        for x in range(3, 13):
+            put(x, 0, BLACK)
+        put(2, 1, BLACK); put(13, 1, BLACK)
+        for x in range(1, 15):
+            put(x, 19, BLACK)
+        for y in range(2, 19):
+            put(2, y, light)
+            put(13, y, edge)
+
+    def closed(put):
+        arch(put, wood, wood_dark, wood_light)
+        for y in range(3, 19, 4):  # tablas
+            for x in range(3, 13):
+                put(x, y, wood_dark)
+        for y in range(8, 14):  # candado
+            for x in range(6, 10):
+                put(x, y, gold)
+        for x in range(6, 10):
+            put(x, 13, gold_dark)
+        put(6, 7, BLACK); put(9, 7, BLACK); put(7, 6, BLACK); put(8, 6, BLACK)
+        put(7, 10, BLACK); put(8, 10, BLACK); put(7, 11, BLACK)
+
+    def opened(put):
+        arch(put, (16, 16, 24), (16, 16, 24), (40, 40, 56))
+        for y in range(2, 19):  # la hoja, girada contra el marco izquierdo
+            put(3, y, wood)
+            put(4, y, wood_dark)
+        put(5, 10, gold)
+
+    def gaster(put):
+        arch(put, gray, gray_dark, gray_light)
+        for y in range(4, 18):
+            put(7, y, gray_dark)  # junta entre las dos hojas
+        put(9, 11, BLACK); put(5, 11, BLACK)
+
+    return {'key_door': [('closed0000', frame(closed)), ('open0000', frame(opened))],
+            'gaster_door': [('idle0000', frame(gaster))]}
+
+
+def mm_frames(path_noext, prefix):
+    """Fotogramas (en orden) de un atlas Sparrow del mod cuyos nombres empiezan por prefix, a tamano completo."""
+    img = Image.open(path_noext + '.png').convert('RGBA')
+    found = []
+    for sub in ET.parse(path_noext + '.xml').getroot().iter('SubTexture'):
+        if not sub.get('name').startswith(prefix):
+            continue
+        x, y, w, h = (int(sub.get(k)) for k in ('x', 'y', 'width', 'height'))
+        frame = Image.new('RGBA', (int(sub.get('frameWidth', w)), int(sub.get('frameHeight', h))), (0, 0, 0, 0))
+        frame.paste(img.crop((x, y, x + w, y + h)), (-int(sub.get('frameX', 0)), -int(sub.get('frameY', 0))))
+        found.append((sub.get('name'), frame))
+    return [frame for _, frame in sorted(found, key=lambda item: item[0])]
+
+
+# Donde va gb_level respecto a gbaura, en pixeles del mapa: su WarpState los pone en (608, 321) y (602, 315)
+# a x3 escalando desde el centro, asi que el centro del nivel queda 2,8 px a la izquierda y 0,3 abajo del aura
+GB_LEVEL_AT = (12, 5)
+
+
+def white_level_dot():
+    """El nodo de nivel de siempre (og_mario/level_tiles tile0002, con su contorno negro) pero blanco y quieto."""
+    base = np.array(sparrow_frame('overworld/og_mario/level_tiles', 'tile0002'))
+    fill = base[..., 3].astype(bool) & (base[..., :3].sum(axis=2) > 120)
+    base[fill, :3] = (248, 248, 248)
+    return Image.fromarray(base, 'RGBA')
+
+
+def gb_void_frames():
+    """La tienda de Gaster del mundo 1 con el nivel corrupto del mundo 4 de Mario's Madness (warpzone/4/gbaura +
+    gb_level, a 6 fps): 'closed' = un nodo normal pero blanco; 'unlock' (una vez, al tener la llave) = como en su
+    WarpState, el vacio parpadea 1 s detras del nodo blanco y luego, ya sin el, la estatica se junta en un punto;
+    'open' = el vacio con el punto. Lienzo con el punto en el centro: el nodo (y BF) quedan encima de el."""
+    aura = mm_frames(MM_GB + '/gbaura', 'gbaura idle')
+    level = mm_frames(MM_GB + '/gb_level', 'gb level idle')
+    x0, y0, x1, y1 = level[-1].getbbox()
+    dot_x = GB_LEVEL_AT[0] + (x0 + x1) // 2
+    dot_y = GB_LEVEL_AT[1] + (y0 + y1) // 2
+    aw, ah = aura[0].size
+    half_w, half_h = max(dot_x, aw - dot_x), max(dot_y, ah - dot_y)
+    ox, oy = half_w - dot_x, half_h - dot_y  # donde va el aura en el lienzo
+
+    white = white_level_dot()
+
+    def compose(back, front, node=False):
+        img = Image.new('RGBA', (half_w * 2, half_h * 2), (0, 0, 0, 0))
+        if back is not None:
+            img.alpha_composite(back, (ox, oy))
+        if front is not None:
+            img.alpha_composite(front, (ox + GB_LEVEL_AT[0], oy + GB_LEVEL_AT[1]))
+        if node:
+            img.alpha_composite(white, (half_w - white.width // 2, half_h - white.height // 2))
+        return img
+
+    frames = [('closed0000', compose(None, None, True))]
+    # el vacio aparece parpadeando (FlxFlicker de 1 s cada 0,2 s en el mod) con el nodo blanco aun encima
+    frames += [('unlock%04d' % i, compose(aura[i % len(aura)] if i % 2 == 0 else None, None, True)) for i in range(6)]
+    # y la estatica se junta en el punto
+    frames += [('unlock%04d' % (6 + i), compose(aura[i % len(aura)], lv)) for i, lv in enumerate(level)]
+    frames += [('open%04d' % i, compose(a, level[-1])) for i, a in enumerate(aura)]
+    return frames
 
 
 def level_dot_frames():
@@ -511,6 +666,10 @@ def level_dot_frames():
 def sparrow_frame(key, name):
     if key == 'overworld/level_dot':  # se genera aqui (la vista previa puede ir antes de escribirlo)
         return dict(level_dot_frames())[name + '0000']
+    if key in ('overworld/key_door', 'overworld/gaster_door'):
+        return dict(door_frames()[key.split('/')[-1]])[name + '0000']
+    if key == 'overworld/gb_void':
+        return dict(gb_void_frames())[name + '0000']
     base = os.path.join(IMAGES, *key.split('/'))
     if not os.path.exists(base + '.xml'):
         base = os.path.join(OWN_DIR, key.split('/')[-1])
@@ -639,7 +798,7 @@ def main(args):
     sprites += [{'image': 'overworld/world1/fish', 'anim': 'idle', 'fps': 8, 'x': x, 'y': y, 'flipX': i % 2 == 1, 'flipY': False,
                  'scale': 1, 'alpha': 1, 'front': False} for i, (x, y) in enumerate(FISH)]
     world = {
-        'displayName': 'Mundo 1',
+        'displayName': 'World 1',
         'bg': SEA_KEY, 'bgAnim': 'idle', 'bgFps': 4, 'bgTile': True,
         'music': 'overworld/world1', 'zoom': 3, 'gridSize': 8, 'startNode': 'inicio',
         'player': 'overworld/overworld_bf', 'walkSpeed': 60,
@@ -650,6 +809,9 @@ def main(args):
     write_packed_atlas('props', prop_images())
     write_atlas('ladder', [('idle0000', ladder_frame())])
     write_atlas('level_dot', level_dot_frames(), per_row=7, folder=os.path.join(IMAGES, 'overworld'))
+    for name, frames in door_frames().items():
+        write_atlas(name, frames, per_row=2, folder=os.path.join(IMAGES, 'overworld'))
+    write_atlas('gb_void', gb_void_frames(), per_row=9, folder=os.path.join(IMAGES, 'overworld'))
     write_atlas('world1_sea', sea_frames(), per_row=2, folder=BG_DIR)
     copy_fish()
     copy_audio()
@@ -671,8 +833,9 @@ def main(args):
             for ext in ('png', 'xml'):
                 shutil.copyfile(os.path.join(BG_DIR, 'world1_sea.' + ext),
                                 os.path.join(build, 'images', 'overworld', 'backgrounds', 'world1_sea.' + ext))
-                shutil.copyfile(os.path.join(IMAGES, 'overworld', 'level_dot.' + ext),
-                                os.path.join(build, 'images', 'overworld', 'level_dot.' + ext))
+                for image in ('level_dot', 'key_door', 'gaster_door', 'gb_void'):
+                    shutil.copyfile(os.path.join(IMAGES, 'overworld', image + '.' + ext),
+                                    os.path.join(build, 'images', 'overworld', image + '.' + ext))
             print('-> ' + build)
 
 

@@ -141,6 +141,10 @@ def port_chart():
                 event[2] = CHARACTERS[event[2]]
             elif event[0] == 'playVideo':
                 event[1] = VIDEO_NAMES[event[1]]
+    # el video de entrada (playVideo en el segundo 0) lo abre intro-sync.hx antes de la cancion
+    for group in chart['events']:
+        group[1] = [e for e in group[1] if not (e[0] == 'playVideo' and e[1] == INTRO_VIDEO)]
+    chart['events'] = [group for group in chart['events'] if group[1]]
     write_text(os.path.join(SHARED, 'data', 'yararara', 'yararara-hard.json'), json.dumps(chart, indent='\t', ensure_ascii=False) + '\n')
 
 
@@ -188,6 +192,10 @@ def port_scripts():
         if name == 'hud-videos.lua':
             for old, new in VIDEO_NAMES.items():
                 text = replace_once(text, 'name = "%s",' % old, 'name = "%s",' % new, name) if ('name = "%s",' % old) in text else text
+        elif name == 'hud-intro.lua':
+            # el rotulo de botplay va dentro de uiGroup (que ya se oculta): el mod lo dejaba oculto para siempre,
+            # asi que con botplay no salia nunca
+            text = replace_once(text, "    setProperty('botplayTxt.visible', false) \n", '', name)
         elif name == 'event-hitting-mode.lua':
             text = replace_once(text, 'precacheSound("HIT");', 'precacheSound("yararara/hit");', name)
             text = replace_once(text, 'playSound("HIT", 1);', 'playSound("yararara/hit", 1);', name)
@@ -208,31 +216,55 @@ def port_scripts():
     if shadersEnabled ~= true then return end
     setShaderFloat("shaderImage", "iTime", os.clock())''', name)
         write_text(os.path.join(out, name), text)
-    write_text(os.path.join(out, 'intro-cover.lua'), INTRO_COVER)
+    write_text(os.path.join(out, 'intro-sync.hx'), INTRO_SYNC)
+    old_cover = os.path.join(out, 'intro-cover.lua')  # la version anterior (el video llegaba 2 s tarde)
+    if os.path.exists(old_cover):
+        os.remove(old_cover)
     copy('shaders/chrom.frag', os.path.join(SHARED, 'shaders', 'yararara-chrom.frag'))
     copy('sounds/HIT.ogg', os.path.join(SHARED, 'sounds', 'yararara', 'hit.ogg'))
 
 
-# Script propio (no es del mod). La cancion empieza con el video de entrada (evento playVideo en el
-# segundo 0). Sin la cuenta atras a la vista, sus 5 pulsos de espera (2,4 s) dejaban ver el escenario
-# antes del video: se salta la espera y se tapa de negro hasta que sale el video, que trae su fondo.
-INTRO_COVER = '''-- Generado por tools/ports/yararara.py (no es del mod): el video de entrada es lo primero que se ve.
+# Script propio (no es del mod). El video de entrada (yararara/1, 11,54 s) tiene que acabar cuando Teto
+# empieza a cantar (11,52 s). En el mod lo lanzaba el evento playVideo del segundo 0, pero abrir un video
+# 1080p tarda unos 2 s y para entonces la cancion ya iba por ahi: se veia el video con Teto cantando. Aqui se
+# abre antes de que empiece la cancion, tapado de negro, y la cancion arranca cuando el video ya avanza (asi
+# acaba unos 0,4 s antes de que cante Teto). Sin cuenta atras: el video es lo primero que se ve.
+INTRO_VIDEO = 'yararara/1'
+INTRO_SYNC = '''// Generado por tools/ports/yararara.py (no es del mod). Ver INTRO_SYNC alli.
+var cover:FlxSprite; // FlxSprite y FlxColor ya los da el HScript de Psych
+var intro = null;
+var waiting:Bool = false;
+
 function onCreate()
-	setProperty('skipCountdown', true) -- la cancion (y su video, en el segundo 0) empieza ya
-end
+{
+	game.skipCountdown = true;
+	cover = new FlxSprite().makeGraphic(FlxG.width, FlxG.height, FlxColor.BLACK);
+	cover.cameras = [game.camOther];
+	game.add(cover);
+}
 
-function onCreatePost()
-	makeLuaSprite('introCover', nil, 0, 0)
-	makeGraphic('introCover', screenWidth, screenHeight, '000000')
-	setObjectCamera('introCover', 'other')
-	addLuaSprite('introCover', true)
-end
+// la primera vez se para la cancion y se abre el video; cuando ya avanza, se vuelve a llamar y sigue
+function onStartCountdown()
+{
+	if (intro != null || waiting) return waiting ? Function_Stop : Function_Continue;
 
-function onEvent(name, value1, value2)
-	if name == 'playVideo' then
-		removeLuaSprite('introCover', true) -- el video ya pone su propio fondo negro
-	end
-end
+	intro = game.startVideo('yararara/1', true, false, false, true);
+	if (intro == null) return Function_Continue;
+	waiting = true;
+	game.canPause = false;
+	return Function_Stop;
+}
+
+function onUpdate(elapsed:Float)
+{
+	if (!waiting || intro == null || intro.videoSprite == null) return;
+	if (intro.videoSprite.bitmap.position <= 0) return;
+
+	waiting = false;
+	game.remove(cover);
+	cover.destroy();
+	game.startCountdown();
+}
 '''
 
 

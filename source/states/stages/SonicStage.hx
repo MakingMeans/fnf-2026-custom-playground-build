@@ -101,6 +101,7 @@ class SonicStage extends BaseStage
 	override function createPost()
 	{
 		if (hudFrame != null) hud = new SonicHUD(play, hudFrame, hudFrameOffset.x, hudFrameOffset.y);
+		play.pauseMenuFactory = function() return new substates.SonicPauseSubState();
 		lyrics = new SonicLyrics(play);
 		splashes = new SonicSplashes(play, 'noteSplashes', 'noteSplashesHOLD');
 

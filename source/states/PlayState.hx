@@ -336,6 +336,7 @@ class PlayState extends MusicBeatState
 
 		GameOverSubstate.resetVariables();
 		states.OverworldState.songSecret = false; // salida secreta que decide la cancion (la pone su escenario)
+		states.OverworldState.songKeys = []; // llaves recogidas en la cancion: solo cuentan si se acaba
 		songName = Paths.formatToSongPath(SONG.song);
 		if(SONG.stage == null || SONG.stage.length < 1)
 			SONG.stage = StageData.vanillaSongStage(Paths.formatToSongPath(Song.loadedSongName));
@@ -1630,6 +1631,11 @@ class PlayState extends MusicBeatState
 		setOnScripts('curDecStep', curDecStep);
 		setOnScripts('curDecBeat', curDecBeat);
 
+		// el rotulo de botplay sigue siempre al botplay de verdad (algun script de cancion lo ocultaba para siempre;
+		// para esconderlo un rato, ocultar uiGroup, que lo contiene)
+		if(botplayTxt != null && botplayTxt.alive && botplayTxt.visible != cpuControlled)
+			botplayTxt.visible = cpuControlled;
+
 		if(botplayTxt != null && botplayTxt.visible) {
 			botplaySine += 180 * elapsed;
 			botplayTxt.alpha = 1 - Math.sin((Math.PI * botplaySine) / 180);
@@ -2393,6 +2399,11 @@ class PlayState extends MusicBeatState
 		var ret:Dynamic = callOnScripts('onEndSong', null, true);
 		if(ret != LuaUtils.Function_Stop && !transitioning)
 		{
+			// las llaves recogidas en la cancion (la de Bad Day) se guardan al acabarla (no con el editor de charts)
+			if (!chartingMode)
+				for (key in states.OverworldState.songKeys) backend.OverworldData.giveKey(key);
+			states.OverworldState.songKeys = [];
+
 			#if !switch
 			var percent:Float = ratingPercent;
 			if(Math.isNaN(percent)) percent = 0;
@@ -2458,11 +2469,16 @@ class PlayState extends MusicBeatState
 				#if DISCORD_ALLOWED DiscordClient.resetClientID(); #end
 
 				canResync = false;
+				var xp:Int = 0;
 				if(!ClientPrefs.getGameplaySetting('practice') && !ClientPrefs.getGameplaySetting('botplay'))
-					states.OverworldState.completeCurrentNode(songMisses, ratingPercent); // fallos y precision: salida secreta
+					xp = states.OverworldState.completeCurrentNode(songMisses, ratingPercent); // fallos y precision: salida secreta
 
-				states.OverworldState.backToOverworld(); // el mapa pone su musica
 				changedDifficulty = false;
+				// la primera vez que se supera un nivel: pantalla de EXP ganada y luego al mapa
+				if (xp > 0)
+					showExpGain(xp, states.OverworldState.backToOverworld);
+				else
+					states.OverworldState.backToOverworld(); // el mapa pone su musica
 			}
 			else
 			{
@@ -2478,6 +2494,42 @@ class PlayState extends MusicBeatState
 			transitioning = true;
 		}
 		return true;
+	}
+
+	/**
+	 * Pantalla de EXP ganada de Friday Night Dustin' (su songs/misc_getrichquick.hx): todo se va a negro,
+	 * "+ N EXP" cuenta desde 0 en 0,7 s con su sonido de subir de nivel y a los 2,6 s se sigue (onDone).
+	 * Solo sale cuando se gana EXP (OverworldState.completeCurrentNode).
+	 */
+	function showExpGain(amount:Int, onDone:Void->Void)
+	{
+		for (camera in FlxG.cameras.list)
+		{
+			camera.alpha = 0;
+			camera.visible = false;
+		}
+		var expCam:FlxCamera = new FlxCamera();
+		expCam.bgColor = FlxColor.BLACK;
+		FlxG.cameras.add(expCam, false);
+
+		var expText:FlxText = new FlxText(0, 0, 0, '+ 0 EXP');
+		expText.setFormat(Paths.font('DTM-Mono.ttf'), 48, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		expText.borderSize = 2;
+		expText.textField.antiAliasType = openfl.text.AntiAliasType.ADVANCED; // letra nitida, como su textCrispy()
+		expText.textField.sharpness = 400;
+		expText.antialiasing = false;
+		expText.alpha = 0;
+		expText.cameras = [expCam];
+		expText.screenCenter();
+		add(expText);
+		FlxTween.tween(expText, {alpha: 1}, 0.2);
+		FlxTween.num(0, amount, 0.7, {ease: FlxEase.sineOut}, function(value:Float)
+		{
+			expText.text = '+ ' + Math.floor(value) + ' EXP';
+			expText.screenCenter();
+		});
+		FlxG.sound.play(Paths.sound('gaster_shop/levelup'), 1);
+		new FlxTimer().start(2.6, function(_) onDone()); // la camara negra se queda hasta cambiar de estado
 	}
 
 	public function KillNotes() {

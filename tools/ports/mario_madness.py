@@ -1,7 +1,8 @@
 """Importa "Last Course" y "Bad Day" de Mario's Madness V2 (carpeta mamami) a este juego.
 
-Uso:  python tools/ports/mario_madness.py [carpeta assets del mod]
+Uso:  python tools/ports/mario_madness.py [carpeta assets del mod] [--pause]
       (por defecto C:/Users/david/Downloads/QsychEngine2.0/QsychEngine2.0/mamami/assets)
+      --pause: solo copia lo del menu de pausa (substates/MarioPauseSubState.hx), sin rehacer las canciones
 
 El mod esta hecho sobre Psych 0.4.2 y casi toda su logica esta escrita en su PlayState.hx. Aqui los
 archivos van directos a las carpetas del juego (nada en mods/) y la logica va en Haxe:
@@ -20,6 +21,8 @@ Destino de los archivos:
   assets/base_game/songs/<cancion>/   Inst.ogg y Voices.ogg
   assets/fonts/mariones.ttf, mario2.ttf  (del repo del mod: el juego compilado las lleva dentro)
   assets/shared/sounds/freeplay/scroll.ogg, start.ogg   los sonidos de su Freeplay
+  assets/base_game/shared/images/mario_madness/pause/, music/mario_madness/breakfast1-3.ogg,
+  sounds/mario_madness/restart.ogg, data/<cancion>/desc.txt   su menu de pausa (PauseSubState.hx del mod)
 
 Conversion del chart (Psych 0.4.2 -> psych_v1):
   - Los eventos iban como notas en el carril -1: pasan a la lista "events".
@@ -35,7 +38,7 @@ import sys
 import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SRC = sys.argv[1] if len(sys.argv) > 1 else 'C:/Users/david/Downloads/QsychEngine2.0/QsychEngine2.0/mamami/assets'
+SRC = next((a for a in sys.argv[1:] if not a.startswith('--')), 'C:/Users/david/Downloads/QsychEngine2.0/QsychEngine2.0/mamami/assets')
 SHARED = os.path.join(ROOT, 'assets', 'base_game', 'shared')
 SONGS = os.path.join(ROOT, 'assets', 'base_game', 'songs')
 FONTS = os.path.join(ROOT, 'assets', 'fonts')
@@ -184,6 +187,15 @@ STAGES = {
     },
 }
 
+# Menu de pausa de Mario's Madness (su PauseSubState.hx): panel con estatica de TV, botones de Mario, musica
+# breakfast 1-3 al azar y el sonido de reiniciar. Cada cancion pone su descripcion y creditos en desc.txt
+# (linea 1: descripcion, linea 2: creditos; los espacios de mas hacen de salto de linea en su cuadro de 700 px).
+PAUSE_FILES = {'images/modstuff/pause/momichi.png': 'images/mario_madness/pause/momichi.png'}
+PAUSE_FILES.update({'images/mainmenu/pause/Mario_pause_%s.%s' % (name, ext): 'images/mario_madness/pause/%s.%s' % (name.lower(), ext)
+                    for name in ('Resume', 'Restart', 'Botplay', 'Exit') for ext in ('png', 'xml')})
+PAUSE_FILES.update({'shared/music/breakfast%d.ogg' % i: 'music/mario_madness/breakfast%d.ogg' % i for i in range(1, 4)})
+PAUSE_FILES['sounds/RESTART.ogg'] = 'sounds/mario_madness/restart.ogg'
+
 copied = []
 
 
@@ -330,9 +342,19 @@ def port_week_and_lists():
                 add_to_list('data/characterList.txt', name)
 
 
+def port_pause():
+    port_files(PAUSE_FILES)
+    for song in SONG_DATA:
+        copy('data/songData/%s/desc.txt' % song, os.path.join(SHARED, 'data', song, 'desc.txt'))
+
+
 def main():
     if not os.path.isdir(SRC):
         raise SystemExit('No existe la carpeta del mod: ' + SRC)
+    port_pause()
+    if '--pause' in sys.argv:
+        print("Mario's Madness: pausa, %d archivos" % len(set(copied)))
+        return
     port_files(COMMON_FILES)
     for old, new in MENU_SOUNDS.items():
         copy(old, os.path.join(ROOT, 'assets', 'shared', *new.split('/')))

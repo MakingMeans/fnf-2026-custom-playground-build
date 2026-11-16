@@ -65,6 +65,20 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 	var dragging:Bool = false;
 	var dragOffsetX:Float = 0;
 	var dragOffsetY:Float = 0;
+	/** Donde se pulso (en pantalla) y si el raton ya se ha movido lo bastante para arrastrar. */
+	var dragPressX:Float = 0;
+	var dragPressY:Float = 0;
+	var dragMoved:Bool = false;
+	static inline final DRAG_THRESHOLD:Float = 4;
+
+	function markDragPress()
+	{
+		var at = FlxG.mouse.getScreenPosition(camHUD);
+		dragPressX = at.x;
+		dragPressY = at.y;
+		at.put();
+		dragMoved = false;
+	}
 	var unsavedProgress:Bool = false;
 
 	// valores que heredan los objetos nuevos
@@ -270,6 +284,15 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		{
 			FlxG.autoPause = false;
 			UI_box.selectedName = Sys.args()[tabArg + 1];
+		}
+		// -select <nodo>: lo deja elegido (con su pestana), para capturar sus controles
+		var selectArg:Int = Sys.args().indexOf('-select');
+		if (selectArg > -1 && selectArg + 1 < Sys.args().length)
+		{
+			FlxG.autoPause = false;
+			selectedNode = OverworldData.findNode(worldFile, Sys.args()[selectArg + 1]);
+			if (selectedNode != null) UI_box.selectedName = 'Nodo';
+			updateUI();
 		}
 		var paletteArg:Int = Sys.args().indexOf('-palette');
 		if (paletteArg > -1 && paletteArg + 1 < Sys.args().length)
@@ -961,6 +984,8 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			+ '   (+SHIFT: con su salida secreta). Otro clic quita el enlace; L, V o ESC salen\n'
 			+ '   CTRL+clic en el mapa (modo T): cuentagotas, coge el tile de debajo para pintar con el\n'
 			+ 'P  paleta de tiles     CTRL+clic en la paleta: tile como aspecto del nodo (+SHIFT: completado)\n'
+			+ 'A  paleta de ASPECTOS de nodo: con un nodo elegido, un clic en uno se lo pone (castillos, casas...)\n'
+			+ 'F (mantener)  resalta en azul lo que se dibuja DELANTE de BF (el resto va detras)\n'
 			+ 'F2 / F3 / F4  bloquear la capa GRAFO (nodos y caminos) / TILES (sueltos) / DECORADOS (y piezas)\n'
 			+ '   con SHIFT: ocultarla. Una capa bloqueada u oculta no se toca con el raton (pestana Capas)\n'
 			+ 'E  siguiente aviso     U  flechas de desbloqueo (rosa normal, amarillo secreta, naranja camino)\n'
@@ -1215,7 +1240,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		tab.add(nodeIdInput);
 
 		label(tab, x + 120, y - 17, 'Tipo:');
-		nodeTypeDropDown = new PsychUIDropDownMenu(x + 120, y, ['level', 'world', 'empty', 'exit', 'warp'], function(sel:Int, value:String)
+		nodeTypeDropDown = new PsychUIDropDownMenu(x + 120, y, ['level', 'world', 'empty', 'exit', 'warp', 'door', 'shop'], function(sel:Int, value:String)
 		{
 			if (selectedNode == null) return;
 			pushUndo();
@@ -1241,11 +1266,43 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 				showOutput('Warp: elige su Mundo destino y pulsa "Crear pareja" para poner la tuberia de vuelta');
 			}
 
+			// puerta con llave y tienda de Gaster: su aspecto por defecto y que escribir en "Llave" / "Tienda"
+			if (value == 'door' && (selectedNode.image == defaultImage || selectedNode.image == '') && OverworldData.imageExists('overworld/key_door'))
+			{
+				selectedNode.image = 'overworld/key_door';
+				selectedNode.anim = 'closed';
+				selectedNode.animDone = 'open';
+				selectedNode.fps = 0;
+				showOutput('Puerta: escribe en "Llave" la llave que la abre (p. ej. world1_key) y pon en
+"Desbloquea" lo que hay detras. Se abre sola al volver al mapa con la llave');
+			}
+			if (value == 'shop' && (selectedNode.image == defaultImage || selectedNode.image == '') && OverworldData.imageExists('overworld/gb_void'))
+			{
+				selectedNode.image = 'overworld/gb_void';
+				selectedNode.anim = 'closed';
+				selectedNode.animDone = 'open';
+				selectedNode.fps = 6;
+				showOutput('Tienda: escribe en "Tienda" cual abre (data/gaster_shop/<tienda>.json, p. ej. gaster_w1) y,
+si se abre con una llave, escribela en "Llave"');
+			}
+
 			unsavedProgress = true;
 			reloadMap(true);
 			updateUI();
 		}, 100);
 		tab.add(nodeTypeDropDown);
+
+		// tienda: cual abre (data/gaster_shop/<tienda>.json)
+		label(tab, x + 240, y - 17, 'Tienda:');
+		nodeParamInput = new PsychUIInputText(x + 240, y, 100, '', 10);
+		nodeParamInput.onChange = function(old:String, cur:String)
+		{
+			if (selectedNode == null || selectedNode.type != 'shop') return;
+			selectedNode.shop = cur;
+			unsavedProgress = true;
+			markProblemsDirty();
+		};
+		tab.add(nodeParamInput);
 
 		y += 40;
 		label(tab, x, y - 17, 'Nombre visible:');
@@ -1362,6 +1419,19 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		});
 		tab.add(nodeUnlockedCheck);
 
+		// llave: una puerta se abre con ella; cualquier otro nodo con llave sigue cerrado (y su camino oculto)
+		// hasta tenerla, y entonces se revela como al superar un nivel (p. ej. la tienda de Gaster del mundo 1)
+		label(tab, x + 180, y - 17, 'Llave:');
+		nodeKeyInput = new PsychUIInputText(x + 180, y, 100, '', 10);
+		nodeKeyInput.onChange = function(old:String, cur:String)
+		{
+			if (selectedNode == null) return;
+			selectedNode.key = cur.trim();
+			unsavedProgress = true;
+			reloadMap(true);
+		};
+		tab.add(nodeKeyInput);
+
 		y += 36;
 		label(tab, x, y - 17, 'Desbloquea al completarlo (ids separados por coma):');
 		nodeUnlocksInput = new PsychUIInputText(x, y + 2, 280, '', 10);
@@ -1469,6 +1539,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 
 		y += 34;
 		tab.add(new PsychUIButton(x, y, 'Probar desde aqui', function() testWorld(true), 130));
+		tab.add(new PsychUIButton(x + 140, y, 'Elegir aspecto (A)', function() openLooksPalette(), 150));
 
 		y += 30;
 		tab.add(new FlxText(x, y, 340,
@@ -1580,7 +1651,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 		});
 		tab.add(decorFlipYCheck);
 
-		decorFrontCheck = new PsychUICheckBox(x + 160, y, 'Delante', 90, function()
+		decorFrontCheck = new PsychUICheckBox(x + 160, y, 'Delante de BF', 110, function()
 		{
 			if (selectedSprite == null) return;
 			selectedSprite.front = decorFrontCheck.checked;
@@ -1755,7 +1826,7 @@ agua puntitos (a nado) o un puente (andando).', 8);
 		var x:Int = 10;
 		var y:Int = 20;
 
-		var tilesets:Array<String> = [];
+		var tilesets:Array<String> = [LOOKS_PALETTE];
 		for (image in imageList)
 			if (OverworldData.hasAtlas(image)) tilesets.push(image);
 		if (tilesets.length < 1) tilesets = [''];
@@ -2489,6 +2560,13 @@ agua puntitos (a nado) o un puente (andando).', 8);
 		paletteSelected = -1;
 		paletteCursor.visible = false;
 		paletteImage = image;
+		paletteLooks = image == LOOKS_PALETTE;
+		if (paletteLooks)
+		{
+			paletteProps = false;
+			buildLooksPalette();
+			return;
+		}
 
 		if (image == null || image.length < 1 || !OverworldData.hasAtlas(image))
 		{
@@ -2545,6 +2623,117 @@ agua puntitos (a nado) o un puente (andando).', 8);
 		paletteInfoTxt.text = '${paletteFrames.length} tiles de ${paletteTileSize}x${paletteTileSize} px.
 Rueda = bajar, shift+rueda = bajar rapido.';
 		showOutput('Paleta cargada: ${paletteFrames.length} tiles de ${paletteTileSize}px. Pulsa T para pintar.');
+	}
+
+	/** Nombre de la paleta de aspectos de nodo en el desplegable de tilesets. */
+	static inline final LOOKS_PALETTE:String = '(aspectos de nodo)';
+
+	/**
+	 * Aspectos de nodo listos para elegir con un clic (tecla A, boton "Elegir aspecto" o el desplegable de
+	 * tilesets): imagen, animacion, animacion al superarlo y FPS. Los de SMW salen de tools/build_node_sprites.py.
+	 */
+	static final NODE_LOOKS:Array<{label:String, image:String, anim:String, done:String, fps:Int}> = [
+		{label: 'Nivel', image: 'overworld/level_dot', anim: 'yellow', done: '', fps: 6},
+		{label: 'Nivel med.', image: 'overworld/level_dot', anim: 'mid_yellow', done: '', fps: 6},
+		{label: 'Secreto', image: 'overworld/level_dot', anim: 'red', done: '', fps: 6},
+		{label: 'Secr. med.', image: 'overworld/level_dot', anim: 'mid_red', done: '', fps: 6},
+		{label: 'Blanco', image: 'overworld/level_dot', anim: 'mid_white', done: '', fps: 0},
+		{label: 'Tierra', image: 'overworld/nodes/smw_dirt_level', anim: 'yellow', done: '', fps: 6},
+		{label: 'Tierra roja', image: 'overworld/nodes/smw_dirt_level', anim: 'red', done: '', fps: 6},
+		{label: 'Punto MM', image: 'overworld/dot', anim: 'idle', done: '', fps: 6},
+		{label: 'Casa Yoshi', image: 'overworld/nodes/smw_yoshi_house', anim: 'idle', done: '', fps: 0},
+		{label: 'Fantasma', image: 'overworld/nodes/smw_ghost_house', anim: 'idle', done: '', fps: 0},
+		{label: 'Casa', image: 'overworld/nodes/smw_house', anim: 'idle', done: '', fps: 0},
+		{label: 'Castillo', image: 'overworld/castle', anim: 'idle', done: 'dead', fps: 0},
+		{label: 'Castillo SMW', image: 'overworld/nodes/smw_castle', anim: 'idle', done: 'dead', fps: 0},
+		{label: 'Fortaleza', image: 'overworld/nodes/smw_fortress', anim: 'idle', done: 'dead', fps: 0},
+		{label: 'Cast. jefe', image: 'overworld/nodes/smw_boss_castle', anim: 'idle', done: '', fps: 0},
+		{label: 'Bowser', image: 'overworld/nodes/smw_bowser_castle', anim: 'idle', done: '', fps: 0},
+		{label: 'Interr. amar.', image: 'overworld/nodes/smw_switch', anim: 'yellow', done: 'pressed_yellow', fps: 0},
+		{label: 'Interr. verde', image: 'overworld/nodes/smw_switch', anim: 'green', done: 'pressed_green', fps: 0},
+		{label: 'Interr. rojo', image: 'overworld/nodes/smw_switch', anim: 'red', done: 'pressed_red', fps: 0},
+		{label: 'Interr. azul', image: 'overworld/nodes/smw_switch', anim: 'blue', done: 'pressed_blue', fps: 0},
+		{label: 'Estrella', image: 'overworld/star', anim: 'idle', done: '', fps: 8},
+		{label: 'Estrella SMW', image: 'overworld/nodes/smw_star', anim: 'idle', done: '', fps: 6},
+		{label: 'Tuberia', image: 'overworld/pipe', anim: 'idle', done: '', fps: 0},
+		{label: 'Tub. gris', image: 'overworld/pipegray', anim: 'idle', done: '', fps: 0},
+		{label: 'Tub. SMW', image: 'overworld/nodes/smw_pipe', anim: 'idle', done: '', fps: 0},
+		{label: 'Puerta azul', image: 'overworld/nodes/smw_door', anim: 'closed', done: 'open', fps: 0},
+		{label: 'Vacio GB', image: 'overworld/gb_void', anim: 'closed', done: 'open', fps: 6},
+		{label: 'Candado', image: 'overworld/key_door', anim: 'closed', done: 'open', fps: 0},
+		{label: 'Invisible', image: '', anim: '', done: '', fps: 0},
+	];
+
+	/** La paleta de la izquierda ensena los aspectos de nodo (no pinta: un clic se lo pone al nodo elegido). */
+	var paletteLooks:Bool = false;
+	static inline final LOOK_CELL:Int = 72;
+
+	function openLooksPalette()
+	{
+		if (!paletteShown)
+		{
+			paletteShown = true;
+			camPalette.visible = true;
+		}
+		if (!paletteLooks) buildPalette(LOOKS_PALETTE);
+		if (tilesetDropDown != null) tilesetDropDown.selectedLabel = LOOKS_PALETTE;
+		showOutput(selectedNode == null ? 'Aspectos de nodo: elige un nodo (V) y haz clic en uno de la paleta'
+			: 'Aspectos de nodo: clic en uno para ponerselo a "${selectedNode.id}" (CTRL+Z lo deshace)');
+	}
+
+	function buildLooksPalette()
+	{
+		paletteCell = LOOK_CELL;
+		paletteColumns = Std.int(Math.max(1, Math.floor(PALETTE_WIDTH / paletteCell)));
+		for (index => look in NODE_LOOKS)
+		{
+			paletteFrames.push(look.label);
+			var col:Int = index % paletteColumns;
+			var row:Int = Std.int(index / paletteColumns);
+			if (look.image.length > 0 && OverworldData.imageExists(look.image))
+			{
+				var spr:FlxSprite = OverworldState.buildSprite(look.image, look.anim, look.fps);
+				var size:Float = Math.max(spr.frameWidth, spr.frameHeight);
+				var scale:Float = Math.min(4, (paletteCell - 22) / Math.max(1, size));
+				spr.scale.set(scale, scale);
+				spr.updateHitbox();
+				spr.setPosition(col * paletteCell + (paletteCell - spr.width) * 0.5, row * paletteCell + (paletteCell - 14 - spr.height) * 0.5);
+				paletteGroup.add(spr);
+			}
+			var name:FlxText = new FlxText(col * paletteCell, row * paletteCell + paletteCell - 14, paletteCell, look.label, 8);
+			name.alignment = CENTER;
+			paletteGroup.add(name);
+		}
+		var rows:Int = Math.ceil(NODE_LOOKS.length / paletteColumns);
+		paletteScrollMax = Math.max(0, rows * paletteCell - camPalette.height);
+		camPalette.scroll.y = 0;
+		paletteCursor.setGraphicSize(paletteCell, paletteCell);
+		paletteCursor.updateHitbox();
+		paletteInfoTxt.text = 'Aspectos de nodo: con un nodo elegido, un clic\nen uno se lo pone (no pinta). A abre esta paleta.';
+	}
+
+	/** Pone al nodo elegido el aspecto `index` de NODE_LOOKS (y los nodos nuevos salen con el). */
+	function applyNodeLook(index:Int)
+	{
+		var look = NODE_LOOKS[index];
+		if (selectedNode == null)
+		{
+			showOutput('"${look.label}": elige antes un nodo (V) para ponerselo', true);
+			return;
+		}
+		pushUndo();
+		selectedNode.image = look.image;
+		selectedNode.anim = look.anim;
+		selectedNode.animDone = look.done;
+		selectedNode.fps = look.fps;
+		lastNodeImage = look.image;
+		lastNodeAnim = look.anim;
+		lastNodeFps = look.fps;
+		selectPaletteTile(index);
+		unsavedProgress = true;
+		reloadMap(true);
+		updateUI();
+		showOutput('"${selectedNode.id}": ${look.label}' + (look.done.length > 0 ? ' (al superarlo: ${look.done})' : ''));
 	}
 
 	/** Un atlas de decorados enteros: los de la carpeta props/ (`overworld/props/smw_green`, `overworld/world1/props`). */
@@ -2649,8 +2838,12 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 	{
 		if (!paletteShown || paletteFrames.length < 1) return false;
 
-		return FlxG.mouse.screenX >= camPalette.x && FlxG.mouse.screenX < camPalette.x + camPalette.width
-			&& FlxG.mouse.screenY >= camPalette.y && FlxG.mouse.screenY < camPalette.y + camPalette.height;
+		// respecto a la camara de la paleta: FlxG.mouse.screenX va con la camara del mapa y su zoom (con el mapa
+		// ampliado, un clic en la paleta caia en el mapa y pintaba detras)
+		var local = FlxG.mouse.getScreenPosition(camPalette);
+		var inside:Bool = local.x >= 0 && local.x < camPalette.width && local.y >= 0 && local.y < camPalette.height;
+		local.put();
+		return inside;
 	}
 
 	function updatePalette()
@@ -2665,8 +2858,10 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 		if (!FlxG.mouse.justPressed) return;
 
-		var localX:Float = FlxG.mouse.screenX - camPalette.x + camPalette.scroll.x;
-		var localY:Float = FlxG.mouse.screenY - camPalette.y + camPalette.scroll.y;
+		var local = FlxG.mouse.getScreenPosition(camPalette);
+		var localX:Float = local.x + camPalette.scroll.x;
+		var localY:Float = local.y + camPalette.scroll.y;
+		local.put();
 
 		var col:Int = Math.floor(localX / paletteCell);
 		var row:Int = Math.floor(localY / paletteCell);
@@ -2674,6 +2869,12 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 		var index:Int = row * paletteColumns + col;
 		if (index < 0 || index >= paletteFrames.length) return;
+
+		if (paletteLooks)
+		{
+			applyNodeLook(index);
+			return;
+		}
 
 		// CTRL+clic con un nodo elegido: ese tile pasa a ser su aspecto (SHIFT: al completarlo). El
 		// desplegable de animaciones solo ofrece prefijos, no "tile0002". Va con CTRL porque elegir
@@ -2793,7 +2994,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 	function paintTile(mouseX:Float, mouseY:Float)
 	{
-		if (paletteSelected < 0 || paletteSelected >= paletteFrames.length) return;
+		if (paletteLooks || paletteSelected < 0 || paletteSelected >= paletteFrames.length) return;
 
 		var size:Int = paletteTileSize;
 		var px:Float = Math.floor(mouseX / size) * size;
@@ -2985,6 +3186,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		{
 			nodeIdInput.text = selectedNode.id;
 			nodeTypeDropDown.selectedLabel = selectedNode.type;
+			nodeParamInput.text = (selectedNode.type == 'shop' && selectedNode.shop != null) ? selectedNode.shop : '';
+			nodeKeyInput.text = selectedNode.key != null ? selectedNode.key : '';
 			nodeNameInput.text = selectedNode.name;
 			nodeWeekDropDown.selectedLabel = selectedNode.week;
 			refreshSongList();
@@ -3145,6 +3348,20 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		updateSelectionBox();
 		updateActionBar();
 		updatePropGhost();
+		updateFrontHighlight();
+	}
+
+	var frontHighlight:Bool = false;
+
+	/** Mientras se mantiene F, lo que se dibuja delante de BF sale en azul (y lo de detras, igual). */
+	function updateFrontHighlight()
+	{
+		var want:Bool = FlxG.keys.pressed.F && PsychUIInputText.focusOn == null;
+		if (want == frontHighlight) return;
+		frontHighlight = want;
+		for (spr in spritesFront.members)
+			if (spr != null) spr.color = want ? 0xFF40E0FF : FlxColor.WHITE;
+		if (want) showOutput('En azul: lo que va DELANTE de BF (${spritesFront.length}). Lo demas va detras. Se cambia con "Delante" (pestana Deco)');
 	}
 
 	function updateKeys(elapsed:Float)
@@ -3261,6 +3478,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			paletteShown = !paletteShown;
 			camPalette.visible = paletteShown;
 		}
+
+		if (FlxG.keys.justPressed.A) openLooksPalette();
 
 		if (FlxG.keys.justPressed.G)
 		{
@@ -3394,6 +3613,12 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 				if (FlxG.mouse.justPressed) pickTileUnderMouse(mouseX, mouseY);
 				return;
 			}
+			// la de aspectos de nodo no pinta nada
+			if (paletteLooks)
+			{
+				if (FlxG.mouse.justPressed) showOutput('La paleta de aspectos no pinta: elige un tileset en la pestana Tiles para pintar', true);
+				return;
+			}
 			// paleta de decorados enteros: cada clic pone uno (no se pinta arrastrando)
 			if (paletteProps)
 			{
@@ -3440,6 +3665,16 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 		if (dragging && FlxG.mouse.pressed)
 		{
+			// elegir algo no lo mueve: el arrastre empieza cuando el raton se ha movido de verdad (si no, el
+			// ajuste a la rejilla movia un nodo que no estaba en ella solo por hacerle clic)
+			if (!dragMoved)
+			{
+				var now = FlxG.mouse.getScreenPosition(camHUD);
+				var far:Bool = Math.abs(now.x - dragPressX) >= DRAG_THRESHOLD || Math.abs(now.y - dragPressY) >= DRAG_THRESHOLD;
+				now.put();
+				if (!far) return;
+				dragMoved = true;
+			}
 			var newX:Float = snap(mouseX + dragOffsetX);
 			var newY:Float = snap(mouseY + dragOffsetY);
 
@@ -3688,6 +3923,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			if (allowDrag)
 			{
 				dragging = true;
+				markDragPress();
 				dragSnapshot = snapshot();
 				dragOffsetX = node.x - mouseX;
 				dragOffsetY = node.y - mouseY;
@@ -3706,6 +3942,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			if (allowDrag)
 			{
 				dragging = true;
+				markDragPress();
 				dragSnapshot = snapshot();
 				dragOffsetX = data.x - mouseX;
 				dragOffsetY = data.y - mouseY;
@@ -4793,6 +5030,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		dragPointPath = pth;
 		dragPointIndex = index;
 		dragging = true;
+		markDragPress();
 		dragSnapshot = snapshot();
 		dragOffsetX = pth.points[index][0] - mouseX;
 		dragOffsetY = pth.points[index][1] - mouseY;
@@ -5032,6 +5270,8 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 
 	// ------------------------------------------------------- unir mundos (bloque B)
 	var nodeLinkButton:PsychUIButton;
+	var nodeParamInput:PsychUIInputText;
+	var nodeKeyInput:PsychUIInputText;
 	var nodeGotoButton:PsychUIButton;
 	var nodeNeedStepper:PsychUINumericStepper;
 	var nodeSecretModeDropDown:PsychUIDropDownMenu;
@@ -5765,6 +6005,15 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		check(OverworldTerrain.classify(0xFF40D020) == OverworldTerrain.GROUND && OverworldTerrain.classify(0xFFD89860) == OverworldTerrain.CLIFF
 			&& OverworldTerrain.classify(0) == OverworldTerrain.NONE && OverworldTerrain.classify(0xFF4088F8) == OverworldTerrain.NONE
 			&& OverworldTerrain.classify(0xFF0D0C0D) == OverworldTerrain.EDGE, 'terreno: hierba, acantilado, agua y contorno por su color');
+		// puertas con llave: sin llave no se abren nunca (aviso); con ella cuentan como completables
+		var door:OverworldNodeFile = OverworldData.createNode('zz_door', 0, 0);
+		door.type = 'door';
+		var doorWithoutKey:Bool = !OverworldData.canBeCompleted(door);
+		door.key = 'zz_test_key';
+		OverworldData.testKeys.push('zz_test_key');
+		check(doorWithoutKey && OverworldData.canBeCompleted(door) && OverworldData.hasKey('zz_test_key') && !OverworldData.hasKey('zz_otra'),
+			'puerta: sin llave no se completa; con su llave, si (y la llave de prueba no se guarda)');
+		OverworldData.testKeys.remove('zz_test_key');
 		var rainbowPath:OverworldPathFile = OverworldData.createPath('a', 'b');
 		rainbowPath.road = true;
 		rainbowPath.style = 'rainbow';

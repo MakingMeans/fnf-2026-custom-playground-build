@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextureAtlas imagePath="smw_switch.png">
+	<SubTexture name="yellow0000" x="0" y="0" width="16" height="16"/>
+	<SubTexture name="pressed_yellow0000" x="16" y="0" width="16" height="16"/>
+	<SubTexture name="green0000" x="32" y="0" width="16" height="16"/>
+	<SubTexture name="pressed_green0000" x="48" y="0" width="16" height="16"/>
+	<SubTexture name="red0000" x="64" y="0" width="16" height="16"/>
+	<SubTexture name="pressed_red0000" x="80" y="0" width="16" height="16"/>
+	<SubTexture name="blue0000" x="96" y="0" width="16" height="16"/>
+	<SubTexture name="pressed_blue0000" x="112" y="0" width="16" height="16"/>
+</TextureAtlas>
