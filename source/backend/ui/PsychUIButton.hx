@@ -84,7 +84,7 @@ class PsychUIButton extends FlxSpriteGroup
 				text.color = style.textColor;
 			}
 
-			if(overlapped && FlxG.mouse.justPressed)
+			if(overlapped && FlxG.mouse.justPressed && !PsychUIDropDownMenu.mouseOnOpenList()) // no si es de una lista abierta encima
 			{
 				isClicked = true;
 				bg.color = clickStyle.bgColor;

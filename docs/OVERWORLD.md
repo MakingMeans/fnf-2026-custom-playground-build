@@ -364,10 +364,18 @@ Sirven igual para los **nodos**: con el nodo elegido, CTRL+clic en el tile de la
 1. Pestaña **Decorado** → elige un **Sprite** (por ejemplo `overworld/test_world/path` con la
    animación `path 1`, o `overworld/pipe`, `overworld/star`, `overworld/ring`).
 2. Pulsa **B** y haz clic para ir colocándolos. Cada clic pone una copia.
-3. Con uno seleccionado (modo **V**) puedes cambiarle escala, alpha, flip y si va **delante** de los
-   nodos y de BF o detrás (casilla *Delante de BF* de la pestaña Deco; al pintar tiles, *Pintar por
-   delante de BF* de la pestaña Tiles). **Manteniendo F** se ve en azul todo lo que va delante de BF;
-   lo demás va detrás.
+3. Con uno seleccionado (modo **V**) puedes cambiarle escala, alpha, flip y su **orden con BF**
+   (desplegable *Orden con BF* de la pestaña Deco; con una pieza o un grupo elegido, vale para todos):
+   - **Por altura (eje Y)**: lo de más abajo en el mapa tapa a lo de más arriba. BF, los caminos y los
+     nodos entran en ese orden: BF pasa por detrás de un montículo si va por encima de su base y por
+     delante si va por debajo. Una pieza se ordena entera, por la base de su trozo más bajo.
+   - **Suelo**: siempre detrás de todo (el terreno, charcos, cosas planas).
+   - **Delante de BF**: siempre encima de todo (copas de árbol, overlays).
+   - **Automático** (lo de por defecto): los tiles sueltos del terreno, suelo; los objetos enteros de la
+     biblioteca, las piezas y lo animado, por altura.
+   Al pintar tiles, *Pintar por delante de BF* (pestaña Tiles) los pone delante. **Manteniendo F** se ve
+   en azul lo de delante y en amarillo lo que va por altura; lo demás es suelo. Excepción: el vacío de
+   Game Boy (`gb_void`) va siempre encima de los decorados, con BF encima de él.
 
 Los overlays a pantalla completa (`overworld/overworld_overlay`, `selector/hub_path`) van colocados
 en 0,0 y con **Delante** marcado.

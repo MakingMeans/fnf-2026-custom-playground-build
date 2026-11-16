@@ -49,8 +49,12 @@ typedef OverworldSpriteFile =
 	var alpha:Float;
 	var front:Bool;         // true = se dibuja por encima de nodos y jugador
 	/** Pieza: los decorados con el mismo nombre (una montana hecha de tiles...) se eligen, mueven, copian y
-	 * borran juntos en el editor. Sin campo (o '') = suelto. El juego no lo usa. */
+	 * borran juntos en el editor. Sin campo (o '') = suelto. En el juego una pieza se ordena entera por su base. */
 	@:optional var piece:String;
+	/** Orden con BF si no va delante (`front`): 'ground' = suelo, siempre detras; 'ysort' = por altura (lo de mas
+	 * abajo en el mapa tapa a lo de mas arriba, BF y los caminos incluidos); '' = automatico (los tiles sueltos
+	 * del terreno, suelo; lo demas, por altura). Ver OverworldData.depthOf. */
+	@:optional var depth:String;
 }
 
 /**
@@ -1484,6 +1488,22 @@ class OverworldData
 	/** Un tile pintado desde la paleta: un fotograma concreto ("tile0042", "w1_0007") y 0 FPS. */
 	public static function isPaintedTile(data:OverworldSpriteFile):Bool
 		return data.fps == 0 && data.anim != null && ~/[0-9]$/.match(data.anim);
+
+	/**
+	 * Donde se dibuja un decorado respecto a BF: 'front' (encima de todo), 'ground' (debajo de todo: el suelo) o
+	 * 'ysort' (ordenado por su base con BF, los caminos, los nodos y los demas decorados 'ysort'). Por defecto los
+	 * tiles sueltos son suelo y los objetos enteros, las piezas y lo animado, por altura.
+	 */
+	public static function depthOf(data:OverworldSpriteFile):String
+	{
+		if (data.front) return 'front';
+		if (data.depth == 'ground' || data.depth == 'ysort') return data.depth;
+		return isLooseTile(data) ? 'ground' : 'ysort';
+	}
+
+	/** Nodos que van siempre encima de los decorados (no se ordenan por altura): el vacio de la tienda de Gaster. */
+	public static function isOverlayNodeImage(image:String):Bool
+		return image != null && image.indexOf('gb_void') > -1;
 
 	/** Un tile suelto (de ninguna pieza): el terreno, la capa TILES del editor. */
 	public static function isLooseTile(data:OverworldSpriteFile):Bool

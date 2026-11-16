@@ -6,6 +6,30 @@ class PsychUIDropDownMenu extends PsychUIInputText
 {
 	public static final CLICK_EVENT = "dropdown_click";
 
+	/**
+	 * Para que el clic en una opcion de la lista no llegue tambien a lo que queda debajo (una casilla se marcaba
+	 * sola al elegir en un desplegable que se abria encima): los desplegables con la lista abierta y el momento
+	 * del ultimo clic en una opcion. PsychUICheckBox y PsychUIButton lo miran antes de hacer caso a un clic.
+	 */
+	public static var openMenus:Array<PsychUIDropDownMenu> = [];
+	public static var lastItemClick:Int = -1;
+
+	public static function mouseOnOpenList():Bool
+	{
+		if (lastItemClick == FlxG.game.ticks) return true;
+		for (menu in openMenus)
+			if (menu != null && menu.exists && menu.visible)
+				for (item in menu._items)
+					if (item != null && item.exists && item.visible && FlxG.mouse.overlaps(item.bg, item.camera)) return true;
+		return false;
+	}
+
+	override function destroy()
+	{
+		openMenus.remove(this);
+		super.destroy();
+	}
+
 	public var list(default, set):Array<String> = [];
 	public var button:FlxSprite;
 	public var onSelect:Int->String->Void;
@@ -126,6 +150,8 @@ class PsychUIDropDownMenu extends PsychUIInputText
 
 	public function showDropDown(vis:Bool = true, scroll:Int = 0, onlyAllowed:Array<String> = null)
 	{
+		openMenus.remove(this);
+		if(vis) openMenus.push(this);
 		if(!vis)
 		{
 			text = selectedLabel;
@@ -179,6 +205,7 @@ class PsychUIDropDownMenu extends PsychUIInputText
 	public var broadcastDropDownEvent:Bool = true;
 	function clickedOn(num:Int, label:String)
 	{
+		lastItemClick = FlxG.game.ticks;
 		selectedIndex = num;
 		showDropDown(false);
 		if(onSelect != null) onSelect(num, label);

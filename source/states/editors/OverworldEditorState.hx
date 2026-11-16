@@ -902,7 +902,44 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 	var decorAlphaStepper:PsychUINumericStepper;
 	var decorFlipXCheck:PsychUICheckBox;
 	var decorFlipYCheck:PsychUICheckBox;
-	var decorFrontCheck:PsychUICheckBox;
+	var decorDepthDropDown:PsychUIDropDownMenu;
+
+	/** Opciones de "Orden con BF" (en este orden: ver setDecorDepth y depthLabelOf). */
+	static final DEPTH_LABELS:Array<String> = ['Automatico', 'Suelo (siempre detras)', 'Por altura (eje Y)', 'Delante de BF'];
+
+	static function depthLabelOf(data:OverworldSpriteFile):String
+	{
+		if (data.front) return DEPTH_LABELS[3];
+		return switch (data.depth)
+		{
+			case 'ground': DEPTH_LABELS[1];
+			case 'ysort': DEPTH_LABELS[2];
+			default: DEPTH_LABELS[0];
+		}
+	}
+
+	/** Cambia el orden con BF del decorado elegido (o de toda su pieza o grupo). */
+	function setDecorDepth(option:Int)
+	{
+		if (selectedSprite == null) return;
+		var targets:Array<OverworldSpriteFile> = (groupSprites.length > 0 && groupSprites.contains(selectedSprite)) ? groupSprites.copy() : [selectedSprite];
+		pushUndo();
+		for (data in targets)
+		{
+			data.front = option == 3;
+			switch (option)
+			{
+				case 1: data.depth = 'ground';
+				case 2: data.depth = 'ysort';
+				default: Reflect.deleteField(data, 'depth');
+			}
+		}
+		unsavedProgress = true;
+		reloadMap();
+		updateUI();
+		var what:String = targets.length > 1 ? '${targets.length} decorados' : 'el decorado';
+		showOutput('Orden con BF de $what: ${DEPTH_LABELS[option]}' + (option == 0 ? ' (tiles sueltos: suelo; lo demas: por altura)' : ''));
+	}
 
 	var pathInfoTxt:FlxText;
 	var pathDotsDropDown:PsychUIDropDownMenu;
@@ -985,7 +1022,7 @@ class OverworldEditorState extends MusicBeatState implements PsychUIEventHandler
 			+ '   CTRL+clic en el mapa (modo T): cuentagotas, coge el tile de debajo para pintar con el\n'
 			+ 'P  paleta de tiles     CTRL+clic en la paleta: tile como aspecto del nodo (+SHIFT: completado)\n'
 			+ 'A  paleta de ASPECTOS de nodo: con un nodo elegido, un clic en uno se lo pone (castillos, casas...)\n'
-			+ 'F (mantener)  resalta en azul lo que se dibuja DELANTE de BF (el resto va detras)\n'
+			+ 'F (mantener)  azul: lo que va DELANTE de BF; amarillo: lo que se ordena POR ALTURA con BF (el resto es suelo)\n'
 			+ 'F2 / F3 / F4  bloquear la capa GRAFO (nodos y caminos) / TILES (sueltos) / DECORADOS (y piezas)\n'
 			+ '   con SHIFT: ocultarla. Una capa bloqueada u oculta no se toca con el raton (pestana Capas)\n'
 			+ 'E  siguiente aviso     U  flechas de desbloqueo (rosa normal, amarillo secreta, naranja camino)\n'
@@ -1651,13 +1688,10 @@ si se abre con una llave, escribela en "Llave"');
 		});
 		tab.add(decorFlipYCheck);
 
-		decorFrontCheck = new PsychUICheckBox(x + 160, y, 'Delante de BF', 110, function()
-		{
-			if (selectedSprite == null) return;
-			selectedSprite.front = decorFrontCheck.checked;
-			reloadMap();
-		});
-		tab.add(decorFrontCheck);
+		// orden con BF: automatico, suelo (siempre detras), por altura (eje Y) o delante (OverworldData.depthOf)
+		label(tab, x + 160, y - 17, 'Orden con BF:');
+		decorDepthDropDown = new PsychUIDropDownMenu(x + 160, y, DEPTH_LABELS, function(sel:Int, value:String) setDecorDepth(sel), 170);
+		tab.add(decorDepthDropDown);
 
 		y += 42;
 		tab.add(new PsychUIButton(x, y, 'Borrar decorado', function() deleteSelectedSprite(), 120));
@@ -3230,7 +3264,7 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 			decorAlphaStepper.value = selectedSprite.alpha;
 			decorFlipXCheck.checked = selectedSprite.flipX;
 			decorFlipYCheck.checked = selectedSprite.flipY;
-			decorFrontCheck.checked = selectedSprite.front;
+			decorDepthDropDown.selectedLabel = depthLabelOf(selectedSprite);
 		}
 		if (decorPieceTxt != null)
 		{
@@ -3359,9 +3393,20 @@ Rueda = bajar, shift+rueda = bajar rapido.';
 		var want:Bool = FlxG.keys.pressed.F && PsychUIInputText.focusOn == null;
 		if (want == frontHighlight) return;
 		frontHighlight = want;
-		for (spr in spritesFront.members)
-			if (spr != null) spr.color = want ? 0xFF40E0FF : FlxColor.WHITE;
-		if (want) showOutput('En azul: lo que va DELANTE de BF (${spritesFront.length}). Lo demas va detras. Se cambia con "Delante" (pestana Deco)');
+		var locals:Array<Int> = decorLocalIndices();
+		var sorted:Int = 0;
+		for (index => data in worldFile.sprites)
+		{
+			var group = data.front ? spritesFront : spritesBack;
+			if (locals[index] >= group.length) continue;
+			var spr:FlxSprite = group.members[locals[index]];
+			if (spr == null) continue;
+			var depth:String = OverworldData.depthOf(data);
+			if (depth == 'ysort') sorted++;
+			spr.color = !want ? FlxColor.WHITE : (depth == 'front' ? 0xFF40E0FF : (depth == 'ysort' ? 0xFFFFE040 : FlxColor.WHITE));
+		}
+		if (want) showOutput('Azul: DELANTE de BF (${spritesFront.length}). Amarillo: POR ALTURA ($sorted): tapa a BF si BF va por encima\n'
+			+ 'de su base y queda detras si va por debajo. Lo demas es suelo (siempre detras). Se cambia en "Orden con BF" (Deco)');
 	}
 
 	function updateKeys(elapsed:Float)

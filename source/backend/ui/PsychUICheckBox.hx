@@ -40,7 +40,7 @@ class PsychUICheckBox extends FlxSpriteGroup
 	{
 		super.update(elapsed);
 
-		if(FlxG.mouse.justPressed)
+		if(FlxG.mouse.justPressed && !PsychUIDropDownMenu.mouseOnOpenList()) // no si el clic es de una lista abierta encima
 		{
 			var screenPos:FlxPoint = getScreenPosition(null, camera);
 			var mousePos:FlxPoint = FlxG.mouse.getPositionInCameraView(camera);

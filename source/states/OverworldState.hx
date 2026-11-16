@@ -246,6 +246,64 @@ class OverworldState extends MusicBeatState
 	var marksGroup:FlxTypedGroup<FlxSprite>;
 	var spritesFront:FlxTypedGroup<FlxSprite>;
 
+	// ---------------------------------------------------------------- orden por altura (eje Y)
+	/** Lo que se ordena por altura: caminos, puntitos, nodos, decorados "por altura" y BF (sortDepth). */
+	var depthGroup:FlxTypedGroup<FlxSprite>;
+	/** Los decorados "por altura" (OverworldData.depthOf) y su base (la de toda su pieza, si son de una). */
+	var sortedDecor:Array<FlxSprite> = [];
+	var decorKeys:Map<FlxSprite, Float> = new Map<FlxSprite, Float>();
+	var pieceOf:Map<FlxSprite, String> = new Map<FlxSprite, String>();
+	/** Nodos que van encima de los decorados (OverworldData.isOverlayNodeImage: el vacio de la tienda). */
+	var overlayNodes:Array<FlxSprite> = [];
+
+	static inline final OVERLAY_KEY:Float = 1e6;
+	/** Un nodo gana a los trozos de camino que lo tocan (estan en el suelo, el nodo encima). */
+	static inline final NODE_BIAS:Float = 6;
+
+	/**
+	 * Ordena depthGroup por la base de cada cosa: lo de mas abajo en el mapa se dibuja despues y tapa a lo de mas
+	 * arriba (BF pasa por detras de un monticulo si va por encima de el y por delante si va por debajo). Los
+	 * caminos cuentan por su centro, los nodos por su base (+NODE_BIAS) y BF por sus pies; encima de un nodo, BF
+	 * siempre por delante de el. Lo marcado "delante" va aparte, encima de todo.
+	 */
+	function sortDepth()
+	{
+		var items:Array<FlxSprite> = [];
+		var keys:Map<FlxSprite, Float> = new Map<FlxSprite, Float>();
+		inline function put(spr:FlxSprite, key:Float)
+		{
+			if (spr == null || !spr.exists) return;
+			items.push(spr);
+			keys.set(spr, key);
+		}
+		for (spr in sortedDecor) put(spr, decorKeys.get(spr));
+		for (spr in roadsGroup.members) if (spr != null) put(spr, spr.y + spr.height * 0.5);
+		for (spr in dotsGroup.members) if (spr != null) put(spr, spr.y + spr.height * 0.5);
+		for (spr in nodesGroup.members)
+			if (spr != null) put(spr, overlayNodes.contains(spr) ? OVERLAY_KEY : spr.y + spr.height + NODE_BIAS);
+		if (player != null)
+		{
+			var feet:Float = player.y + player.height;
+			for (spr in nodesGroup.members)
+				if (spr != null && spr.visible && keys.exists(spr) && playerX >= spr.x && playerX < spr.x + spr.width
+					&& playerY >= spr.y && playerY < spr.y + spr.height)
+					feet = Math.max(feet, keys.get(spr) + 0.5);
+			put(player, feet);
+		}
+		haxe.ds.ArraySort.sort(items, function(a:FlxSprite, b:FlxSprite):Int
+		{
+			var ka:Float = keys.get(a);
+			var kb:Float = keys.get(b);
+			return ka < kb ? -1 : (ka > kb ? 1 : 0);
+		});
+		// sin add(): con cientos de trozos de camino, add() busca repetidos en cada uno y en cada fotograma
+		@:privateAccess
+		{
+			depthGroup.members = items;
+			depthGroup.length = items.length;
+		}
+	}
+
 	var player:FlxSprite;
 	var nodeSprites:Map<String, FlxSprite> = new Map<String, FlxSprite>();
 
@@ -521,11 +579,16 @@ class OverworldState extends MusicBeatState
 		spritesFront = new FlxTypedGroup<FlxSprite>();
 
 		marksGroup = new FlxTypedGroup<FlxSprite>();
+		depthGroup = new FlxTypedGroup<FlxSprite>();
+		sortedDecor = [];
+		decorKeys = new Map<FlxSprite, Float>();
+		overlayNodes = [];
 
+		// el suelo (tiles del terreno) debajo de todo; luego, ordenado por altura cada fotograma (sortDepth), lo
+		// que se tapa entre si: caminos, puntitos, nodos, los decorados "por altura" y BF. roadsGroup, dotsGroup y
+		// nodesGroup no se anaden: solo los guardan (y depthGroup los dibuja y actualiza una vez)
 		add(spritesBack);
-		add(roadsGroup);
-		add(dotsGroup);
-		add(nodesGroup);
+		add(depthGroup);
 		add(marksGroup);
 
 		var terrainSprites:Array<FlxSprite> = [];
@@ -543,10 +606,22 @@ class OverworldState extends MusicBeatState
 				spr.setPosition(data.x, data.y);
 			}
 
-			if (data.front) spritesFront.add(spr);
-			else spritesBack.add(spr);
+			switch (OverworldData.depthOf(data))
+			{
+				case 'front': spritesFront.add(spr);
+				case 'ground': spritesBack.add(spr);
+				default:
+					sortedDecor.push(spr);
+					decorKeys.set(spr, spr.y + spr.height);
+					if (data.piece != null && data.piece.length > 0) pieceOf.set(spr, data.piece);
+			}
 			if (!data.front && OverworldData.isLooseTile(data)) terrainSprites.push(spr);
 		}
+		// una pieza (una montana hecha de tiles...) se ordena entera, por la base de su trozo mas bajo
+		var pieceBottom:Map<String, Float> = new Map<String, Float>();
+		for (spr => piece in pieceOf)
+			pieceBottom.set(piece, Math.max(pieceBottom.exists(piece) ? pieceBottom.get(piece) : -1e9, decorKeys.get(spr)));
+		for (spr => piece in pieceOf) decorKeys.set(spr, pieceBottom.get(piece));
 		// lo que hay bajo cada pixel (suelo, acantilado, agua), antes de juntar los tiles en imagenes
 		terrain = new OverworldTerrain(terrainSprites);
 		bakeStillSprites(spritesBack);
@@ -583,6 +658,7 @@ class OverworldState extends MusicBeatState
 			if (node.image == null || node.image.length < 1) spr.visible = false;
 			nodesGroup.add(spr);
 			nodeSprites.set(node.id, spr);
+			if (OverworldData.isOverlayNodeImage(node.image)) overlayNodes.push(spr);
 			if (opening) doorUnlocks.push({sprite: spr, node: node, onArrival: onArrival});
 			// un nivel superado sin animDone se queda igual, como en SMW (el usuario no quiere
 			// marcas encima): lo dicen los caminos abiertos y el HUD (SUPERADO)
@@ -594,7 +670,6 @@ class OverworldState extends MusicBeatState
 		// jugador
 		player = new FlxSprite();
 		loadPlayerGraphic();
-		add(player);
 		add(spritesFront);
 
 		// llegando por un warp: BF aparece encima de su pareja (ver starArrival / pipeArrival)
@@ -631,6 +706,7 @@ class OverworldState extends MusicBeatState
 
 		updatePlayerPosition();
 		idleAnim();
+		sortDepth();
 		// sale con su animacion al abrirse la pantalla (si no, se le veria de pie antes de tiempo)
 		if (warpEntrance != null && start != null && start.id == warpDoor.id) player.visible = false;
 		else warpEntrance = null;
@@ -1748,6 +1824,7 @@ class OverworldState extends MusicBeatState
 		}
 
 		super.update(elapsed);
+		sortDepth();
 
 		#if debug
 		// -shot: a los 3 s (o a los de -shotat) guarda una captura del mapa en world_shot.png y cierra
